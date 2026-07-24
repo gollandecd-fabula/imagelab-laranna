@@ -1,40 +1,43 @@
 {
   "schema": 2,
   "status": "PASS_NON_AUTHORIZING_REAL_PROJECT_MECHANISM",
-  "recorded_at_utc": "2026-07-24T22:08:00Z",
+  "recorded_at_utc": "2026-07-24T22:10:02Z",
   "repository": "gollandecd-fabula/imagelab-laranna",
   "branch": "codex/imagelab-selftest-project-evidence",
   "workflow": {
     "name": "Diagnostic Real Project Preservation 1.4.8 to 1.4.9",
-    "run_id": 30129197033,
-    "head_sha": "fbaab26612e2800fcad2933012bd968d7ea24d1b",
+    "run_id": 30129859181,
+    "head_sha": "dc31d91f71aadd80ca4f7a5de9d91b7d1da2f9c0",
     "job": "NON-AUTHORIZING real project update and rollback",
     "job_conclusion": "success"
   },
   "artifact": {
-    "id": 8610502669,
+    "id": 8610748700,
     "name": "imagelab-real-project-preservation-148-149",
-    "digest": "sha256:bbebaf3bc863f727298cbc5aeb678dbf22fcf5af73eea26e0985680b38cdbecd",
-    "retention_expires_at": "2026-08-23T21:57:02Z"
+    "digest": "sha256:83d151a8e25223bad7c85bade1a9721935acec481dd93db06e29132a4ee467db",
+    "retention_expires_at": "2026-08-23T22:10:01Z"
   },
   "baseline": {
     "version": "1.4.8-recovery-candidate",
     "build_id": "REC-RT8-M6-20260724-05",
     "installer_sha256": "b456994c002187ccf88e0e7f4695c756c0aa9f955d3b78eff78a38fd22d9be1c",
-    "release_authorized": false
+    "release_authorized": false,
+    "install_id": "edc866c80f28c7ae5b70d4162264f52e"
   },
   "candidate": {
     "version": "1.4.9-recovery-candidate",
     "build_id": "REC-RT8-M6-20260724-06",
     "installer_sha256": "12817550c2fac6a6453945c38eefe86368cd4cfa1991c1565e49b092bd818d56",
-    "release_authorized": false
+    "release_authorized": false,
+    "install_id": "5078a09d4774e65bf03868b044426300"
   },
   "project": {
     "project_id": "ZTR-UPDATE-PROJECT",
-    "asset_id": "9304d3a9b368425394cb855620a2360c",
+    "asset_id": "0f992c91734742de9efc8022a6e4d9d9",
+    "stored_name": "0f992c91734742de9efc8022a6e4d9d9.svg",
     "original_fixture_sha256": "b79a27ac99ef25f1f1c0e85496e01ac95328d9f063f2101d724c7a471f214cf3",
     "canonical_uploaded_sha256": "2b8723a330ecdb81f4731ec4c84c9a4c091ac643f8b23bf476d0060c7dc5167b",
-    "project_file_sha256": "d525e1ba9ffbee67f41ccc01c2db1f9d4611f0fd41d4ac5d464cdfa109284fc5",
+    "project_file_sha256": "6b707ed90eaca4c924feb9d00a8ad8c39a714f19ecf98cdac33e7b0ebca13991",
     "asset_size_bytes": 306,
     "preserved_after_update": true,
     "preserved_after_forced_rollback": true,
