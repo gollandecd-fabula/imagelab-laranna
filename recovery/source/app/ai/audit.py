@@ -5,7 +5,9 @@ import json
 import math
 import os
 import threading
+import time
 import uuid
+from contextlib import AbstractContextManager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -15,6 +17,54 @@ from app.config import settings
 
 MAX_AUDIT_FILE_BYTES = 20 * 1024 * 1024
 GENESIS_HASH = "0" * 64
+
+
+class _AuditFileLock(AbstractContextManager["_AuditFileLock"]):
+    def __init__(self, path: Path, timeout: float = 30.0) -> None:
+        self.path = path
+        self.timeout = timeout
+        self._fd: int | None = None
+
+    def __enter__(self) -> "_AuditFileLock":
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(self.path, os.O_RDWR | os.O_CREAT, 0o600)
+        self._fd = fd
+        if os.fstat(fd).st_size == 0:
+            os.write(fd, b"0")
+            os.fsync(fd)
+        deadline = time.monotonic() + self.timeout
+        while True:
+            try:
+                os.lseek(fd, 0, os.SEEK_SET)
+                if os.name == "nt":
+                    import msvcrt
+                    msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+                else:
+                    import fcntl
+                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                return self
+            except OSError as exc:
+                if time.monotonic() >= deadline:
+                    os.close(fd)
+                    self._fd = None
+                    raise RuntimeError("Не удалось получить блокировку AI-аудита") from exc
+                time.sleep(0.025)
+
+    def __exit__(self, exc_type, exc, traceback) -> None:
+        fd = self._fd
+        self._fd = None
+        if fd is None:
+            return
+        try:
+            os.lseek(fd, 0, os.SEEK_SET)
+            if os.name == "nt":
+                import msvcrt
+                msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(fd, fcntl.LOCK_UN)
+        finally:
+            os.close(fd)
 
 
 def _sanitize(value: Any, depth: int = 0) -> Any:
@@ -46,17 +96,19 @@ def _record_hash(item: dict[str, Any]) -> str:
 
 
 class AIAuditStore:
-    def __init__(self) -> None:
-        settings.ai_audit_dir.mkdir(parents=True, exist_ok=True)
+    def __init__(self, directory: Path | None = None) -> None:
+        self.directory = (directory or settings.ai_audit_dir).resolve()
+        self.directory.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
+        self._process_lock_path = self.directory / ".ai-audit.lock"
 
     def _current_path(self, day: str) -> Path:
-        base = settings.ai_audit_dir / f"ai-audit-{day}.jsonl"
+        base = self.directory / f"ai-audit-{day}.jsonl"
         if not base.exists() or base.stat().st_size < MAX_AUDIT_FILE_BYTES:
             return base
         index = 1
         while True:
-            candidate = settings.ai_audit_dir / f"ai-audit-{day}-{index:03d}.jsonl"
+            candidate = self.directory / f"ai-audit-{day}-{index:03d}.jsonl"
             if not candidate.exists() or candidate.stat().st_size < MAX_AUDIT_FILE_BYTES:
                 return candidate
             index += 1
@@ -91,7 +143,7 @@ class AIAuditStore:
     def append(self, record: dict[str, Any]) -> dict[str, Any]:
         created_at = datetime.now(timezone.utc).isoformat()
         day = created_at[:10]
-        with self._lock:
+        with self._lock, _AuditFileLock(self._process_lock_path):
             path = self._current_path(day)
             item = {
                 "id": uuid.uuid4().hex,
@@ -142,14 +194,14 @@ class AIAuditStore:
         return {"path": path.name, "valid": valid, "checked": checked, "legacy_seen": legacy_seen, "last_hash": previous}
 
     def verify_all(self) -> list[dict[str, Any]]:
-        with self._lock:
-            return [self.verify_file(path) for path in sorted(settings.ai_audit_dir.glob("ai-audit-*.jsonl"))]
+        with self._lock, _AuditFileLock(self._process_lock_path):
+            return [self.verify_file(path) for path in sorted(self.directory.glob("ai-audit-*.jsonl"))]
 
     def recent(self, limit: int = 100) -> list[dict[str, Any]]:
         limit = max(1, min(int(limit), 100_000))
         items: list[dict[str, Any]] = []
-        with self._lock:
-            paths = sorted(settings.ai_audit_dir.glob("ai-audit-*.jsonl"), reverse=True)
+        with self._lock, _AuditFileLock(self._process_lock_path):
+            paths = sorted(self.directory.glob("ai-audit-*.jsonl"), reverse=True)
             for path in paths:
                 try:
                     lines = path.read_text("utf-8").splitlines()

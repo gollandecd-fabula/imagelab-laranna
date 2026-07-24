@@ -1,0 +1,62 @@
+{
+  "schema": 1,
+  "status": "PASS_SOURCE_RECOVERY_PROGRESS",
+  "identity": {
+    "version": "1.4.4-recovery-candidate",
+    "build_id": "REC-RT8-M6-20260724-01"
+  },
+  "base": {
+    "version": "1.4.2-zero-trust-candidate",
+    "build_id": "ZTR-M6-20260724-01",
+    "archive_sha256": "c236656f53447996dc837a206a8896fc6abacf13d45829d8e9e64888b9f6b308"
+  },
+  "patch_sha256": "674ff435d98487a99efde0b4a5081bb0acc311fde9f0a1a42e908b5011b951b5",
+  "checks": {
+    "compileall": "PASS",
+    "javascript": "PASS",
+    "pytest": "PASS",
+    "selftest": "PASS",
+    "backend_selftest": "PASS",
+    "backend_identity": {
+      "version": "1.4.4-recovery-candidate",
+      "build_id": "REC-RT8-M6-20260724-01"
+    }
+  },
+  "recovered_clusters": [
+    {
+      "id": "RC-01",
+      "name": "IZ017 color vector fidelity",
+      "status": "PASS"
+    },
+    {
+      "id": "RC-02",
+      "name": "project storage concurrency and lineage",
+      "status": "PASS"
+    },
+    {
+      "id": "RC-03",
+      "name": "AI audit concurrency",
+      "status": "PASS"
+    }
+  ],
+  "files": {
+    "app/config.py": "3af54b2985b71147d086135e756cf5e83cbfd798a8a58054a9cd384d6c66d35c",
+    "app/main.py": "e312bcfe97984e297f492b1683668bfdb3446fae558653f558817b4d82df29dd",
+    "app/services/image_processing.py": "0808d61215f2fe760d233923658a4a7215d21c204674232061d75452f57ec5d4",
+    "app/services/project_store.py": "fee1631832e44c7433d6c1bad0d1de2288c0daa7dd6cc17c972b06b3d0dcdcc4",
+    "app/ai/audit.py": "ac7a7565d19a6e4e307588c645e8508d9040e51d6ad0650f980f8e8a95ec431e",
+    "windows_installer/launcher/main.go": "17e7a9cc5e9246385b7c6329d5ab1de6381817ee7c01410577aa35f4896e884b",
+    "windows_installer/installer/main.go": "5a1e76f0d7f9f367c2574ed89f77dfbb48ff0e6040393ec3d0256e46255e4c9f",
+    "tests/test_project_store_concurrency.py": "ba77a5ff2738badeac459f202aceed0388bd847cfcd8c6f3978af3ac2f4e09cc",
+    "tests/test_ai_audit_concurrency.py": "5aa31bba410b88c1ec36c111704ebd16e7e1d43c949a236f3d8903069d37c066"
+  },
+  "remaining_missing_cycle6_test_modules": [
+    "test_isolated_processing.py",
+    "test_product_workflows.py",
+    "test_project_lookup_resilience.py",
+    "test_redteam_contracts.py",
+    "test_segmentation_governance.py",
+    "test_storage_and_package_integrity.py"
+  ],
+  "claim_boundary": "Source recovery progress only. Windows install, installed UI, update/rollback, L4 and L5 are not verified."
+}

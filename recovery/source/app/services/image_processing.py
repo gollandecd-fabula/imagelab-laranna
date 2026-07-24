@@ -1045,6 +1045,49 @@ def _vectorize_with_diagnostics(image: Image.Image, params: dict[str, Any]) -> t
             if path_count > max_paths:
                 raise ProcessingError("Векторизация создала слишком много контуров; увеличьте допуск контура")
         rendered_bool = rendered > 0
+
+        # Preserve thin strokes and tiny colour islands that morphology or polygon
+        # simplification can legitimately omit.  Do not lower the fidelity gate:
+        # encode only the still-missing target pixels as deterministic horizontal
+        # pixel runs.  Multiple runs are grouped into one SVG path so the fallback
+        # remains bounded by the path and byte limits.
+        missing_mask = expected & ~rendered_bool
+        missing_count = int(np.count_nonzero(missing_mask))
+        if missing_count:
+            run_commands: list[str] = []
+            run_count = 0
+            chunk_runs = 256
+            for y in range(missing_mask.shape[0]):
+                row = missing_mask[y]
+                padded = np.pad(row.astype(np.int8), (1, 1), constant_values=0)
+                changes = np.diff(padded)
+                starts = np.flatnonzero(changes == 1)
+                ends = np.flatnonzero(changes == -1)
+                for x0, x1 in zip(starts, ends, strict=True):
+                    run_commands.append(
+                        f"M {int(x0)} {y} H {int(x1)} V {y + 1} H {int(x0)} Z"
+                    )
+                    run_count += 1
+                    if run_count % chunk_runs == 0:
+                        path_parts.append(
+                            f'<path d="{" ".join(run_commands)}" fill="{fill}"/>'
+                        )
+                        path_count += 1
+                        run_commands = []
+                        if path_count > max_paths:
+                            raise ProcessingError(
+                                "Векторизация создала слишком много контуров; увеличьте допуск контура"
+                            )
+            if run_commands:
+                path_parts.append(f'<path d="{" ".join(run_commands)}" fill="{fill}"/>')
+                path_count += 1
+                if path_count > max_paths:
+                    raise ProcessingError(
+                        "Векторизация создала слишком много контуров; увеличьте допуск контура"
+                    )
+            rendered[missing_mask] = 255
+            rendered_bool = rendered > 0
+
         union = int(np.count_nonzero(rendered_bool | expected))
         intersection = int(np.count_nonzero(rendered_bool & expected))
         cluster_ious.append(intersection / max(1, union))

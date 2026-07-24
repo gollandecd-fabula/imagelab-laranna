@@ -432,10 +432,11 @@ def process_project_asset(project_id: str, request: ProcessRequest) -> ProcessRe
             project = store.set_active_asset(project_id, source.id)
         result, attempts, repair = run_processing_with_repair(source, request.operation, request.parameters)
         try:
-            # Keep every version for auditability, but place the selected best result last.
+            # Keep every version for auditability and commit the complete lineage
+            # atomically. A crash or concurrent request must never expose only a
+            # subset of attempts or a stale active result.
             ordered = [item for item in attempts if item.id != result.id] + [result]
             project = store.add_assets(project_id, ordered)
-            project = store.set_active_asset(project_id, result.id)
         except Exception:
             for item in attempts:
                 _remove_asset_files(item)
