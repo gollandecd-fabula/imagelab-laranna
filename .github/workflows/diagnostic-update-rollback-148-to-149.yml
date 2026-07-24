@@ -1,123 +1,19 @@
-name: Diagnostic Update Rollback 1.4.8 to 1.4.9
+name: RETIRED — Diagnostic Update Rollback 1.4.8 to 1.4.9
 
-# Historical sentinel-era mechanism diagnostic. Superseded by
-# diagnostic-real-project-preservation-148-to-149.yml.
 on:
   workflow_dispatch:
 
 permissions:
   contents: read
-  actions: read
-
-concurrency:
-  group: imagelab-diagnostic-update-rollback-148-149
-  cancel-in-progress: false
-
-env:
-  BASELINE_RUN_ID: '30110254072'
-  BASELINE_ARTIFACT: 'RC12_UNVERIFIED_WINDOWS_CANDIDATE'
-  BASELINE_VERSION: '1.4.8-recovery-candidate'
-  BASELINE_BUILD_ID: 'REC-RT8-M6-20260724-05'
-  BASELINE_INSTALLER_SHA256: 'b456994c002187ccf88e0e7f4695c756c0aa9f955d3b78eff78a38fd22d9be1c'
-  CANDIDATE_RUN_ID: '30111216367'
-  CANDIDATE_ARTIFACT: 'RC13_UNVERIFIED_WINDOWS_CANDIDATE'
-  CANDIDATE_VERSION: '1.4.9-recovery-candidate'
-  CANDIDATE_BUILD_ID: 'REC-RT8-M6-20260724-06'
-  CANDIDATE_INSTALLER_SHA256: '12817550c2fac6a6453945c38eefe86368cd4cfa1991c1565e49b092bd818d56'
 
 jobs:
-  diagnostic-update-rollback:
-    name: NON-AUTHORIZING update and rollback diagnostic
-    runs-on: windows-2022
-    timeout-minutes: 70
+  retired:
+    runs-on: ubuntu-24.04
     steps:
-      - name: Checkout exact recovery branch
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
-        with:
-          ref: bootstrap/zero-trust-gate
-
-      - name: Download exact historical candidate artifacts
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Enforce retirement boundary
         run: |
-          $ErrorActionPreference = 'Stop'
-          New-Item -ItemType Directory -Force baseline,candidate,evidence-update | Out-Null
-          gh run download $env:BASELINE_RUN_ID --repo $env:GITHUB_REPOSITORY --name $env:BASELINE_ARTIFACT --dir baseline
-          gh run download $env:CANDIDATE_RUN_ID --repo $env:GITHUB_REPOSITORY --name $env:CANDIDATE_ARTIFACT --dir candidate
-
-      - name: Verify exact baseline and candidate identities
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $baselineManifestPath = (Get-ChildItem baseline -Filter candidate-manifest.json -File -Recurse | Select-Object -First 1).FullName
-          $candidateManifestPath = (Get-ChildItem candidate -Filter candidate-manifest.json -File -Recurse | Select-Object -First 1).FullName
-          $baselineInstaller = (Get-ChildItem baseline -Filter *.exe -File -Recurse | Select-Object -First 1).FullName
-          $candidateInstaller = (Get-ChildItem candidate -Filter *.exe -File -Recurse | Select-Object -First 1).FullName
-          if (-not $baselineManifestPath -or -not $candidateManifestPath -or -not $baselineInstaller -or -not $candidateInstaller) { throw 'Exact diagnostic inputs are incomplete' }
-          $baselineManifest = Get-Content -Raw -LiteralPath $baselineManifestPath | ConvertFrom-Json
-          $candidateManifest = Get-Content -Raw -LiteralPath $candidateManifestPath | ConvertFrom-Json
-          $baselineSha = (Get-FileHash -Algorithm SHA256 -LiteralPath $baselineInstaller).Hash.ToLowerInvariant()
-          $candidateSha = (Get-FileHash -Algorithm SHA256 -LiteralPath $candidateInstaller).Hash.ToLowerInvariant()
-          if ($baselineSha -ne $env:BASELINE_INSTALLER_SHA256) { throw 'Baseline installer SHA mismatch' }
-          if ($candidateSha -ne $env:CANDIDATE_INSTALLER_SHA256) { throw 'Candidate installer SHA mismatch' }
-          if ($baselineManifest.identity.version -ne $env:BASELINE_VERSION -or $baselineManifest.identity.build_id -ne $env:BASELINE_BUILD_ID) { throw 'Baseline identity mismatch' }
-          if ($candidateManifest.identity.version -ne $env:CANDIDATE_VERSION -or $candidateManifest.identity.build_id -ne $env:CANDIDATE_BUILD_ID) { throw 'Candidate identity mismatch' }
-          if ($baselineManifest.installer.sha256 -ne $baselineSha -or $candidateManifest.installer.sha256 -ne $candidateSha) { throw 'Manifest installer SHA mismatch' }
-          @{
-            schema = 1
-            status = 'PASS'
-            authorization = 'NON_AUTHORIZING_DIAGNOSTIC_ONLY'
-            baseline = @{run_id=$env:BASELINE_RUN_ID; artifact=$env:BASELINE_ARTIFACT; version=$env:BASELINE_VERSION; build_id=$env:BASELINE_BUILD_ID; installer_sha256=$baselineSha; release_authorized=$false}
-            candidate = @{run_id=$env:CANDIDATE_RUN_ID; artifact=$env:CANDIDATE_ARTIFACT; version=$env:CANDIDATE_VERSION; build_id=$env:CANDIDATE_BUILD_ID; installer_sha256=$candidateSha; release_authorized=$false}
-            protocol_note = 'This input pair cannot satisfy G6 because the baseline was never RELEASE_AUTHORIZED.'
-          } | ConvertTo-Json -Depth 6 | Set-Content evidence-update/baseline-verification.json -Encoding utf8
-          "BASELINE_INSTALLER=$baselineInstaller" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          "CANDIDATE_INSTALLER=$candidateInstaller" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          "CANDIDATE_MANIFEST=$candidateManifestPath" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-
-      - name: Execute update and forced rollback mechanism
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          ./recovery/source/release_gate/run_update_rollback_gate.ps1 `
-            -BaselineInstallerPath $env:BASELINE_INSTALLER `
-            -InstallerPath $env:CANDIDATE_INSTALLER `
-            -CandidateManifestPath $env:CANDIDATE_MANIFEST `
-            -EvidenceDir evidence-update
-
-      - name: Write diagnostic verdict
-        if: always()
-        shell: pwsh
-        run: |
-          $update = if (Test-Path evidence-update/update-test.json) { Get-Content -Raw evidence-update/update-test.json | ConvertFrom-Json } else { $null }
-          $rollback = if (Test-Path evidence-update/rollback-test.json) { Get-Content -Raw evidence-update/rollback-test.json | ConvertFrom-Json } else { $null }
-          $mechanismPass = ($null -ne $update -and $update.status -eq 'PASS' -and $null -ne $rollback -and $rollback.status -eq 'PASS')
-          @{
-            schema = 1
-            status = $(if ($mechanismPass) { 'PASS_NON_AUTHORIZING_MECHANISM' } else { 'FAIL_NON_AUTHORIZING_MECHANISM' })
-            update_mechanism = $(if ($null -ne $update) { $update.status } else { 'MISSING' })
-            rollback_mechanism = $(if ($null -ne $rollback) { $rollback.status } else { 'MISSING' })
-            g6_authorization = 'BLOCKED_BASELINE_NOT_RELEASE_AUTHORIZED'
-            g7_authorization = 'BLOCKED_G6_BASELINE_NOT_RELEASE_AUTHORIZED'
-            release = 'BLOCKED'
-          } | ConvertTo-Json | Set-Content evidence-update/diagnostic-verdict.json -Encoding utf8
-
-      - name: Upload complete diagnostic evidence
-        if: always()
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
-        with:
-          name: imagelab-non-authorizing-update-rollback-148-149
-          path: evidence-update/
-          include-hidden-files: true
-          if-no-files-found: error
-          retention-days: 30
-
-      - name: Enforce non-authorizing boundary
-        if: always()
-        shell: pwsh
-        run: |
-          $verdict = Get-Content -Raw evidence-update/diagnostic-verdict.json | ConvertFrom-Json
-          if ($verdict.status -ne 'PASS_NON_AUTHORIZING_MECHANISM') { throw 'Update/rollback mechanism diagnostic failed' }
-          Write-Error 'Mechanism passed, but G6/G7 remain blocked because the baseline is not RELEASE_AUTHORIZED.'
+          echo "RETIRED_WORKFLOW"
+          echo "Superseded by diagnostic-real-project-preservation-148-to-149.yml."
+          echo "Historical evidence remains in Git history and recovery/evidence/update-rollback/."
+          echo "This workflow cannot authorize G6 or G7."
           exit 1
