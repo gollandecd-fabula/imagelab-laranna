@@ -1,0 +1,9 @@
+{
+  "source_sha256": "476b68ee2ddea5f2985c1c8fd2fc841de490a866bb3a9676aca9411b463e6538",
+  "installer_sha256": "f67aac4ac412d4b934fc672bc25cf949e36ec54c02b3bb2fd5277a7f1d5c180f",
+  "status": "PASS",
+  "expected_version": "1.4.6-recovery-candidate",
+  "schema": 2,
+  "second_build_sha256": "f67aac4ac412d4b934fc672bc25cf949e36ec54c02b3bb2fd5277a7f1d5c180f",
+  "expected_build_id": "REC-RT8-M6-20260724-03"
+}
