@@ -64,17 +64,20 @@ def test_zero_trust_workflow_has_all_gates_and_exact_candidate_flow() -> None:
     assert "workflow_dispatch:" in workflow
     assert "baseline_release_tag:" in workflow
     assert "baseline_installer_sha256:" in workflow
+    assert "baseline_authorization_record_sha256:" in workflow
     assert "UNVERIFIED_INTERNAL_EXACT_CANDIDATE" in workflow
     assert "ztr-unit-verdict" in workflow
     assert "ImageLab-RELEASE-VERDICT" in workflow
     assert "ImageLab-RELEASE-AUTHORIZED" in workflow
+    assert "ImageLab-RELEASE-AUTHORIZATION.json" in workflow
     assert "run_clean_install_gate.ps1" in workflow
     assert "run_update_rollback_gate.ps1" in workflow
     assert "-BaselineInstallerPath" in workflow
     assert "-BrowserChannel msedge" in workflow
     assert "finalize_gate.py" in workflow
     assert "release_authorized=$true" in workflow
-    assert "authorization_source='github_release_asset'" in workflow
+    assert "authorization_source='prior_finalizer_record'" in workflow
+    assert "authorization_record_sha256" in workflow
 
 
 def test_finalizer_requires_all_g0_g8_evidence() -> None:
@@ -103,8 +106,11 @@ def test_finalizer_requires_all_g0_g8_evidence() -> None:
     assert "selftest_identity_mismatch" in source
     assert "selftest_case_set_mismatch" in source
     assert "baseline_not_release_authorized" in source
+    assert "baseline_authorization_source_invalid" in source
+    assert "baseline_authorization_record_sha" in source
     assert "project_data_not_preserved" in source
     assert "project_handoff_mismatch" in source
+    assert "ImageLab-RELEASE-AUTHORIZATION.json" in source
 
 
 def _write_json(path: Path, value: object) -> None:
@@ -148,11 +154,13 @@ def _build_complete_release_evidence(root: Path) -> tuple[str, str]:
     installer.write_bytes(b"synthetic exact installer evidence")
     installer_sha = hashlib.sha256(installer.read_bytes()).hexdigest()
     baseline_sha = "1" * 64
+    authorization_record_sha = "6" * 64
     original_fixture_sha = "2" * 64
     canonical_uploaded_sha = "3" * 64
     project_before = _project_snapshot(canonical_uploaded_sha)
     project_after_update = dict(project_before)
     project_after_rollback = dict(project_before)
+    baseline_name = "ImageLab_by_LarannA_RELEASE_AUTHORIZED_Setup_x64.exe"
 
     _write_json(root / "source" / "source-gate.json", {"status": "PASS"})
     _write_json(root / "unit" / "unit-matrix-verdict.json", {"status": "PASS"})
@@ -192,13 +200,17 @@ def _build_complete_release_evidence(root: Path) -> tuple[str, str]:
     _write_json(
         root / "update" / "baseline-verification.json",
         {
-            "schema": 2,
+            "schema": 3,
             "status": "PASS",
             "release_authorized": True,
-            "authorization_source": "github_release_asset",
+            "authorization_source": "prior_finalizer_record",
+            "authorization_record_status": "RELEASE_AUTHORIZED",
+            "authorization_record_sha256": authorization_record_sha,
+            "authorization_record_installer_name": baseline_name,
+            "authorization_record_installer_sha256": baseline_sha,
             "release_tag": "v9.9.8-release-authorized",
             "installer_sha256": baseline_sha,
-            "name": "ImageLab_by_LarannA_RELEASE_AUTHORIZED_Setup_x64.exe",
+            "name": baseline_name,
         },
     )
     _write_json(
@@ -265,13 +277,23 @@ def _run_finalizer(root: Path, output: Path) -> tuple[subprocess.CompletedProces
 
 def test_finalizer_accepts_complete_embedded_selftest_and_project_evidence(tmp_path: Path) -> None:
     evidence = tmp_path / "evidence"
-    _build_complete_release_evidence(evidence)
-    result, verdict = _run_finalizer(evidence, tmp_path / "output")
+    installer_sha, _ = _build_complete_release_evidence(evidence)
+    output = tmp_path / "output"
+    result, verdict = _run_finalizer(evidence, output)
     assert result.returncode == 0, result.stderr
     assert verdict["status"] == "RELEASE_AUTHORIZED"
     assert verdict["gates"]["G3_preinstall_selftest"] == "PASS"
     assert verdict["gates"]["G8_postinstall_selftest"] == "PASS"
     assert verdict["schema"] == 3
+    authorization_path = output / "ImageLab-RELEASE-AUTHORIZATION.json"
+    assert authorization_path.exists()
+    authorization = json.loads(authorization_path.read_text("utf-8"))
+    assert authorization["status"] == "RELEASE_AUTHORIZED"
+    assert authorization["authorization_source"] == "finalize_gate.py"
+    assert authorization["installer_sha256"] == installer_sha
+    assert authorization["installer_name"] == "ImageLab_RELEASE_AUTHORIZED_Setup_x64.exe"
+    assert len(authorization["final_verdict_sha256"]) == 64
+    assert len(authorization["release_evidence_sha256"]) == 64
 
 
 def test_finalizer_blocks_missing_or_malformed_selftest_evidence(tmp_path: Path) -> None:
@@ -310,6 +332,8 @@ def test_finalizer_blocks_untrusted_baseline_and_sentinel_only_evidence(tmp_path
     baseline = json.loads(baseline_path.read_text("utf-8"))
     baseline["schema"] = 1
     baseline["release_authorized"] = False
+    baseline["authorization_source"] = "filename_only"
+    baseline.pop("authorization_record_sha256")
     _write_json(baseline_path, baseline)
     update_path = evidence / "update" / "update-test.json"
     update = json.loads(update_path.read_text("utf-8"))
@@ -323,9 +347,28 @@ def test_finalizer_blocks_untrusted_baseline_and_sentinel_only_evidence(tmp_path
     assert verdict["status"] == "RELEASE_BLOCKED"
     assert "baseline_evidence_schema" in verdict["failed_conditions"]
     assert "baseline_not_release_authorized" in verdict["failed_conditions"]
+    assert "baseline_authorization_source_invalid" in verdict["failed_conditions"]
+    assert "baseline_authorization_record_sha" in verdict["failed_conditions"]
     assert "project_transition_schema:update" in verdict["failed_conditions"]
     assert "project_data_not_preserved:update" in verdict["failed_conditions"]
     assert "project_snapshot_missing:update:before" in verdict["failed_conditions"]
+
+
+def test_finalizer_blocks_tampered_authorization_record_binding(tmp_path: Path) -> None:
+    evidence = tmp_path / "evidence"
+    _build_complete_release_evidence(evidence)
+    baseline_path = evidence / "update" / "baseline-verification.json"
+    baseline = json.loads(baseline_path.read_text("utf-8"))
+    baseline["authorization_record_status"] = "RELEASE_BLOCKED"
+    baseline["authorization_record_installer_sha256"] = "7" * 64
+    baseline["authorization_record_installer_name"] = "wrong.exe"
+    _write_json(baseline_path, baseline)
+    result, verdict = _run_finalizer(evidence, tmp_path / "output")
+    assert result.returncode != 0
+    assert verdict["status"] == "RELEASE_BLOCKED"
+    assert "baseline_authorization_record_status" in verdict["failed_conditions"]
+    assert "baseline_authorization_record_installer_sha_mismatch" in verdict["failed_conditions"]
+    assert "baseline_authorization_record_name_mismatch" in verdict["failed_conditions"]
 
 
 def test_finalizer_blocks_tampered_project_transition(tmp_path: Path) -> None:
