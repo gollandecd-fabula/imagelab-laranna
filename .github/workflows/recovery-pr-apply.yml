@@ -1,0 +1,135 @@
+name: Recovery PR Apply
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/recovery-pr-apply.yml
+      - recovery/patches/rc-01-03.patch.gz.b64
+
+permissions:
+  contents: write
+
+concurrency:
+  group: imagelab-recovery-pr-apply
+  cancel-in-progress: false
+
+jobs:
+  apply-verify-commit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact recovery branch
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+        with:
+          ref: bootstrap/zero-trust-gate
+          fetch-depth: 0
+
+      - name: Set up exact Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.13.14'
+
+      - name: Verify and apply SHA-pinned patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          base64 --decode recovery/patches/rc-01-03.patch.gz.b64 | gzip -dc > "$RUNNER_TEMP/recovery.patch"
+          echo '674ff435d98487a99efde0b4a5081bb0acc311fde9f0a1a42e908b5011b951b5  '"$RUNNER_TEMP/recovery.patch" | sha256sum --check --strict
+          git apply --check "$RUNNER_TEMP/recovery.patch"
+          git apply "$RUNNER_TEMP/recovery.patch"
+          grep -F '1.4.4-recovery-candidate' recovery/source/app/config.py
+          grep -F 'REC-RT8-M6-20260724-01' recovery/source/app/config.py
+
+      - name: Install source dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check -r recovery/source/requirements.txt
+
+      - name: Run source recovery gates
+        shell: bash
+        env:
+          PYTHONPATH: ${{ github.workspace }}/recovery/source
+          IMAGELAB_DATA_DIR: ${{ runner.temp }}/imagelab-recovery-data
+        run: |
+          set -euo pipefail
+          cd recovery/source
+          python -m compileall -q app release_gate scripts tests
+          node --check app/static/app.js
+          python -m pytest -q | tee "$RUNNER_TEMP/pytest.txt"
+          python -m app.release_selftest --output "$RUNNER_TEMP/backend-selftest.json"
+
+      - name: Write recovery evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          root = Path('recovery/source')
+          files = [
+              'app/config.py', 'app/main.py', 'app/services/image_processing.py',
+              'app/services/project_store.py', 'app/ai/audit.py',
+              'windows_installer/launcher/main.go', 'windows_installer/installer/main.go',
+              'tests/test_project_store_concurrency.py', 'tests/test_ai_audit_concurrency.py',
+          ]
+          selftest = json.loads((Path(os.environ['RUNNER_TEMP']) / 'backend-selftest.json').read_text('utf-8'))
+          evidence = {
+              'schema': 1,
+              'status': 'PASS_SOURCE_RECOVERY_PROGRESS',
+              'identity': {'version': '1.4.4-recovery-candidate', 'build_id': 'REC-RT8-M6-20260724-01'},
+              'base': {
+                  'version': '1.4.2-zero-trust-candidate',
+                  'build_id': 'ZTR-M6-20260724-01',
+                  'archive_sha256': 'c236656f53447996dc837a206a8896fc6abacf13d45829d8e9e64888b9f6b308',
+              },
+              'patch_sha256': '674ff435d98487a99efde0b4a5081bb0acc311fde9f0a1a42e908b5011b951b5',
+              'checks': {
+                  'compileall': 'PASS', 'pytest': 'PASS', 'javascript_syntax': 'PASS',
+                  'backend_selftest': selftest['status'],
+                  'backend_identity': {'version': selftest['version'], 'build_id': selftest['build_id']},
+              },
+              'recovered_clusters': [
+                  {'id': 'RC-01', 'name': 'IZ017 color vector fidelity', 'status': 'PASS'},
+                  {'id': 'RC-02', 'name': 'project storage concurrency and lineage', 'status': 'PASS'},
+                  {'id': 'RC-03', 'name': 'AI audit concurrency', 'status': 'PASS'},
+              ],
+              'files': {rel: hashlib.sha256((root / rel).read_bytes()).hexdigest() for rel in files},
+              'remaining_missing_cycle6_test_modules': [
+                  'test_isolated_processing.py', 'test_product_workflows.py',
+                  'test_project_lookup_resilience.py', 'test_redteam_contracts.py',
+                  'test_segmentation_governance.py', 'test_storage_and_package_integrity.py',
+              ],
+              'claim_boundary': 'Source recovery progress only. Windows install, installed UI, update/rollback, L4 and L5 are not verified.',
+          }
+          path = Path('recovery/evidence/recovery-progress.json')
+          path.parent.mkdir(parents=True, exist_ok=True)
+          path.write_text(json.dumps(evidence, ensure_ascii=False, indent=2) + '\n', 'utf-8')
+          print(json.dumps(evidence, ensure_ascii=False, indent=2))
+          PY
+
+      - name: Commit verified source recovery
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'ImageLab Recovery Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add recovery/source recovery/evidence/recovery-progress.json
+          git commit -m 'recovery: restore vector fidelity and atomic storage [recovery-patch-output]'
+          git push origin HEAD:bootstrap/zero-trust-gate
+
+      - name: Upload recovery evidence
+        if: always()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        with:
+          name: imagelab-recovery-progress
+          path: |
+            recovery/evidence/recovery-progress.json
+            ${{ runner.temp }}/backend-selftest.json
+            ${{ runner.temp }}/pytest.txt
+          if-no-files-found: warn
+          retention-days: 30
