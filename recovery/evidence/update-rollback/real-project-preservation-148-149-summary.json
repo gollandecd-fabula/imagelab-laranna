@@ -1,43 +1,53 @@
 {
   "schema": 2,
   "status": "PASS_NON_AUTHORIZING_REAL_PROJECT_MECHANISM",
-  "recorded_at_utc": "2026-07-24T22:10:02Z",
+  "recorded_at_utc": "2026-07-24T22:27:46Z",
   "repository": "gollandecd-fabula/imagelab-laranna",
   "branch": "codex/imagelab-selftest-project-evidence",
   "workflow": {
     "name": "Diagnostic Real Project Preservation 1.4.8 to 1.4.9",
-    "run_id": 30129859181,
-    "head_sha": "dc31d91f71aadd80ca4f7a5de9d91b7d1da2f9c0",
+    "run_id": 30130759364,
+    "head_sha": "be466fc98d726e8ca3b280fffdce4f6bafd3df6c",
     "job": "NON-AUTHORIZING real project update and rollback",
     "job_conclusion": "success"
   },
+  "diagnostic_input_archive": {
+    "run_id": 30130329628,
+    "artifact_id": 8610828235,
+    "name": "imagelab-exact-diagnostic-inputs-148-149",
+    "digest": "sha256:1fe5387bf650b8e43cb4631cbf0aa0c51241c3eda0a4c2dc9224cabbf008b233",
+    "retention_expires_at": "2026-10-22T22:14:05Z",
+    "authorization": "NON_AUTHORIZING_DIAGNOSTIC_ONLY"
+  },
   "artifact": {
-    "id": 8610748700,
+    "id": 8611072395,
     "name": "imagelab-real-project-preservation-148-149",
-    "digest": "sha256:83d151a8e25223bad7c85bade1a9721935acec481dd93db06e29132a4ee467db",
-    "retention_expires_at": "2026-08-23T22:10:01Z"
+    "digest": "sha256:cbd29d91fe8e27ebf59021af640c9ff9aa14ebbf66a7bdf88705bcdaf9114d34",
+    "retention_expires_at": "2026-08-23T22:27:46Z"
   },
   "baseline": {
+    "source_run_id": 30110254072,
     "version": "1.4.8-recovery-candidate",
     "build_id": "REC-RT8-M6-20260724-05",
     "installer_sha256": "b456994c002187ccf88e0e7f4695c756c0aa9f955d3b78eff78a38fd22d9be1c",
     "release_authorized": false,
-    "install_id": "edc866c80f28c7ae5b70d4162264f52e"
+    "install_id": "7578c8970b0a4cf445c4ba8d5c8c5473"
   },
   "candidate": {
+    "source_run_id": 30111216367,
     "version": "1.4.9-recovery-candidate",
     "build_id": "REC-RT8-M6-20260724-06",
     "installer_sha256": "12817550c2fac6a6453945c38eefe86368cd4cfa1991c1565e49b092bd818d56",
     "release_authorized": false,
-    "install_id": "5078a09d4774e65bf03868b044426300"
+    "install_id": "ac78c80ad02904d9a144dbb7f7029a8c"
   },
   "project": {
     "project_id": "ZTR-UPDATE-PROJECT",
-    "asset_id": "0f992c91734742de9efc8022a6e4d9d9",
-    "stored_name": "0f992c91734742de9efc8022a6e4d9d9.svg",
+    "asset_id": "163b5d32580d416d81c694addca13ff1",
+    "stored_name": "163b5d32580d416d81c694addca13ff1.svg",
     "original_fixture_sha256": "b79a27ac99ef25f1f1c0e85496e01ac95328d9f063f2101d724c7a471f214cf3",
     "canonical_uploaded_sha256": "2b8723a330ecdb81f4731ec4c84c9a4c091ac643f8b23bf476d0060c7dc5167b",
-    "project_file_sha256": "6b707ed90eaca4c924feb9d00a8ad8c39a714f19ecf98cdac33e7b0ebca13991",
+    "project_file_sha256": "f884d53ef3304281d47b5d31d4049e57914f2b92ac5e55e1384e0840c3fbd9f6",
     "asset_size_bytes": 306,
     "preserved_after_update": true,
     "preserved_after_forced_rollback": true,
