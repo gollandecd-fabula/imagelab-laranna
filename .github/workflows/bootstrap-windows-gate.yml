@@ -1,17 +1,8 @@
 name: ImageLab Bootstrap Windows Gate
 
 on:
-  push:
-    branches:
-      - bootstrap/zero-trust-gate
-    paths:
-      - bootstrap/imagelab-source.zip
-      - bootstrap/imagelab-source.sha256
-      - bootstrap/verify_source_bundle.py
-      - .github/workflows/bootstrap-windows-gate.yml
   pull_request:
-    branches:
-      - main
+    branches: [main]
     paths:
       - bootstrap/imagelab-source.zip
       - bootstrap/imagelab-source.sha256
@@ -20,16 +11,16 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   PYTHONUTF8: '1'
   PIP_DISABLE_PIP_VERSION_CHECK: '1'
   EXACT_PYTHON_VERSION: '3.13.14'
-  GATE_REVISION: 'RC10-WINDOWS-RERUN-3'
-  EXPECTED_SOURCE_SHA256: '476b68ee2ddea5f2985c1c8fd2fc841de490a866bb3a9676aca9411b463e6538'
-  EXPECTED_APP_VERSION: '1.4.6-recovery-candidate'
-  EXPECTED_BUILD_ID: 'REC-RT8-M6-20260724-03'
+  GATE_REVISION: 'RC11-WINDOWS-RERUN-1'
+  EXPECTED_SOURCE_SHA256: 'e130ce027c2d54b72161afe6b9882f66a4311f01d7249b6c7e9bbd9ce4645327'
+  EXPECTED_APP_VERSION: '1.4.7-recovery-candidate'
+  EXPECTED_BUILD_ID: 'REC-RT8-M6-20260724-04'
 
 jobs:
   verify-source-bundle:
@@ -41,7 +32,7 @@ jobs:
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: ${{ env.EXACT_PYTHON_VERSION }}
-      - name: Verify SHA-256, archive safety, privacy and exact build identity
+      - name: Verify exact SHA, archive safety, privacy and identity
         shell: bash
         run: |
           set -euo pipefail
@@ -59,16 +50,16 @@ jobs:
         with:
           name: bootstrap-bundle-evidence
           path: bundle-evidence/
-          retention-days: 30
           if-no-files-found: warn
+          retention-days: 30
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         if: success()
         with:
           name: bootstrap-source-tree
           path: source-tree/
           include-hidden-files: true
-          retention-days: 7
           if-no-files-found: error
+          retention-days: 7
 
   source-and-regression-gate:
     name: B1 Source and regression gate
@@ -83,7 +74,7 @@ jobs:
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: ${{ env.EXACT_PYTHON_VERSION }}
-      - name: Install locked application and exact test dependencies
+      - name: Install exact application and test dependencies
         working-directory: source-tree
         shell: bash
         run: |
@@ -92,10 +83,10 @@ jobs:
             --requirement requirements.txt \
             pytest==9.0.2 \
             httpx==0.28.1
-      - name: Run mandatory source gate
+      - name: Run mandatory 26-file Source Gate
         working-directory: source-tree
         run: python release_gate/source_gate.py --output evidence-bootstrap/source-gate.json
-      - name: Run critical isolated regression files
+      - name: Repeat six critical isolated regressions
         working-directory: source-tree
         shell: bash
         run: |
@@ -110,7 +101,6 @@ jobs:
             tests/test_zero_trust_release_gate.py
           )
           for test_file in "${cases[@]}"; do
-            test -f "$test_file"
             case_id="$(basename "$test_file" .py)"
             python release_gate/run_unit_case.py \
               --case-id "$case_id" \
@@ -123,11 +113,11 @@ jobs:
         with:
           name: bootstrap-source-regression-evidence
           path: source-tree/evidence-bootstrap/
-          retention-days: 30
           if-no-files-found: warn
+          retention-days: 30
 
   build-exact-windows-candidate:
-    name: B2 Build exact Windows candidate
+    name: B2 Build exact reproducible Windows candidate
     needs: source-and-regression-gate
     runs-on: windows-2022
     timeout-minutes: 35
@@ -143,10 +133,11 @@ jobs:
         with:
           go-version: '1.25.x'
           cache: false
-      - name: Build candidate twice and require exact reproducibility and identity
+      - name: Build twice and require exact identity and installer SHA
         working-directory: source-tree
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
           python scripts/build_zero_trust_candidate.py --output-dir dist-a --label BOOTSTRAP_ZERO_TRUST
           python scripts/build_zero_trust_candidate.py --output-dir dist-b --label BOOTSTRAP_ZERO_TRUST
           $aText = Get-Content -Raw dist-a/candidate-manifest.json
@@ -173,8 +164,8 @@ jobs:
         with:
           name: UNVERIFIED_BOOTSTRAP_WINDOWS_CANDIDATE
           path: source-tree/exact-candidate/
-          retention-days: 2
           if-no-files-found: error
+          retention-days: 2
 
   clean-install-ui:
     name: B3-B5 Clean Windows installation and UI path
@@ -193,15 +184,18 @@ jobs:
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: ${{ env.EXACT_PYTHON_VERSION }}
-      - name: Install browser harness
+      - name: Install exact browser harness
         working-directory: source-tree
+        shell: pwsh
         run: |
           python -m pip install --requirement requirements.txt
           python -m pip install --requirement requirements-release.txt
           python -m playwright install chromium
+          python -c "import PIL; import playwright.sync_api; print('RELEASE_GATE_DEPS_PASS')"
       - name: Install exact candidate and drive installed UI
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
           $installer = (Get-ChildItem exact-candidate -Filter *.exe -File | Select-Object -First 1).FullName
           if (-not $installer) { throw 'Exact installer missing' }
           ./source-tree/release_gate/run_clean_install_gate.ps1 `
@@ -215,8 +209,9 @@ jobs:
         with:
           name: bootstrap-clean-install-evidence
           path: evidence-clean/
-          retention-days: 30
+          include-hidden-files: true
           if-no-files-found: warn
+          retention-days: 30
 
   independent-windows-rerun:
     name: B8 Independent Windows rerun
@@ -235,15 +230,18 @@ jobs:
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: ${{ env.EXACT_PYTHON_VERSION }}
-      - name: Install independent browser harness
+      - name: Install exact independent browser harness
         working-directory: source-tree
+        shell: pwsh
         run: |
           python -m pip install --requirement requirements.txt
           python -m pip install --requirement requirements-release.txt
           python -m playwright install chromium
-      - name: Independently repeat installed user path
+          python -c "import PIL; import playwright.sync_api; print('RELEASE_GATE_DEPS_PASS')"
+      - name: Repeat exact installed user path independently
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
           $installer = (Get-ChildItem exact-candidate -Filter *.exe -File | Select-Object -First 1).FullName
           if (-not $installer) { throw 'Exact installer missing' }
           ./source-tree/release_gate/run_clean_install_gate.ps1 `
@@ -257,8 +255,9 @@ jobs:
         with:
           name: bootstrap-independent-evidence
           path: evidence-independent/
-          retention-days: 30
+          include-hidden-files: true
           if-no-files-found: warn
+          retention-days: 30
 
   bootstrap-verdict:
     name: Bootstrap verdict — always release blocked
@@ -270,109 +269,35 @@ jobs:
       - clean-install-ui
       - independent-windows-rerun
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
-      - name: Checkout evidence branch
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
-        with:
-          ref: bootstrap/zero-trust-gate
-          fetch-depth: 0
-      - name: Download B0 evidence
-        continue-on-error: true
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
-        with:
-          name: bootstrap-bundle-evidence
-          path: captured/b0
-      - name: Download B1 evidence
-        continue-on-error: true
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
-        with:
-          name: bootstrap-source-regression-evidence
-          path: captured/b1
-      - name: Download B2 candidate metadata
-        continue-on-error: true
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
-        with:
-          name: UNVERIFIED_BOOTSTRAP_WINDOWS_CANDIDATE
-          path: captured/b2
-      - name: Download B3-B5 evidence
-        continue-on-error: true
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
-        with:
-          name: bootstrap-clean-install-evidence
-          path: captured/b3-b5
-      - name: Download B8 evidence
-        continue-on-error: true
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
-        with:
-          name: bootstrap-independent-evidence
-          path: captured/b8
-      - name: Write fail-closed bootstrap verdict and capture JSON evidence
+      - name: Write exact fail-closed verdict
         shell: bash
         run: |
           set -euo pipefail
-          evidence_root="recovery/evidence/windows-gate/run-${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}"
-          mkdir -p "$evidence_root/json"
-          cat > "$evidence_root/final-verdict.json" <<JSON
+          mkdir -p bootstrap-verdict
+          cat > bootstrap-verdict/final-verdict.json <<JSON
           {
-            "schema": 4,
+            "schema": 5,
             "status": "RELEASE_BLOCKED",
             "run_id": "${GITHUB_RUN_ID}",
-            "run_number": "${GITHUB_RUN_NUMBER}",
-            "run_attempt": "${GITHUB_RUN_ATTEMPT}",
-            "event": "${GITHUB_EVENT_NAME}",
-            "head_sha": "${GITHUB_SHA}",
             "gate_revision": "${GATE_REVISION}",
             "expected_source_sha256": "${EXPECTED_SOURCE_SHA256}",
             "expected_version": "${EXPECTED_APP_VERSION}",
             "expected_build_id": "${EXPECTED_BUILD_ID}",
-            "reason": "Bootstrap cannot authorize release. Update/rollback and physical L5 remain separate mandatory gates.",
             "verify_source_bundle": "${{ needs.verify-source-bundle.result }}",
             "source_and_regression_gate": "${{ needs.source-and-regression-gate.result }}",
             "build_exact_windows_candidate": "${{ needs.build-exact-windows-candidate.result }}",
             "clean_install_ui": "${{ needs.clean-install-ui.result }}",
-            "independent_windows_rerun": "${{ needs.independent-windows-rerun.result }}"
+            "independent_windows_rerun": "${{ needs.independent-windows-rerun.result }}",
+            "reason": "Bootstrap cannot authorize release. Update/rollback and physical L5 remain separate mandatory gates."
           }
           JSON
-          if [ -d captured ]; then
-            find captured -type f \( -name '*.json' -o -name '*.log' -o -name '*.txt' \) -print0 | while IFS= read -r -d '' file; do
-              relative="${file#captured/}"
-              target="$evidence_root/json/$relative"
-              mkdir -p "$(dirname "$target")"
-              cp "$file" "$target"
-            done
-          fi
-          python - <<'PY'
-          import json
-          import os
-          from pathlib import Path
-          root = Path('recovery/evidence/windows-gate') / f"run-{os.environ['GITHUB_RUN_NUMBER']}-{os.environ['GITHUB_RUN_ATTEMPT']}"
-          verdict = json.loads((root / 'final-verdict.json').read_text('utf-8'))
-          assert verdict['status'] == 'RELEASE_BLOCKED'
-          assert verdict['expected_source_sha256'] == '476b68ee2ddea5f2985c1c8fd2fc841de490a866bb3a9676aca9411b463e6538'
-          assert verdict['expected_version'] == '1.4.6-recovery-candidate'
-          assert verdict['expected_build_id'] == 'REC-RT8-M6-20260724-03'
-          print(json.dumps(verdict, ensure_ascii=False, indent=2))
-          PY
-      - name: Commit fail-closed evidence snapshot
-        if: github.event_name == 'push'
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name 'ImageLab Windows Gate Bot'
-          git config user.email 'actions@users.noreply.github.com'
-          git add recovery/evidence/windows-gate
-          if git diff --cached --quiet; then
-            echo 'No new evidence snapshot.'
-          else
-            git commit -m "evidence: capture Windows gate run ${GITHUB_RUN_NUMBER} [skip ci]"
-            git push origin HEAD:bootstrap/zero-trust-gate
-          fi
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         with:
           name: ImageLab-BOOTSTRAP-VERDICT
-          path: recovery/evidence/windows-gate/
-          retention-days: 90
+          path: bootstrap-verdict/
           if-no-files-found: error
-      - name: Enforce fail-closed bootstrap state
+          retention-days: 90
+      - name: Enforce release block
         run: exit 1
