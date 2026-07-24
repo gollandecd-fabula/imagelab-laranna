@@ -44,7 +44,19 @@ jobs:
       - name: Run focused release-gate tests
         run: python -m pytest tests/test_zero_trust_release_gate.py -vv --tb=short
       - name: Run complete source test suite
-        run: python -m pytest -q
+        run: |
+          set +e
+          python -m pytest -q > full-suite.log 2>&1
+          code=$?
+          tail -n 120 full-suite.log
+          exit $code
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        if: always()
+        with:
+          name: ImageLab-evidence-hardening-python
+          path: recovery/source/full-suite.log
+          retention-days: 30
+          if-no-files-found: warn
 
   powershell-contract:
     name: Windows PowerShell parser contract
