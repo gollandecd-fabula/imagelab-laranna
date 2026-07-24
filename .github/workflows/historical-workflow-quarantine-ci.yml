@@ -21,12 +21,12 @@ permissions:
 
 jobs:
   quarantine-contract:
-    name: Historical workflows cannot auto-run or write
+    name: Historical workflows quarantined; RC13 gate preserved
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
-      - name: Verify retirement boundaries
+      - name: Verify workflow boundaries
         shell: python
         run: |
           from pathlib import Path
@@ -36,7 +36,6 @@ jobs:
               ".github/workflows/bootstrap-windows-gate.yml",
               ".github/workflows/diagnostic-update-rollback-148-to-149.yml",
               ".github/workflows/rc12-windows-gate.yml",
-              ".github/workflows/rc13-windows-gate.yml",
               ".github/workflows/recovery-pr-apply-rc12.yml",
               ".github/workflows/recovery-pr-apply-rc13.yml",
               ".github/workflows/recovery-promote-bootstrap-rc13.yml",
@@ -56,9 +55,37 @@ jobs:
                   failures.append(f"retirement_marker_missing:{name}")
               if "on:\n  workflow_dispatch:" not in text:
                   failures.append(f"manual_only_trigger_missing:{name}")
-          current_gate = Path("recovery/source/.github/workflows/zero-trust-release.yml")
-          if not current_gate.is_file():
-              failures.append("current_zero_trust_gate_missing")
+
+          rc13_path = Path(".github/workflows/rc13-windows-gate.yml")
+          if not rc13_path.is_file():
+              failures.append("current_rc13_gate_missing")
+          else:
+              rc13 = rc13_path.read_text("utf-8")
+              if "pull_request:" in rc13:
+                  failures.append("current_rc13_gate_auto_trigger")
+              if "contents: write" in rc13:
+                  failures.append("current_rc13_gate_write_permission")
+              if "on:\n  workflow_dispatch:" not in rc13:
+                  failures.append("current_rc13_manual_trigger_missing")
+              if "RETIRED_WORKFLOW" in rc13:
+                  failures.append("current_rc13_gate_retired")
+              for token in (
+                  "EXPECTED_SOURCE_SHA256: '83bcfcc9e9d6dfaa29ef2827f3a967d9719cbff2650672b7d5d9d3eac1af4885'",
+                  "EXPECTED_APP_VERSION: '1.4.9-recovery-candidate'",
+                  "EXPECTED_BUILD_ID: 'REC-RT8-M6-20260724-06'",
+                  "b0:",
+                  "b1:",
+                  "b2:",
+                  "b3_b5:",
+                  "b8:",
+                  '"status": "RELEASE_BLOCKED"',
+              ):
+                  if token not in rc13:
+                      failures.append(f"current_rc13_contract_missing:{token}")
+
+          source_gate = Path("recovery/source/.github/workflows/zero-trust-release.yml")
+          if not source_gate.is_file():
+              failures.append("source_zero_trust_gate_missing")
           if failures:
               raise SystemExit("\n".join(failures))
-          print(f"PASS: {len(historical)} historical workflows are quarantined; current zero-trust gate is present.")
+          print(f"PASS: {len(historical)} historical workflows are quarantined; exact RC13 manual gate is preserved.")
