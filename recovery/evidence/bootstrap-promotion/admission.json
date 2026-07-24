@@ -1,0 +1,34 @@
+{
+  "schema": 1,
+  "status": "PASS",
+  "mode": "RECOVERY_TO_BOOTSTRAP_PROMOTION_ADMISSION",
+  "identity": {
+    "version": "1.4.5-recovery-candidate",
+    "build_id": "REC-RT8-M6-20260724-02"
+  },
+  "bundle": {
+    "path": "recovery/dist/ImageLab_by_LarannA_RECOVERY_1.4.5_SOURCE.zip",
+    "expected_sha256": "e4268157d6abc5495eefa9799b09a5352d43102019c4f0047f7303597f6c2ea7",
+    "actual_sha256": "e4268157d6abc5495eefa9799b09a5352d43102019c4f0047f7303597f6c2ea7",
+    "member_count": 87,
+    "members_sha256": "b0c43a785c437bf649750a5541386b81b6436c160aad07a5aa6903265581e2fe",
+    "crc_failure": null
+  },
+  "checks": {
+    "full_pytest": "142/142 PASS",
+    "required_test_files": "26/26 PASS",
+    "compileall": "PASS",
+    "javascript_syntax": "PASS",
+    "backend_selftest": "PASS",
+    "source_zip_reproducibility": "2/2 BYTE_IDENTICAL"
+  },
+  "claim_boundary": {
+    "source_recovery": "PASS",
+    "windows_packaging": "NOT_STARTED_FOR_RECOVERY_CANDIDATE",
+    "installed_windows_runtime_L4": "UNVERIFIED",
+    "physical_user_path_L5": "UNVERIFIED",
+    "update_rollback": "UNVERIFIED",
+    "release": "BLOCKED"
+  },
+  "failures": []
+}
