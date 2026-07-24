@@ -79,7 +79,7 @@ jobs:
             pytest==9.0.2 \
             httpx==0.28.1
 
-      - name: Run full 142-test regression
+      - name: Run exact 142-test regression
         shell: bash
         env:
           PYTHONPATH: ${{ github.workspace }}/recovery/source
@@ -89,8 +89,23 @@ jobs:
           cd recovery/source
           python -m compileall -q app release_gate scripts tests
           node --check app/static/app.js
-          python -m pytest -q | tee "$RUNNER_TEMP/pytest-full.log"
-          grep -Eq '142 passed' "$RUNNER_TEMP/pytest-full.log"
+          python -m pytest -q --junitxml="$RUNNER_TEMP/pytest-full.xml" | tee "$RUNNER_TEMP/pytest-full.log"
+          python - <<'PY'
+          import os
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+          root = ET.parse(Path(os.environ['RUNNER_TEMP']) / 'pytest-full.xml').getroot()
+          suites = [root] if root.tag == 'testsuite' else list(root.findall('testsuite'))
+          tests = sum(int(suite.attrib.get('tests', '0')) for suite in suites)
+          failures = sum(int(suite.attrib.get('failures', '0')) for suite in suites)
+          errors = sum(int(suite.attrib.get('errors', '0')) for suite in suites)
+          skipped = sum(int(suite.attrib.get('skipped', '0')) for suite in suites)
+          assert tests == 142, tests
+          assert failures == 0, failures
+          assert errors == 0, errors
+          assert skipped == 0, skipped
+          print('PYTEST_142_OF_142_PASS')
+          PY
 
       - name: Run exact 26-file Source Gate
         shell: bash
@@ -257,5 +272,6 @@ jobs:
             recovery/evidence
             recovery/dist
             ${{ runner.temp }}/pytest-full.log
+            ${{ runner.temp }}/pytest-full.xml
           if-no-files-found: warn
           retention-days: 30
