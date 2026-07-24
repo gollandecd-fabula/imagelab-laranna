@@ -11,6 +11,10 @@ on:
         description: Externally pinned SHA-256 of the last authorized installer
         required: true
         type: string
+      baseline_authorization_record_sha256:
+        description: Independently pinned SHA-256 of ImageLab-RELEASE-AUTHORIZATION.json from the prior finalizer
+        required: true
+        type: string
       enable_attestation:
         description: Generate GitHub artifact attestation when repository plan supports it
         required: false
@@ -42,8 +46,10 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
-      - name: Install exact application dependencies
-        run: python -m pip install --requirement requirements.txt
+      - name: Install exact application and test dependencies
+        run: |
+          python -m pip install --requirement requirements.txt
+          python -m pip install pytest==8.4.2 httpx==0.28.1
       - name: Run source gate
         run: python release_gate/source_gate.py --output evidence-zero-trust/source-gate.json
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
@@ -93,8 +99,10 @@ jobs:
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: '3.13.14'
-      - name: Install exact application dependencies
-        run: python -m pip install --requirement requirements.txt
+      - name: Install exact application and test dependencies
+        run: |
+          python -m pip install --requirement requirements.txt
+          python -m pip install pytest==8.4.2 httpx==0.28.1
       - name: Run one isolated test file and always write evidence
         run: >-
           python release_gate/run_unit_case.py
@@ -218,20 +226,40 @@ jobs:
         with:
           name: UNVERIFIED_INTERNAL_EXACT_CANDIDATE
           path: exact-candidate
-      - name: Download and pin the last authorized installer
+      - name: Download and verify the prior finalizer authorization record
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
           BASELINE_TAG: ${{ inputs.baseline_release_tag }}
           BASELINE_SHA256: ${{ inputs.baseline_installer_sha256 }}
+          BASELINE_AUTHORIZATION_SHA256: ${{ inputs.baseline_authorization_record_sha256 }}
         run: |
+          $ErrorActionPreference = 'Stop'
           New-Item -ItemType Directory -Force baseline | Out-Null
           gh release download $env:BASELINE_TAG --pattern 'ImageLab_by_LarannA_RELEASE_AUTHORIZED*_Setup_x64.exe' --dir baseline --clobber
+          gh release download $env:BASELINE_TAG --pattern 'ImageLab-RELEASE-AUTHORIZATION.json' --dir baseline --clobber
           $files = @(Get-ChildItem baseline -Filter *.exe -File)
+          $records = @(Get-ChildItem baseline -Filter ImageLab-RELEASE-AUTHORIZATION.json -File)
           if ($files.Count -ne 1) { throw "Expected exactly one authorized baseline installer, found $($files.Count)" }
+          if ($records.Count -ne 1) { throw "Expected exactly one prior finalizer authorization record, found $($records.Count)" }
           $actual = (Get-FileHash -Algorithm SHA256 $files[0].FullName).Hash.ToLowerInvariant()
+          $recordActual = (Get-FileHash -Algorithm SHA256 $records[0].FullName).Hash.ToLowerInvariant()
           if ($actual -ne $env:BASELINE_SHA256.ToLowerInvariant()) { throw "Baseline installer SHA-256 mismatch" }
-          @{schema=1;status='PASS';release_tag=$env:BASELINE_TAG;installer_sha256=$actual;name=$files[0].Name} | ConvertTo-Json | Set-Content baseline/baseline-verification.json -Encoding utf8
+          if ($recordActual -ne $env:BASELINE_AUTHORIZATION_SHA256.ToLowerInvariant()) { throw "Baseline authorization record SHA-256 mismatch" }
+          $record = Get-Content -Raw -LiteralPath $records[0].FullName | ConvertFrom-Json
+          if ($record.schema -ne 1) { throw "Prior authorization record schema mismatch" }
+          if ($record.status -ne 'RELEASE_AUTHORIZED') { throw "Prior authorization record does not authorize release" }
+          if ($record.authorization_source -ne 'finalize_gate.py') { throw "Prior authorization record source mismatch" }
+          if ($record.installer_sha256 -ne $actual) { throw "Prior authorization record installer SHA mismatch" }
+          if ($record.installer_name -ne $files[0].Name) { throw "Prior authorization record installer name mismatch" }
+          if ($record.final_verdict_sha256 -notmatch '^[0-9a-f]{64}$' -or $record.release_evidence_sha256 -notmatch '^[0-9a-f]{64}$') { throw "Prior authorization record evidence digests are invalid" }
+          [ordered]@{
+            schema=3; status='PASS'; release_authorized=$true; authorization_source='prior_finalizer_record';
+            authorization_record_status=$record.status; authorization_record_sha256=$recordActual;
+            authorization_record_installer_name=$record.installer_name; authorization_record_installer_sha256=$record.installer_sha256;
+            authorization_record_final_verdict_sha256=$record.final_verdict_sha256; authorization_record_release_evidence_sha256=$record.release_evidence_sha256;
+            release_tag=$env:BASELINE_TAG; installer_sha256=$actual; name=$files[0].Name
+          } | ConvertTo-Json | Set-Content baseline/baseline-verification.json -Encoding utf8
       - name: Update real previous version and inject post-promotion failure
         shell: pwsh
         run: |
@@ -325,11 +353,11 @@ jobs:
         id: finalize
         continue-on-error: true
         run: python release_gate/finalize_gate.py --aggregate-dir aggregate --output-dir authorized-release
-      - name: Attest exact authorized installer
+      - name: Attest exact authorized release outputs
         if: ${{ steps.finalize.outcome == 'success' && inputs.enable_attestation }}
         uses: actions/attest@v4
         with:
-          subject-path: authorized-release/*.exe
+          subject-path: authorized-release/*
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         if: always()
         with:
@@ -341,7 +369,9 @@ jobs:
         if: ${{ steps.finalize.outcome == 'success' }}
         with:
           name: ImageLab-RELEASE-AUTHORIZED
-          path: authorized-release/*.exe
+          path: |
+            authorized-release/*.exe
+            authorized-release/ImageLab-RELEASE-AUTHORIZATION.json
           retention-days: 90
           if-no-files-found: error
       - name: Enforce fail-closed final verdict
