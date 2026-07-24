@@ -1,35 +1,49 @@
 # ImageLab bootstrap source bundle
 
-Эта папка используется только для первоначального запуска Windows Zero-Trust Gate.
+Эта папка используется только для запуска Windows Zero-Trust Gate. Она не является каналом пользовательского релиза.
 
 ## Exact source identity
 
-Для текущего цикла разрешён только один исходный пакет:
+Для текущего recovery-цикла разрешён только один исходный пакет:
 
 - файл: `imagelab-source.zip`;
-- версия: `1.4.3-redteam-cycle6-candidate`;
-- Build ID: `RT8-M6-20260724-02`;
-- SHA-256: `272e825aa4dc320bc6c287fe44700d1c234a9cd97414b719fc62a74b0fc37ab5`.
+- версия: `1.4.9-recovery-candidate`;
+- Build ID: `REC-RT8-M6-20260724-06`;
+- SHA-256: `83bcfcc9e9d6dfaa29ef2827f3a967d9719cbff2650672b7d5d9d3eac1af4885`.
 
-Файл `imagelab-source.sha256` закрепляет этот SHA-256. Совпадение только с самим checksum-файлом недостаточно: B0 независимо проверяет ожидаемую версию, Build ID, безопасные пути архива, CRC, обязательные файлы и privacy denylist.
+Файл `imagelab-source.sha256` закрепляет этот SHA-256. Совпадение только с checksum-файлом недостаточно: B0 независимо проверяет ожидаемую версию, Build ID, безопасные пути архива, CRC, обязательные файлы и privacy denylist.
 
-## Текущий блокер
+## Подтверждённые hosted-проверки
 
-На ветке всё ещё находится предыдущий архив с SHA-256 `c236656f53447996dc837a206a8896fc6abacf13d45829d8e9e64888b9f6b308`. Он не соответствует cycle 6 и обязан блокироваться до распаковки/исполнения последующих ворот.
+Workflow run `30111216367` подтвердил для точного кандидата:
 
-Для продолжения RT8-M6 необходимо атомарно заменить только `bootstrap/imagelab-source.zip` точным cycle-6 архивом. Подмена checksum, ручное изменение версии внутри старого ZIP или ослабление B0 запрещены.
+- B0: exact source admission — `PASS`;
+- B1: source gate — `PASS`;
+- B2: две byte-identical Windows-сборки — `PASS`;
+- B3–B5: чистая Windows-установка, Edge UI и валидация реальных PNG/SVG — `PASS`;
+- B8: независимый повтор на другом Windows runner с bundled Chromium — `PASS`.
 
-## Проверки bootstrap
+Точная сводка evidence:
 
-Workflow выполняет:
+- `recovery/evidence/windows-gate/rc13-windows-evidence-summary.json`.
 
-- B0: точный SHA-256, CRC, безопасные пути, denylist, version/build identity;
-- B1: обязательный Source Gate и критические изолированные regression tests;
-- B2: две воспроизводимые Windows-сборки и manifest identity;
-- B3–B5: чистую Windows-установку, установленный UI-путь и проверку результатов;
-- B8: независимый повторный Windows-прогон.
+## Update / rollback
 
-Bootstrap никогда не публикует установщик как пользовательский релиз. Пока не проверены обновление реальной предыдущей версии, forced-failure rollback и физический пользовательский путь, итог остаётся:
+Механизм обновления и forced-failure rollback диагностически проверен на переходе `1.4.8` → `1.4.9` и прошёл. Эта проверка не является authorizing G6/G7, потому что `1.4.8` никогда не имела статуса `RELEASE_AUTHORIZED`.
+
+Evidence:
+
+- `recovery/evidence/update-rollback/diagnostic-update-rollback-148-149-summary.json`;
+- `recovery/evidence/update-rollback/g6-authorized-baseline-blocker.json`.
+
+## Текущие блокеры
+
+- G6: отсутствует реальная предыдущая версия `RELEASE_AUTHORIZED`, опубликованная внешним GitHub Release и независимо закреплённая SHA-256;
+- authorizing G7: заблокирован недействительным G6 baseline, несмотря на PASS технического rollback-механизма;
+- физический пользовательский Windows L5: `UNVERIFIED`;
+- RT8-M7 и RT8-M8: не завершены.
+
+Bootstrap никогда не публикует установщик как пользовательский релиз. Текущий итог:
 
 `FAIL-CLOSED`
 
