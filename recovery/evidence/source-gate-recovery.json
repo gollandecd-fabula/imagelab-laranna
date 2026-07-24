@@ -18,7 +18,7 @@
         "scripts"
       ],
       "exit_code": 0,
-      "duration_seconds": 0.038,
+      "duration_seconds": 0.037,
       "stdout": "",
       "stderr": ""
     },
@@ -27,7 +27,7 @@
         "isolated critical pytest files"
       ],
       "exit_code": 0,
-      "duration_seconds": 32.42,
+      "duration_seconds": 30.965,
       "stdout": "26/26 critical test files passed",
       "stderr": "",
       "files": {
@@ -39,7 +39,7 @@
             "tests/test_a0.py"
           ],
           "exit_code": 0,
-          "duration_seconds": 0.95,
+          "duration_seconds": 0.895,
           "stdout": ".....                                                                    [100%]\n",
           "stderr": ""
         },
@@ -51,7 +51,7 @@
             "tests/test_a1.py"
           ],
           "exit_code": 0,
-          "duration_seconds": 1.289,
+          "duration_seconds": 1.178,
           "stdout": "....                                                                     [100%]\n",
           "stderr": ""
         },
@@ -63,7 +63,7 @@
             "tests/test_a2_a4.py"
           ],
           "exit_code": 0,
-          "duration_seconds": 2.041,
+          "duration_seconds": 1.967,
           "stdout": "..                                                                       [100%]\n",
           "stderr": ""
         },
@@ -75,7 +75,7 @@
             "tests/test_ai_audit_concurrency.py"
           ],
           "exit_code": 0,
-          "duration_seconds": 0.969,
+          "duration_seconds": 0.94,
           "stdout": "..                                                                       [100%]\n",
           "stderr": ""
         },
@@ -87,7 +87,7 @@
             "tests/test_ai_contours.py"
           ],
           "exit_code": 0,
-          "duration_seconds": 3.625,
+          "duration_seconds": 3.519,
           "stdout": ".......                                                                  [100%]\n",
           "stderr": ""
         },
@@ -99,7 +99,7 @@
             "tests/test_bootstrap.py"
           ],
           "exit_code": 0,
-          "duration_seconds": 0.335,
+          "duration_seconds": 0.312,
           "stdout": ".....                                                                    [100%]\n",
           "stderr": ""
         },
@@ -111,7 +111,7 @@
             "tests/test_core_failure_regression.py"
           ],
           "exit_code": 0,
-          "duration_seconds": 1.227,
+          "duration_seconds": 1.167,
           "stdout": ".....                                                                    [100%]\n",
           "stderr": ""
         },
@@ -123,7 +123,7 @@
             "tests/test_installer_update_lock.py"
           ],
           "exit_code": 0,
-          "duration_seconds": 0.844,
+          "duration_seconds": 0.807,
           "stdout": "........                                                                 [100%]\n",
           "stderr": ""
         },
@@ -135,7 +135,7 @@
             "tests/test_isolated_processing.py"
           ],
           "exit_code": 0,
-          "duration_seconds": 1.277,
+          "duration_seconds": 1.268,
           "stdout": "...                                                                      [100%]\n",
           "stderr": ""
         },
@@ -147,7 +147,7 @@
             "tests/test_l5_iz017_regression.py"
           ],
           "exit_code": 0,
-          "duration_seconds": 2.593,
+          "duration_seconds": 2.505,
           "stdout": "...                                                                      [100%]\n",
           "stderr": ""
         },
@@ -159,7 +159,7 @@
             "tests/test_m1_ui.py"
           ],
           "exit_code": 0,
-          "duration_seconds": 0.851,
+          "duration_seconds": 0.798,
           "stdout": ".....                                                                    [100%]\n",
           "stderr": ""
         },
@@ -171,7 +171,7 @@
             "tests/test_print_extraction.py"
           ],
           "exit_code": 0,
-          "duration_seconds": 2.127,
+          "duration_seconds": 2.011,
           "stdout": "....                                                                     [100%]\n",
           "stderr": ""
         },
@@ -183,7 +183,7 @@
             "tests/test_product_workflows.py"
           ],
           "exit_code": 0,
-          "duration_seconds": 0.583,
+          "duration_seconds": 0.538,
           "stdout": "....                                                                     [100%]\n",
           "stderr": ""
         },
@@ -195,7 +195,7 @@
             "tests/test_project_lookup_resilience.py"
           ],
           "exit_code": 0,
-          "duration_seconds": 0.397,
+          "duration_seconds": 0.378,
           "stdout": ".......                                                                  [100%]\n",
           "stderr": ""
         },
@@ -207,7 +207,7 @@
             "tests/test_project_store_concurrency.py"
           ],
           "exit_code": 0,
-          "duration_seconds": 0.691,
+          "duration_seconds": 0.658,
           "stdout": "....                                                                     [100%]\n",
           "stderr": ""
         },
@@ -219,7 +219,7 @@
             "tests/test_redteam_adversarial.py"
           ],
           "exit_code": 0,
-          "duration_seconds": 2.225,
+          "duration_seconds": 2.135,
           "stdout": "...............................                                          [100%]\n",
           "stderr": ""
         },
@@ -231,7 +231,7 @@
             "tests/test_redteam_contracts.py"
           ],
           "exit_code": 0,
-          "duration_seconds": 0.836,
+          "duration_seconds": 0.793,
           "stdout": ".....                                                                    [100%]\n",
           "stderr": ""
         },
@@ -243,7 +243,7 @@
             "tests/test_second_core_failure_regression.py"
           ],
           "exit_code": 0,
-          "duration_seconds": 1.549,
+          "duration_seconds": 1.512,
           "stdout": ".....                                                                    [100%]\n",
           "stderr": ""
         },
@@ -255,7 +255,7 @@
             "tests/test_segmentation_governance.py"
           ],
           "exit_code": 0,
-          "duration_seconds": 0.685,
+          "duration_seconds": 0.662,
           "stdout": "..                                                                       [100%]\n",
           "stderr": ""
         },
@@ -267,7 +267,7 @@
             "tests/test_slu_m1_units.py"
           ],
           "exit_code": 0,
-          "duration_seconds": 1.23,
+          "duration_seconds": 1.157,
           "stdout": ".....                                                                    [100%]\n",
           "stderr": ""
         },
@@ -279,7 +279,7 @@
             "tests/test_slu_m2_m5.py"
           ],
           "exit_code": 0,
-          "duration_seconds": 1.506,
+          "duration_seconds": 1.393,
           "stdout": ".....                                                                    [100%]\n",
           "stderr": ""
         },
@@ -291,7 +291,7 @@
             "tests/test_slu_m3_segmentation.py"
           ],
           "exit_code": 0,
-          "duration_seconds": 0.766,
+          "duration_seconds": 0.74,
           "stdout": "...                                                                      [100%]\n",
           "stderr": ""
         },
@@ -303,7 +303,7 @@
             "tests/test_slu_m5_e2e.py"
           ],
           "exit_code": 0,
-          "duration_seconds": 1.471,
+          "duration_seconds": 1.388,
           "stdout": ".                                                                        [100%]\n",
           "stderr": ""
         },
@@ -315,7 +315,7 @@
             "tests/test_storage_and_package_integrity.py"
           ],
           "exit_code": 0,
-          "duration_seconds": 0.607,
+          "duration_seconds": 0.569,
           "stdout": "..                                                                       [100%]\n",
           "stderr": ""
         },
@@ -327,7 +327,7 @@
             "tests/test_windows_packaging_config.py"
           ],
           "exit_code": 0,
-          "duration_seconds": 0.34,
+          "duration_seconds": 0.317,
           "stdout": "......                                                                   [100%]\n",
           "stderr": ""
         },
@@ -339,7 +339,7 @@
             "tests/test_zero_trust_release_gate.py"
           ],
           "exit_code": 0,
-          "duration_seconds": 1.406,
+          "duration_seconds": 1.358,
           "stdout": ".........                                                                [100%]\n",
           "stderr": ""
         }
@@ -352,7 +352,7 @@
         "app/static/app.js"
       ],
       "exit_code": 0,
-      "duration_seconds": 0.024,
+      "duration_seconds": 0.023,
       "stdout": "",
       "stderr": ""
     },
@@ -362,11 +362,11 @@
         "-m",
         "app.release_selftest",
         "--output",
-        "/tmp/imagelab-source-gate-19s2n7w1/backend-selftest.json"
+        "/tmp/imagelab-source-gate-urpq5436/backend-selftest.json"
       ],
       "exit_code": 0,
-      "duration_seconds": 1.036,
-      "stdout": "{\n  \"schema\": 1,\n  \"status\": \"PASS\",\n  \"app\": \"ImageLab by LarannA\",\n  \"version\": \"1.4.5-recovery-candidate\",\n  \"build_id\": \"REC-RT8-M6-20260724-02\",\n  \"install_id\": \"source-tree\",\n  \"python\": \"3.13.14 (main, Jun 11 2026, 03:02:07) [GCC 13.3.0]\",\n  \"data_dir\": \"/tmp/imagelab-source-gate-19s2n7w1/data\",\n  \"tests\": {\n    \"resize_ppi\": {\n      \"status\": \"PASS\",\n      \"asset_id\": \"72c2297771874eb3bf304780ae9c2801\",\n      \"size_px\": [\n        400,\n        300\n      ],\n      \"ppi\": 200.0,\n      \"sha256\": \"32768585753a10c6e4b5e82e32e82c6518c400baa30fe031d2539813c8a6c691\"\n    },\n    \"background\": {\n      \"status\": \"PASS\",\n      \"asset_id\": \"07b4ca3fc6fe447093e0139c72248e50\",\n      \"border_visible_ratio\": 0.0,\n      \"visible_ratio\": 0.439635,\n      \"transparent_ratio\": 0.560365,\n      \"sha256\": \"656909881f5c4c9d9e555424337dcf70640ae85bbab38a335ac31559b26c5906\"\n    },\n    \"halftone\": {\n      \"status\": \"PASS\",\n      \"asset_id\": \"ca538daf275847d4bcedc85d96916eb7\",\n      \"coverage_ratio\": 0.139219,\n      \"components\": 973,\n      \"sha256\": \"d31484048818acaad057360d4bf8fb02aff506ab3b5421de5e90bf5095f6e340\"\n    },\n    \"vector\": {\n      \"status\": \"PASS\",\n      \"asset_id\": \"c88a7ffca3a44f12b00e8cc52e07ef2b\",\n      \"path_count\": 9,\n      \"coverage_ratio\": 1.0,\n      \"quality_score\": 0.996949,\n      \"sha256\": \"6d0afbcc7972e50f8f58b92cc71fa38dc483f890db8ded8643c8ba9a6d907b2a\"\n    },\n    \"history_lineage\": {\n      \"status\": \"PASS\",\n      \"source_asset_id\": \"8d07f2aef3544e9e931b8c2f91999ce1\",\n      \"resize_asset_id\": \"72c2297771874eb3bf304780ae9c2801\",\n      \"vector_asset_id\": \"c88a7ffca3a44f12b00e8cc52e07ef2b\",\n      \"active_revision\": 3\n    },\n    \"export\": {\n      \"status\": \"PASS\",\n      \"asset_id\": \"c64d6b42bac141068c8c8c13a08891dd\",\n      \"format\": \"PNG\",\n      \"size_px\": [\n        400,\n        300\n      ],\n      \"ppi\": 200.0,\n      \"sha256\": \"32768585753a10c6e4b5e82e32e82c6518c400baa30fe031d2539813c8a6c691\"\n    }\n  },\n  \"duration_seconds\": 0.688\n}\n",
+      "duration_seconds": 1.003,
+      "stdout": "{\n  \"schema\": 1,\n  \"status\": \"PASS\",\n  \"app\": \"ImageLab by LarannA\",\n  \"version\": \"1.4.5-recovery-candidate\",\n  \"build_id\": \"REC-RT8-M6-20260724-02\",\n  \"install_id\": \"source-tree\",\n  \"python\": \"3.13.14 (main, Jun 11 2026, 03:02:07) [GCC 13.3.0]\",\n  \"data_dir\": \"/tmp/imagelab-source-gate-urpq5436/data\",\n  \"tests\": {\n    \"resize_ppi\": {\n      \"status\": \"PASS\",\n      \"asset_id\": \"d6bc128ff52f4c4eb30a75e5f1c6eae7\",\n      \"size_px\": [\n        400,\n        300\n      ],\n      \"ppi\": 200.0,\n      \"sha256\": \"32768585753a10c6e4b5e82e32e82c6518c400baa30fe031d2539813c8a6c691\"\n    },\n    \"background\": {\n      \"status\": \"PASS\",\n      \"asset_id\": \"ac5877490f6a4522a5cf7c2af5e99585\",\n      \"border_visible_ratio\": 0.0,\n      \"visible_ratio\": 0.439635,\n      \"transparent_ratio\": 0.560365,\n      \"sha256\": \"656909881f5c4c9d9e555424337dcf70640ae85bbab38a335ac31559b26c5906\"\n    },\n    \"halftone\": {\n      \"status\": \"PASS\",\n      \"asset_id\": \"88a98228a2864f41b3891601b5fd8572\",\n      \"coverage_ratio\": 0.139219,\n      \"components\": 973,\n      \"sha256\": \"d31484048818acaad057360d4bf8fb02aff506ab3b5421de5e90bf5095f6e340\"\n    },\n    \"vector\": {\n      \"status\": \"PASS\",\n      \"asset_id\": \"6e54e109e5c24374819a42cc638e6778\",\n      \"path_count\": 9,\n      \"coverage_ratio\": 1.0,\n      \"quality_score\": 0.996949,\n      \"sha256\": \"6d0afbcc7972e50f8f58b92cc71fa38dc483f890db8ded8643c8ba9a6d907b2a\"\n    },\n    \"history_lineage\": {\n      \"status\": \"PASS\",\n      \"source_asset_id\": \"da817d872e9c4a31a07259f6d7a61ab0\",\n      \"resize_asset_id\": \"d6bc128ff52f4c4eb30a75e5f1c6eae7\",\n      \"vector_asset_id\": \"6e54e109e5c24374819a42cc638e6778\",\n      \"active_revision\": 3\n    },\n    \"export\": {\n      \"status\": \"PASS\",\n      \"asset_id\": \"efd530e53ef6493c9c9a7b419a63bb0c\",\n      \"format\": \"PNG\",\n      \"size_px\": [\n        400,\n        300\n      ],\n      \"ppi\": 200.0,\n      \"sha256\": \"32768585753a10c6e4b5e82e32e82c6518c400baa30fe031d2539813c8a6c691\"\n    }\n  },\n  \"duration_seconds\": 0.678\n}\n",
       "stderr": ""
     }
   },
@@ -378,11 +378,11 @@
     "build_id": "REC-RT8-M6-20260724-02",
     "install_id": "source-tree",
     "python": "3.13.14 (main, Jun 11 2026, 03:02:07) [GCC 13.3.0]",
-    "data_dir": "/tmp/imagelab-source-gate-19s2n7w1/data",
+    "data_dir": "/tmp/imagelab-source-gate-urpq5436/data",
     "tests": {
       "resize_ppi": {
         "status": "PASS",
-        "asset_id": "72c2297771874eb3bf304780ae9c2801",
+        "asset_id": "d6bc128ff52f4c4eb30a75e5f1c6eae7",
         "size_px": [
           400,
           300
@@ -392,7 +392,7 @@
       },
       "background": {
         "status": "PASS",
-        "asset_id": "07b4ca3fc6fe447093e0139c72248e50",
+        "asset_id": "ac5877490f6a4522a5cf7c2af5e99585",
         "border_visible_ratio": 0.0,
         "visible_ratio": 0.439635,
         "transparent_ratio": 0.560365,
@@ -400,14 +400,14 @@
       },
       "halftone": {
         "status": "PASS",
-        "asset_id": "ca538daf275847d4bcedc85d96916eb7",
+        "asset_id": "88a98228a2864f41b3891601b5fd8572",
         "coverage_ratio": 0.139219,
         "components": 973,
         "sha256": "d31484048818acaad057360d4bf8fb02aff506ab3b5421de5e90bf5095f6e340"
       },
       "vector": {
         "status": "PASS",
-        "asset_id": "c88a7ffca3a44f12b00e8cc52e07ef2b",
+        "asset_id": "6e54e109e5c24374819a42cc638e6778",
         "path_count": 9,
         "coverage_ratio": 1.0,
         "quality_score": 0.996949,
@@ -415,14 +415,14 @@
       },
       "history_lineage": {
         "status": "PASS",
-        "source_asset_id": "8d07f2aef3544e9e931b8c2f91999ce1",
-        "resize_asset_id": "72c2297771874eb3bf304780ae9c2801",
-        "vector_asset_id": "c88a7ffca3a44f12b00e8cc52e07ef2b",
+        "source_asset_id": "da817d872e9c4a31a07259f6d7a61ab0",
+        "resize_asset_id": "d6bc128ff52f4c4eb30a75e5f1c6eae7",
+        "vector_asset_id": "6e54e109e5c24374819a42cc638e6778",
         "active_revision": 3
       },
       "export": {
         "status": "PASS",
-        "asset_id": "c64d6b42bac141068c8c8c13a08891dd",
+        "asset_id": "efd530e53ef6493c9c9a7b419a63bb0c",
         "format": "PNG",
         "size_px": [
           400,
@@ -432,6 +432,6 @@
         "sha256": "32768585753a10c6e4b5e82e32e82c6518c400baa30fe031d2539813c8a6c691"
       }
     },
-    "duration_seconds": 0.688
+    "duration_seconds": 0.678
   }
 }
