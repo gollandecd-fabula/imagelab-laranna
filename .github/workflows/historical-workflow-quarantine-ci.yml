@@ -27,10 +27,11 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
-      - name: Verify workflow boundaries
+      - name: Verify workflow boundaries and YAML syntax
         shell: python
         run: |
           import re
+          import subprocess
           from pathlib import Path
 
           def top_level_trigger_keys(text: str, name: str) -> set[str]:
@@ -54,11 +55,28 @@ jobs:
                       keys.add(match.group(1))
               return keys
 
+          def require_valid_yaml(path: Path) -> list[str]:
+              result = subprocess.run(
+                  [
+                      "ruby",
+                      "-e",
+                      "require 'psych'; Psych.parse_file(ARGV.fetch(0)); puts 'PASS'",
+                      path.as_posix(),
+                  ],
+                  text=True,
+                  capture_output=True,
+                  timeout=30,
+              )
+              if result.returncode == 0:
+                  return []
+              return [f"yaml_syntax:{path.as_posix()}:{result.stderr.strip()}"]
+
           def require_manual_only(path: Path, *, retired: bool) -> list[str]:
               failures: list[str] = []
               name = path.as_posix()
               if not path.is_file():
                   return [f"missing:{name}"]
+              failures.extend(require_valid_yaml(path))
               text = path.read_text("utf-8")
               try:
                   triggers = top_level_trigger_keys(text, name)
@@ -139,10 +157,12 @@ jobs:
           source_copy = Path("recovery/source/.github/workflows/zero-trust-release.yml")
           if not source_copy.is_file():
               failures.append("source_zero_trust_gate_missing")
+          else:
+              failures.extend(require_valid_yaml(source_copy))
 
           if failures:
               raise SystemExit("\n".join(failures))
           print(
               f"PASS: {len(historical)} historical workflows are quarantined; "
-              "the exact RC13 gate and active root zero-trust release gate are manual-only and preserved."
+              "the exact RC13 gate and active root zero-trust release gate are manual-only, syntactically valid and preserved."
           )
