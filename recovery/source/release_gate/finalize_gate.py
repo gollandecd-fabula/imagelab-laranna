@@ -10,6 +10,16 @@ from pathlib import Path
 from typing import Any
 
 
+SELFTEST_CASES = {
+    "resize_ppi",
+    "background",
+    "halftone",
+    "vector",
+    "history_lineage",
+    "export",
+}
+
+
 def sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
@@ -29,6 +39,39 @@ def read_optional(path: Path, missing: list[str]) -> dict[str, Any]:
         return {"status": "MALFORMED", "evidence_path": path.as_posix(), "error": str(exc)}
 
 
+def validate_selftest(
+    name: str,
+    data: dict[str, Any],
+    *,
+    candidate_identity: dict[str, Any],
+    install_evidence: dict[str, Any],
+    failed: list[str],
+) -> None:
+    if data.get("schema") != 1:
+        failed.append(f"selftest_schema:{name}")
+
+    expected_identity = {
+        "app": candidate_identity.get("app"),
+        "version": candidate_identity.get("version"),
+        "build_id": candidate_identity.get("build_id"),
+        "install_id": install_evidence.get("install_id"),
+    }
+    for field, expected in expected_identity.items():
+        if not expected or data.get(field) != expected:
+            failed.append(f"selftest_identity_mismatch:{name}:{field}")
+
+    tests = data.get("tests")
+    if not isinstance(tests, dict):
+        failed.append(f"selftest_cases_missing:{name}")
+        return
+    if set(tests) != SELFTEST_CASES:
+        failed.append(f"selftest_case_set_mismatch:{name}")
+    for case_name in SELFTEST_CASES:
+        case = tests.get(case_name)
+        if not isinstance(case, dict) or case.get("status") != "PASS":
+            failed.append(f"selftest_case_failed:{name}:{case_name}")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--aggregate-dir", type=Path, required=True)
@@ -46,12 +89,16 @@ def main() -> int:
         candidate = read_optional(root / "build" / "candidate-manifest.json", missing_evidence)
         reproducibility = read_optional(root / "build" / "reproducibility.json", missing_evidence)
         clean = read_optional(root / "clean" / "clean-install.json", missing_evidence)
+        clean_pre = read_optional(root / "clean" / "preinstall-selftest.json", missing_evidence)
+        clean_post = read_optional(root / "clean" / "postinstall-selftest.json", missing_evidence)
         ui = read_optional(root / "clean" / "ui-gate.json", missing_evidence)
         outputs = read_optional(root / "clean" / "output-validation.json", missing_evidence)
         baseline = read_optional(root / "update" / "baseline-verification.json", missing_evidence)
         update = read_optional(root / "update" / "update-test.json", missing_evidence)
         rollback = read_optional(root / "update" / "rollback-test.json", missing_evidence)
         independent = read_optional(root / "independent" / "independent-verification.json", missing_evidence)
+        independent_pre = read_optional(root / "independent" / "preinstall-selftest.json", missing_evidence)
+        independent_post = read_optional(root / "independent" / "postinstall-selftest.json", missing_evidence)
         independent_ui = read_optional(root / "independent" / "ui-gate.json", missing_evidence)
         independent_outputs = read_optional(root / "independent" / "output-validation.json", missing_evidence)
 
@@ -61,12 +108,16 @@ def main() -> int:
             "G2_candidate": candidate,
             "G2_reproducibility": reproducibility,
             "G3_clean_install": clean,
+            "G3_preinstall_selftest": clean_pre,
+            "G3_postinstall_selftest": clean_post,
             "G4_browser_ui": ui,
             "G5_output_validation": outputs,
             "G6_baseline_pinned": baseline,
             "G6_update": update,
             "G7_rollback": rollback,
             "G8_independent": independent,
+            "G8_preinstall_selftest": independent_pre,
+            "G8_postinstall_selftest": independent_post,
             "G8_independent_ui": independent_ui,
             "G8_independent_outputs": independent_outputs,
         }
@@ -93,6 +144,39 @@ def main() -> int:
             failed.append("baseline_sha_mismatch:update")
         if baseline_sha and baseline_sha == installer_sha:
             failed.append("baseline_must_differ_from_candidate")
+
+        candidate_identity = candidate.get("identity")
+        if not isinstance(candidate_identity, dict):
+            candidate_identity = {}
+            failed.append("candidate_identity_missing")
+        validate_selftest(
+            "G3_preinstall_selftest",
+            clean_pre,
+            candidate_identity=candidate_identity,
+            install_evidence=clean,
+            failed=failed,
+        )
+        validate_selftest(
+            "G3_postinstall_selftest",
+            clean_post,
+            candidate_identity=candidate_identity,
+            install_evidence=clean,
+            failed=failed,
+        )
+        validate_selftest(
+            "G8_preinstall_selftest",
+            independent_pre,
+            candidate_identity=candidate_identity,
+            install_evidence=independent,
+            failed=failed,
+        )
+        validate_selftest(
+            "G8_postinstall_selftest",
+            independent_post,
+            candidate_identity=candidate_identity,
+            install_evidence=independent,
+            failed=failed,
+        )
 
         installer_candidates = list((root / "build").glob("*.exe")) if (root / "build").exists() else []
         if len(installer_candidates) != 1:
