@@ -244,18 +244,29 @@ def main() -> int:
 
         baseline_sha = str(baseline.get("installer_sha256", ""))
         update_baseline_sha = str(update.get("baseline_installer_sha256", ""))
-        if baseline.get("schema") != 2:
+        if baseline.get("schema") != 3:
             failed.append("baseline_evidence_schema")
         if baseline.get("release_authorized") is not True:
             failed.append("baseline_not_release_authorized")
+        if baseline.get("authorization_source") != "prior_finalizer_record":
+            failed.append("baseline_authorization_source_invalid")
+        if baseline.get("authorization_record_status") != "RELEASE_AUTHORIZED":
+            failed.append("baseline_authorization_record_status")
+        authorization_record_sha = str(baseline.get("authorization_record_sha256", ""))
+        if not valid_sha256(authorization_record_sha):
+            failed.append("baseline_authorization_record_sha")
         release_tag = str(baseline.get("release_tag", "")).strip()
         baseline_name = str(baseline.get("name", "")).strip()
         if not release_tag:
             failed.append("baseline_release_tag_missing")
         if "RELEASE_AUTHORIZED" not in baseline_name or not baseline_name.endswith("_Setup_x64.exe"):
             failed.append("baseline_authorized_asset_name_invalid")
+        if baseline.get("authorization_record_installer_name") != baseline_name:
+            failed.append("baseline_authorization_record_name_mismatch")
         if not valid_sha256(baseline_sha):
             failed.append("baseline_installer_sha")
+        if baseline.get("authorization_record_installer_sha256") != baseline_sha:
+            failed.append("baseline_authorization_record_installer_sha_mismatch")
         if baseline_sha and update_baseline_sha and baseline_sha != update_baseline_sha:
             failed.append("baseline_sha_mismatch:update")
         if baseline_sha and baseline_sha == installer_sha:
@@ -346,6 +357,19 @@ def main() -> int:
             authorized = output / installer.name.replace("ZERO_TRUST", "RELEASE_AUTHORIZED")
             shutil.copy2(installer, authorized)
             (output / "installer-sha256.txt").write_text(f"{installer_sha}  {authorized.name}\n", "utf-8")
+            authorization_record = {
+                "schema": 1,
+                "status": "RELEASE_AUTHORIZED",
+                "authorization_source": "finalize_gate.py",
+                "installer_name": authorized.name,
+                "installer_sha256": installer_sha,
+                "identity": candidate.get("identity"),
+                "final_verdict_sha256": sha256(verdict_path),
+                "release_evidence_sha256": sha256(archive_path),
+            }
+            (output / "ImageLab-RELEASE-AUTHORIZATION.json").write_text(
+                json.dumps(authorization_record, ensure_ascii=False, indent=2), "utf-8"
+            )
         print(json.dumps(verdict, ensure_ascii=False, indent=2))
         return 0 if status == "RELEASE_AUTHORIZED" else 1
     except Exception as exc:
