@@ -1,6 +1,14 @@
 name: ImageLab Bootstrap Windows Gate
 
 on:
+  push:
+    branches:
+      - bootstrap/zero-trust-gate
+    paths:
+      - bootstrap/imagelab-source.zip
+      - bootstrap/imagelab-source.sha256
+      - bootstrap/verify_source_bundle.py
+      - .github/workflows/bootstrap-windows-gate.yml
   pull_request:
     branches:
       - main
@@ -14,11 +22,15 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: imagelab-bootstrap-windows-gate
+  cancel-in-progress: false
+
 env:
   PYTHONUTF8: '1'
   PIP_DISABLE_PIP_VERSION_CHECK: '1'
   EXACT_PYTHON_VERSION: '3.13.14'
-  GATE_REVISION: 'RC10-WINDOWS-RERUN-1'
+  GATE_REVISION: 'RC10-WINDOWS-RERUN-2'
   EXPECTED_SOURCE_SHA256: '476b68ee2ddea5f2985c1c8fd2fc841de490a866bb3a9676aca9411b463e6538'
   EXPECTED_APP_VERSION: '1.4.6-recovery-candidate'
   EXPECTED_BUILD_ID: 'REC-RT8-M6-20260724-03'
