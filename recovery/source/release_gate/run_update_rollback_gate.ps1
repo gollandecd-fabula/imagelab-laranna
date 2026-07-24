@@ -22,7 +22,7 @@ function Get-ImageLabProjectEvidence {
     $assets = @($project.assets)
     if ($assets.Count -ne 1) { throw "Project must contain exactly one preserved asset" }
     $asset = $assets[0]
-    if ($asset.sha256 -ne $ExpectedAssetSha256) { throw "Project asset SHA differs from uploaded fixture" }
+    if ($asset.sha256 -ne $ExpectedAssetSha256) { throw "Project asset SHA differs from production upload record" }
     if ($project.workspace.active_asset_id -ne $asset.id) { throw "Project active asset changed" }
 
     $projectPath = Join-Path $DataRoot "data\projects\$ProjectId.json"
@@ -108,7 +108,8 @@ try {
     "preserve-$($first.install_id)" | Set-Content -LiteralPath $sentinel -Encoding utf8
 
     # Create an actual project through the installed production API and upload
-    # an exact SVG asset. Preserve both API metadata and on-disk bytes/hashes.
+    # an exact SVG asset. SVG is sanitized by production, so preserve both the
+    # original fixture hash and the canonical persisted hash returned by the API.
     $projectId = 'ZTR-UPDATE-PROJECT'
     $projectTitle = "Zero Trust Update $($first.install_id)"
     $createBody = @{ title = $projectTitle } | ConvertTo-Json -Compress
@@ -117,12 +118,19 @@ try {
     $fixturePath = Join-Path $EvidenceDir 'update-project-fixture.svg'
     $fixtureSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="48" viewBox="0 0 64 48"><rect width="64" height="48" fill="#f2f2f2"/><circle cx="24" cy="24" r="14" fill="#222222"/><rect x="38" y="10" width="16" height="28" fill="#e14b2a"/></svg>'
     [System.IO.File]::WriteAllText($fixturePath, $fixtureSvg, [System.Text.UTF8Encoding]::new($false))
-    $fixtureSha = Get-Sha256 $fixturePath
+    $fixtureOriginalSha = Get-Sha256 $fixturePath
     $upload = Invoke-RestMethod -Method Post -Uri "$($firstHealth.Url)/api/projects/$projectId/upload" -Form @{ files = Get-Item -LiteralPath $fixturePath } -TimeoutSec 60
-    if (@($upload.uploaded).Count -ne 1) { throw "Project upload did not create exactly one asset" }
+    $uploadedAssets = @($upload.uploaded)
+    if ($uploadedAssets.Count -ne 1) { throw "Project upload did not create exactly one asset" }
+    $uploadedAssetSha = [string]$uploadedAssets[0].sha256
+    if ($uploadedAssetSha -notmatch '^[0-9a-f]{64}$') { throw "Production upload did not return a valid canonical asset SHA-256" }
 
-    $projectBefore = Get-ImageLabProjectEvidence -BaseUrl $firstHealth.Url -DataRoot $dataRoot -ProjectId $projectId -ExpectedTitle $projectTitle -ExpectedAssetSha256 $fixtureSha
-    Write-Json $projectBefore (Join-Path $EvidenceDir 'project-before-update.json')
+    $projectBefore = Get-ImageLabProjectEvidence -BaseUrl $firstHealth.Url -DataRoot $dataRoot -ProjectId $projectId -ExpectedTitle $projectTitle -ExpectedAssetSha256 $uploadedAssetSha
+    Write-Json ([ordered]@{
+        original_fixture_sha256 = $fixtureOriginalSha
+        canonical_uploaded_sha256 = $uploadedAssetSha
+        project = $projectBefore
+    }) (Join-Path $EvidenceDir 'project-before-update.json')
 
     # Keep the real previous version running and update it with the exact current candidate.
     $secondExit = Invoke-Installer -InstallerPath $InstallerPath -EvidenceDir $EvidenceDir -Prefix 'update-install'
@@ -132,7 +140,7 @@ try {
     if ($second.version -ne $candidate.identity.version -or $second.build_id -ne $candidate.identity.build_id) { throw "Update did not install current candidate identity" }
     if (-not (Test-Path -LiteralPath $sentinel)) { throw "Update deleted sentinel data" }
     $secondHealth = Find-ImageLabHealth -Manifest $second -TimeoutSeconds 120
-    $projectAfterUpdate = Get-ImageLabProjectEvidence -BaseUrl $secondHealth.Url -DataRoot $dataRoot -ProjectId $projectId -ExpectedTitle $projectTitle -ExpectedAssetSha256 $fixtureSha
+    $projectAfterUpdate = Get-ImageLabProjectEvidence -BaseUrl $secondHealth.Url -DataRoot $dataRoot -ProjectId $projectId -ExpectedTitle $projectTitle -ExpectedAssetSha256 $uploadedAssetSha
     Compare-ImageLabProjectEvidence -Before $projectBefore -After $projectAfterUpdate -Phase 'Update'
     Write-Json $projectAfterUpdate (Join-Path $EvidenceDir 'project-after-update.json')
 
@@ -152,6 +160,7 @@ try {
         first_install_id=$first.install_id; second_install_id=$second.install_id;
         first_url=$firstHealth.Url; second_url=$secondHealth.Url; old_process_stopped=$true;
         project_data_preserved=$true; sentinel_preserved=$true;
+        original_fixture_sha256=$fixtureOriginalSha; canonical_uploaded_sha256=$uploadedAssetSha;
         project_evidence_before=$projectBefore; project_evidence_after_update=$projectAfterUpdate
     }) (Join-Path $EvidenceDir 'update-test.json')
 
@@ -168,7 +177,7 @@ try {
     $launcher = Join-Path $installDir 'ImageLab.exe'
     Start-Process -FilePath $launcher -WorkingDirectory $installDir | Out-Null
     $restoredHealth = Find-ImageLabHealth -Manifest $restored -TimeoutSeconds 120
-    $projectAfterRollback = Get-ImageLabProjectEvidence -BaseUrl $restoredHealth.Url -DataRoot $dataRoot -ProjectId $projectId -ExpectedTitle $projectTitle -ExpectedAssetSha256 $fixtureSha
+    $projectAfterRollback = Get-ImageLabProjectEvidence -BaseUrl $restoredHealth.Url -DataRoot $dataRoot -ProjectId $projectId -ExpectedTitle $projectTitle -ExpectedAssetSha256 $uploadedAssetSha
     Compare-ImageLabProjectEvidence -Before $projectAfterUpdate -After $projectAfterRollback -Phase 'Rollback'
     Write-Json $projectAfterRollback (Join-Path $EvidenceDir 'project-after-rollback.json')
 
@@ -177,6 +186,7 @@ try {
         restored_install_id=$restored.install_id; expected_install_id=$second.install_id;
         fault_exit_code=$faultExit; restored_url=$restoredHealth.Url; critical_hashes_restored=$true;
         project_data_preserved=$true; sentinel_preserved=$true;
+        original_fixture_sha256=$fixtureOriginalSha; canonical_uploaded_sha256=$uploadedAssetSha;
         project_evidence_before=$projectAfterUpdate; project_evidence_after_rollback=$projectAfterRollback
     }) (Join-Path $EvidenceDir 'rollback-test.json')
 } catch {
