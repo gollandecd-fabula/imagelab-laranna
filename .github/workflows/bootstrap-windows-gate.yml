@@ -23,7 +23,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: imagelab-bootstrap-windows-gate
+  group: imagelab-bootstrap-windows-gate-recovery-145
   cancel-in-progress: false
 
 env:
