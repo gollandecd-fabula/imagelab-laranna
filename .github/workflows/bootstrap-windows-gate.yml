@@ -9,6 +9,14 @@ on:
       - bootstrap/imagelab-source.sha256
       - bootstrap/verify_source_bundle.py
       - .github/workflows/bootstrap-windows-gate.yml
+  pull_request:
+    branches:
+      - main
+    paths:
+      - bootstrap/imagelab-source.zip
+      - bootstrap/imagelab-source.sha256
+      - bootstrap/verify_source_bundle.py
+      - .github/workflows/bootstrap-windows-gate.yml
   workflow_dispatch:
 
 permissions:
