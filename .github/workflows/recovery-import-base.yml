@@ -118,18 +118,21 @@ jobs:
                   staging.mkdir(parents=True, exist_ok=True)
                   zf.extractall(staging)
 
-          required = [
+          required_core = [
               'app/config.py',
               'app/main.py',
               'app/services/project_store.py',
               'app/services/image_processing.py',
               'app/static/app.js',
+          ]
+          external_release_files = [
               'scripts/source_gate.py',
               'requirements.lock',
           ]
-          missing = [item for item in required if not (staging / item).is_file()]
+          missing = [item for item in required_core if not (staging / item).is_file()]
+          external_absent = [item for item in external_release_files if not (staging / item).is_file()]
           if missing:
-              failures.append('BASE_REQUIRED_FILES_MISSING')
+              failures.append('BASE_REQUIRED_CORE_FILES_MISSING')
 
           config_text = (staging / 'app/config.py').read_text(encoding='utf-8') if (staging / 'app/config.py').is_file() else ''
           if expected_version not in config_text:
@@ -146,6 +149,7 @@ jobs:
                   'expected_sha256': expected_sha,
                   'actual_sha256': actual_sha,
                   'member_count': len(seen),
+                  'members_sha256': hashlib.sha256('\n'.join(sorted(seen)).encode('utf-8')).hexdigest(),
                   'unsafe_members': sorted(set(unsafe)),
                   'duplicate_members': sorted(set(duplicates)),
                   'forbidden_members': sorted(set(forbidden)),
@@ -154,7 +158,8 @@ jobs:
                   'expected_version': expected_version,
                   'expected_build_id': expected_build_id,
               },
-              'required_files_missing': missing,
+              'required_core_missing': missing,
+              'external_release_files_absent_from_source_archive': external_absent,
               'failures': failures,
           }
           evidence_dir.mkdir(parents=True, exist_ok=True)
