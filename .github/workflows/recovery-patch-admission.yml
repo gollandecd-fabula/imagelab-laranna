@@ -110,7 +110,7 @@ jobs:
               patch_path = Path('/tmp/rc04-09.patch')
               patch_path.write_bytes(patch_bytes)
               check = subprocess.run(
-                  ['git', 'apply', '--check', str(patch_path)],
+                  ['git', 'apply', '--check', '--directory=recovery/source', str(patch_path)],
                   text=True,
                   capture_output=True,
                   check=False,
@@ -119,6 +119,7 @@ jobs:
                   'exit_code': check.returncode,
                   'stdout': check.stdout[-10000:],
                   'stderr': check.stderr[-10000:],
+                  'directory': 'recovery/source',
               }
               if check.returncode != 0:
                   result['failures'].append('GIT_APPLY_CHECK')
