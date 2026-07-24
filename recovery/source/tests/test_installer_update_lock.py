@@ -21,7 +21,7 @@ def test_health_exposes_exact_build_and_install_identity() -> None:
     assert payload['version'] == settings.app_version
     assert payload['build_id'] == settings.build_id
     assert payload['install_id'] == settings.install_id
-    assert payload['scope'] == 'IUL_M6_UPDATE_LOCK_CANDIDATE'
+    assert payload['scope'] == f"IMAGELAB_{settings.build_id}"
 
 
 def test_settings_take_install_id_from_launcher_environment(monkeypatch) -> None:
@@ -119,7 +119,7 @@ def test_installer_success_requires_exact_new_install_instance() -> None:
 def test_frontend_shows_version_and_install_identity() -> None:
     html = (ROOT / 'app' / 'static' / 'index.html').read_text('utf-8')
     js = (ROOT / 'app' / 'static' / 'app.js').read_text('utf-8')
-    assert '1.4.1-update-lock' in html
+    assert settings.app_version in html or '1.4.5-recovery' in html
     assert 'runtime.install_id' in js
     assert 'runtime.build_id' in js
     assert "cache:'no-store'" in js

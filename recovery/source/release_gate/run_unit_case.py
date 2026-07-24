@@ -30,17 +30,35 @@ def run_isolated(command: list[str], env: dict[str, str], timeout: int) -> tuple
         stdout, stderr = process.communicate(timeout=timeout)
         return int(process.returncode or 0), stdout or "", stderr or "", False
     except subprocess.TimeoutExpired:
+        cleanup_notes: list[str] = []
         if os.name == "posix":
             try:
                 os.killpg(process.pid, signal.SIGKILL)
             except ProcessLookupError:
                 pass
         else:
-            subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"], capture_output=True)
+            try:
+                subprocess.run(
+                    ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                    capture_output=True, text=True, timeout=10, check=False,
+                )
+            except subprocess.TimeoutExpired:
+                cleanup_notes.append("taskkill timeout")
         try:
             stdout, stderr = process.communicate(timeout=15)
         except subprocess.TimeoutExpired:
-            stdout, stderr = "", "forced process-group termination did not close pipes"
+            cleanup_notes.append("bounded reap timeout")
+            try:
+                process.kill()
+            except OSError:
+                pass
+            try:
+                stdout, stderr = process.communicate(timeout=2)
+            except subprocess.TimeoutExpired:
+                stdout, stderr = "", "process pipes remained open after bounded kill"
+        suffix = "; ".join(cleanup_notes)
+        if suffix:
+            stderr = (stderr or "") + f"\ncleanup: {suffix}"
         return 124, stdout or "", (stderr or "") + f"\nTIMEOUT after {timeout}s", True
 
 

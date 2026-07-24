@@ -87,6 +87,19 @@ def _extract_ppi(image: Image.Image) -> tuple[float, float, str]:
                 return x, y, "embedded"
         except (TypeError, ValueError):
             pass
+    try:
+        exif = image.getexif()
+        unit = int(exif.get(296, 2) or 2)
+        x_raw, y_raw = exif.get(282), exif.get(283)
+        if x_raw is not None and y_raw is not None:
+            x, y = float(x_raw), float(y_raw)
+            if unit == 3:  # pixels per centimetre -> pixels per inch
+                x *= 2.54
+                y *= 2.54
+            if 1 <= x <= 100_000 and 1 <= y <= 100_000:
+                return x, y, "embedded_exif"
+    except (TypeError, ValueError, ZeroDivisionError):
+        pass
     return settings.workspace_ppi, settings.workspace_ppi, "workspace_default"
 
 

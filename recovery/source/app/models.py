@@ -7,6 +7,18 @@ from typing import Any
 from pydantic import BaseModel, Field, field_validator
 
 
+_WINDOWS_RESERVED_PROJECT_IDS = {"CON", "PRN", "AUX", "NUL", *{f"COM{i}" for i in range(1, 10)}, *{f"LPT{i}" for i in range(1, 10)}}
+
+
+def validate_project_identifier(value: str) -> str:
+    """Validate one cross-platform project identifier before any filesystem use."""
+    if not value or len(value) > 64 or any(not (ch.isalnum() or ch in {"-", "_"}) for ch in value):
+        raise ValueError("Некорректный идентификатор проекта")
+    if value.upper() in _WINDOWS_RESERVED_PROJECT_IDS:
+        raise ValueError("Идентификатор проекта зарезервирован операционной системой")
+    return value
+
+
 class CheckItem(BaseModel):
     code: str
     label: str
@@ -99,8 +111,82 @@ class ProjectRecord(BaseModel):
     @field_validator("id")
     @classmethod
     def validate_project_id(cls, value: str) -> str:
-        if not value or len(value) > 64 or any(not (ch.isalnum() or ch in {"-", "_"}) for ch in value):
-            raise ValueError("Некорректный идентификатор проекта")
+        return validate_project_identifier(value)
+
+
+class ProjectCreateRequest(BaseModel):
+    title: str | None = None
+
+    @field_validator("title")
+    @classmethod
+    def validate_title(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        value = value.strip()
+        if not value or len(value) > 160:
+            raise ValueError("Название проекта должно содержать от 1 до 160 символов")
+        return value
+
+
+class ProjectRenameRequest(BaseModel):
+    title: str
+
+    @field_validator("title")
+    @classmethod
+    def validate_title(cls, value: str) -> str:
+        value = value.strip()
+        if not value or len(value) > 160:
+            raise ValueError("Название проекта должно содержать от 1 до 160 символов")
+        return value
+
+
+class PresetRequest(BaseModel):
+    name: str
+    module: str
+    parameters: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, value: str) -> str:
+        value = value.strip()
+        if not value or len(value) > 80:
+            raise ValueError("Название профиля должно содержать от 1 до 80 символов")
+        return value
+
+    @field_validator("module")
+    @classmethod
+    def validate_module(cls, value: str) -> str:
+        value = value.strip().lower()
+        allowed = {"improve", "extract", "selection", "cleanup", "halftone", "vector", "geometry", "export"}
+        if value not in allowed:
+            raise ValueError("Неизвестный модуль профиля")
+        return value
+
+
+class BatchProcessRequest(BaseModel):
+    asset_ids: list[str]
+    operation: str
+    parameters: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("asset_ids")
+    @classmethod
+    def validate_asset_ids(cls, values: list[str]) -> list[str]:
+        if not values or len(values) > 20:
+            raise ValueError("Пакет должен содержать от 1 до 20 файлов")
+        if len(set(values)) != len(values):
+            raise ValueError("Пакет содержит повторяющиеся файлы")
+        for value in values:
+            if not value.isalnum() or not (8 <= len(value) <= 64):
+                raise ValueError("Некорректный идентификатор файла")
+        return values
+
+    @field_validator("operation")
+    @classmethod
+    def validate_operation(cls, value: str) -> str:
+        value = value.strip().lower()
+        allowed = {"enhance", "reconstruct", "color", "select", "background", "cleanup", "geometry", "halftone", "vectorize", "master_clean", "master_card", "master_dtf", "logo"}
+        if value not in allowed:
+            raise ValueError("Операция недоступна для пакетной обработки")
         return value
 
 

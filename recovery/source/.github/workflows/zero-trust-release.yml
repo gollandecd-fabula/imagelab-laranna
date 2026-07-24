@@ -32,13 +32,13 @@ env:
 jobs:
   source-gate:
     name: G0 Source, identity and backend self-test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
-          python-version: '3.13'
+          python-version: '3.13.14'
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
@@ -46,7 +46,7 @@ jobs:
         run: python -m pip install --requirement requirements.txt
       - name: Run source gate
         run: python release_gate/source_gate.py --output evidence-zero-trust/source-gate.json
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         if: always()
         with:
           name: ztr-source-evidence
@@ -56,7 +56,7 @@ jobs:
 
   unit-matrix:
     name: G1 Unit ${{ matrix.id }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     strategy:
       fail-fast: false
@@ -65,26 +65,34 @@ jobs:
           - { id: a0, file: tests/test_a0.py }
           - { id: a1, file: tests/test_a1.py }
           - { id: a2-a4, file: tests/test_a2_a4.py }
+          - { id: ai-audit-concurrency, file: tests/test_ai_audit_concurrency.py }
           - { id: ai-contours, file: tests/test_ai_contours.py }
           - { id: bootstrap, file: tests/test_bootstrap.py }
           - { id: core-failure, file: tests/test_core_failure_regression.py }
           - { id: installer-lock, file: tests/test_installer_update_lock.py }
+          - { id: isolated-processing, file: tests/test_isolated_processing.py }
           - { id: l5-iz017, file: tests/test_l5_iz017_regression.py }
           - { id: m1-ui, file: tests/test_m1_ui.py }
           - { id: print-extraction, file: tests/test_print_extraction.py }
+          - { id: product-workflows, file: tests/test_product_workflows.py }
+          - { id: project-lookup, file: tests/test_project_lookup_resilience.py }
+          - { id: project-store-concurrency, file: tests/test_project_store_concurrency.py }
           - { id: redteam, file: tests/test_redteam_adversarial.py }
+          - { id: redteam-contracts, file: tests/test_redteam_contracts.py }
           - { id: second-core, file: tests/test_second_core_failure_regression.py }
+          - { id: segmentation-governance, file: tests/test_segmentation_governance.py }
           - { id: slu-m1, file: tests/test_slu_m1_units.py }
           - { id: slu-m2-m5, file: tests/test_slu_m2_m5.py }
           - { id: slu-m3, file: tests/test_slu_m3_segmentation.py }
           - { id: slu-m5-e2e, file: tests/test_slu_m5_e2e.py }
+          - { id: storage-package-integrity, file: tests/test_storage_and_package_integrity.py }
           - { id: windows-packaging, file: tests/test_windows_packaging_config.py }
           - { id: zero-trust, file: tests/test_zero_trust_release_gate.py }
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
-          python-version: '3.13'
+          python-version: '3.13.14'
       - name: Install exact application dependencies
         run: python -m pip install --requirement requirements.txt
       - name: Run one isolated test file and always write evidence
@@ -94,7 +102,7 @@ jobs:
           --test-file "${{ matrix.file }}"
           --output "evidence-unit/${{ matrix.id }}.json"
           --timeout 600
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         if: always()
         with:
           name: ztr-unit-${{ matrix.id }}
@@ -106,11 +114,11 @@ jobs:
     name: G1 Fail-closed unit matrix verdict
     needs: unit-matrix
     if: ${{ always() }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/download-artifact@v5
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
         continue-on-error: true
         with:
           pattern: ztr-unit-*
@@ -121,7 +129,7 @@ jobs:
           python release_gate/finalize_unit_matrix.py
           --input-dir aggregate-unit/cases
           --output aggregate-unit/unit-matrix-verdict.json
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         if: always()
         with:
           name: ztr-unit-verdict
@@ -132,14 +140,14 @@ jobs:
   build-exact-candidate:
     name: G2 Build exact immutable candidate
     needs: [source-gate, unit-verdict]
-    runs-on: windows-latest
+    runs-on: windows-2022
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
-          python-version: '3.13'
-      - uses: actions/setup-go@v6
+          python-version: '3.13.14'
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
         with:
           go-version: '1.25.x'
       - name: Build candidate A
@@ -157,7 +165,7 @@ jobs:
           New-Item -ItemType Directory -Force exact-candidate | Out-Null
           Copy-Item dist-a/* exact-candidate/ -Force
           @{schema=1;status='PASS';installer_sha256=$a.installer.sha256;second_build_sha256=$b.installer.sha256} | ConvertTo-Json | Set-Content exact-candidate/reproducibility.json -Encoding utf8
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         with:
           name: UNVERIFIED_INTERNAL_EXACT_CANDIDATE
           path: exact-candidate/
@@ -167,14 +175,14 @@ jobs:
   clean-install-ui:
     name: G3-G5 Clean Windows install and browser path
     needs: build-exact-candidate
-    runs-on: windows-latest
+    runs-on: windows-2022
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
-          python-version: '3.13'
-      - uses: actions/download-artifact@v5
+          python-version: '3.13.14'
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
         with:
           name: UNVERIFIED_INTERNAL_EXACT_CANDIDATE
           path: exact-candidate
@@ -188,7 +196,7 @@ jobs:
         run: |
           $installer = (Get-ChildItem exact-candidate -Filter *.exe -File | Select-Object -First 1).FullName
           ./release_gate/run_clean_install_gate.ps1 -InstallerPath $installer -CandidateManifestPath exact-candidate/candidate-manifest.json -EvidenceDir evidence-clean -Mode clean -BrowserChannel msedge
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         if: always()
         with:
           name: ztr-clean-install-evidence
@@ -199,14 +207,14 @@ jobs:
   update-rollback:
     name: G6-G7 Running update and forced rollback
     needs: build-exact-candidate
-    runs-on: windows-latest
+    runs-on: windows-2022
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
-          python-version: '3.13'
-      - uses: actions/download-artifact@v5
+          python-version: '3.13.14'
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
         with:
           name: UNVERIFIED_INTERNAL_EXACT_CANDIDATE
           path: exact-candidate
@@ -231,7 +239,7 @@ jobs:
           $installer = (Get-ChildItem exact-candidate -Filter *.exe -File | Select-Object -First 1).FullName
           ./release_gate/run_update_rollback_gate.ps1 -BaselineInstallerPath $baseline -InstallerPath $installer -CandidateManifestPath exact-candidate/candidate-manifest.json -EvidenceDir evidence-update
           Copy-Item baseline/baseline-verification.json evidence-update/baseline-verification.json -Force
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         if: always()
         with:
           name: ztr-update-rollback-evidence
@@ -242,14 +250,14 @@ jobs:
   independent-verification:
     name: G8 Independent exact-SHA rerun
     needs: build-exact-candidate
-    runs-on: windows-latest
+    runs-on: windows-2022
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
-          python-version: '3.13'
-      - uses: actions/download-artifact@v5
+          python-version: '3.13.14'
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
         with:
           name: UNVERIFIED_INTERNAL_EXACT_CANDIDATE
           path: exact-candidate
@@ -263,7 +271,7 @@ jobs:
         run: |
           $installer = (Get-ChildItem exact-candidate -Filter *.exe -File | Select-Object -First 1).FullName
           ./release_gate/run_clean_install_gate.ps1 -InstallerPath $installer -CandidateManifestPath exact-candidate/candidate-manifest.json -EvidenceDir evidence-independent -Mode independent -BrowserChannel bundled
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         if: always()
         with:
           name: ztr-independent-evidence
@@ -275,40 +283,40 @@ jobs:
     name: Final fail-closed release authorization
     if: ${{ always() }}
     needs: [source-gate, unit-verdict, build-exact-candidate, clean-install-ui, update-rollback, independent-verification]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
       contents: read
       id-token: write
       attestations: write
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/download-artifact@v5
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
         continue-on-error: true
         with:
           name: ztr-source-evidence
           path: aggregate/source
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
         continue-on-error: true
         with:
           name: ztr-unit-verdict
           path: aggregate/unit
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
         continue-on-error: true
         with:
           name: UNVERIFIED_INTERNAL_EXACT_CANDIDATE
           path: aggregate/build
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
         continue-on-error: true
         with:
           name: ztr-clean-install-evidence
           path: aggregate/clean
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
         continue-on-error: true
         with:
           name: ztr-update-rollback-evidence
           path: aggregate/update
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
         continue-on-error: true
         with:
           name: ztr-independent-evidence
@@ -322,14 +330,14 @@ jobs:
         uses: actions/attest@v4
         with:
           subject-path: authorized-release/*.exe
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         if: always()
         with:
           name: ImageLab-RELEASE-VERDICT
           path: authorized-release/
           retention-days: 90
           if-no-files-found: error
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         if: ${{ steps.finalize.outcome == 'success' }}
         with:
           name: ImageLab-RELEASE-AUTHORIZED

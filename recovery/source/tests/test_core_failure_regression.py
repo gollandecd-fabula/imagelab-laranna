@@ -120,5 +120,5 @@ def test_frontend_uses_optimistic_persistent_switch_and_svg_img_preview() -> Non
     assert "state.selectedId = assetId; renderProject();" in js
     assert "project.workspace?.active_asset_id" in js
     assert "asset.format === 'SVG'" in js and "image.src=previewUrl" in js
-    assert "1.4.1-update-lock" in html
+    assert "1.4.5-recovery" in html
     assert 'id="buildVersionChip"' in html

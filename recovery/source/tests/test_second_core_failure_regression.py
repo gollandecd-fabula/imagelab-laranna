@@ -45,7 +45,7 @@ def upload_flat() -> dict:
 def test_runtime_identity_is_visible_and_update_safe() -> None:
     health = client.get("/api/health").json()
     assert health["version"] == settings.app_version
-    assert health["scope"] == "IUL_M6_UPDATE_LOCK_CANDIDATE"
+    assert health["scope"] == f"IMAGELAB_{settings.build_id}"
     html = (settings.static_dir / "index.html").read_text("utf-8")
     js = (settings.static_dir / "app.js").read_text("utf-8")
     bootstrap = Path("bootstrap.py").read_text("utf-8")

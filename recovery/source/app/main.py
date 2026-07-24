@@ -17,6 +17,7 @@ from app.ai.runtime import get_ai_engine
 from app.config import settings
 from app.models import (
     ActiveAssetRequest,
+    BatchProcessRequest,
     AIFeedbackRequest,
     CheckItem,
     AIRollbackRequest,
@@ -25,12 +26,15 @@ from app.models import (
     ExportResponse,
     ProcessRequest,
     ProcessResponse,
+    ProjectCreateRequest,
     ProjectRecord,
+    ProjectRenameRequest,
+    PresetRequest,
     ProjectReportResponse,
     QaResponse,
     UploadResponse,
 )
-from app.services.export_service import ExportError, build_project_bundle, export_asset
+from app.services.export_service import ExportError, build_cardlab_package, build_project_bundle, export_asset
 from app.services.file_inspector import UploadValidationError, inspect_upload
 from app.services.image_processing import ProcessingError
 from app.services.project_store import ProjectStore, ProjectStoreError
@@ -247,7 +251,7 @@ def health() -> dict[str, object]:
         "status": "ok" if ai_status == "ready" else "degraded",
         "app": settings.app_name,
         "version": settings.app_version,
-        "scope": "IUL_M6_UPDATE_LOCK_CANDIDATE",
+        "scope": f"IMAGELAB_{settings.build_id}",
         "build_id": settings.build_id,
         "install_id": settings.install_id,
         "host_policy": "localhost_only",
@@ -315,6 +319,46 @@ def ai_rollback(request: AIRollbackRequest) -> dict[str, object]:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
+@app.get("/api/projects", response_model=list[ProjectRecord])
+def list_projects() -> list[ProjectRecord]:
+    return store.list_projects()
+
+
+@app.post("/api/projects/{project_id}", response_model=ProjectRecord)
+def create_project(project_id: str, request: ProjectCreateRequest) -> ProjectRecord:
+    try:
+        return store.create(project_id, request.title)
+    except (ValueError, ProjectStoreError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.patch("/api/projects/{project_id}/title", response_model=ProjectRecord)
+def rename_project(project_id: str, request: ProjectRenameRequest) -> ProjectRecord:
+    try:
+        return store.rename(project_id, request.title)
+    except (ValueError, ProjectStoreError) as exc:
+        status = 404 if "не найден" in str(exc).lower() else 400
+        raise HTTPException(status_code=status, detail=str(exc)) from exc
+
+
+@app.put("/api/projects/{project_id}/presets", response_model=ProjectRecord)
+def save_project_preset(project_id: str, request: PresetRequest) -> ProjectRecord:
+    try:
+        return store.set_preset(project_id, request.name, request.module, request.parameters)
+    except (ValueError, ProjectStoreError) as exc:
+        status = 404 if "не найден" in str(exc).lower() else 400
+        raise HTTPException(status_code=status, detail=str(exc)) from exc
+
+
+@app.delete("/api/projects/{project_id}/presets/{name}", response_model=ProjectRecord)
+def delete_project_preset(project_id: str, name: str) -> ProjectRecord:
+    try:
+        return store.delete_preset(project_id, name)
+    except (ValueError, ProjectStoreError) as exc:
+        status = 404 if "не найден" in str(exc).lower() else 400
+        raise HTTPException(status_code=status, detail=str(exc)) from exc
+
+
 @app.get("/api/projects/{project_id}", response_model=ProjectRecord)
 def get_project(project_id: str) -> ProjectRecord:
     try:
@@ -366,6 +410,21 @@ def project_bundle(project_id: str) -> Response:
         payload, filename = build_project_bundle(project)
     except (ValueError, ProjectStoreError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+    return Response(content=payload, media_type="application/zip", headers=headers)
+
+
+@app.get("/api/projects/{project_id}/cardlab-package")
+def project_cardlab_package(project_id: str, asset_id: str) -> Response:
+    try:
+        project = store.get(project_id)
+        asset = next((item for item in project.assets if item.id == asset_id), None)
+        if asset is None:
+            raise HTTPException(status_code=404, detail="Файл не найден в проекте")
+        payload, filename = build_cardlab_package(project, asset)
+    except (ValueError, ProjectStoreError, ExportError) as exc:
+        status = 404 if "не найден" in str(exc).lower() else 400
+        raise HTTPException(status_code=status, detail=str(exc)) from exc
     headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
     return Response(content=payload, media_type="application/zip", headers=headers)
 
@@ -422,7 +481,7 @@ async def upload_files(project_id: str, files: list[UploadFile] = File(...)) -> 
 @app.post("/api/projects/{project_id}/process", response_model=ProcessResponse)
 def process_project_asset(project_id: str, request: ProcessRequest) -> ProcessResponse:
     try:
-        project = store.get_or_create(project_id)
+        project = store.get(project_id)
         source = next((item for item in project.assets if item.id == request.asset_id), None)
         if source is None:
             raise HTTPException(status_code=404, detail="Исходный файл не найден в проекте")
@@ -436,7 +495,7 @@ def process_project_asset(project_id: str, request: ProcessRequest) -> ProcessRe
             # atomically. A crash or concurrent request must never expose only a
             # subset of attempts or a stale active result.
             ordered = [item for item in attempts if item.id != result.id] + [result]
-            project = store.add_assets(project_id, ordered)
+            project = store.commit_derived_assets(project_id, source.id, ordered, active_asset_id=result.id)
         except Exception:
             for item in attempts:
                 _remove_asset_files(item)
@@ -450,10 +509,53 @@ def process_project_asset(project_id: str, request: ProcessRequest) -> ProcessRe
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+@app.post("/api/projects/{project_id}/batch-process")
+def batch_process_project_assets(project_id: str, request: BatchProcessRequest) -> dict[str, object]:
+    created: list = []
+    try:
+        project = store.get(project_id)
+        by_id = {item.id: item for item in project.assets}
+        missing = [asset_id for asset_id in request.asset_ids if asset_id not in by_id]
+        if missing:
+            raise HTTPException(status_code=404, detail="Один или несколько файлов пакета не найдены в проекте")
+        selected_results = []
+        repairs = []
+        for asset_id in request.asset_ids:
+            source = by_id[asset_id]
+            result, attempts, repair = run_processing_with_repair(source, request.operation, request.parameters)
+            ordered = [item for item in attempts if item.id != result.id] + [result]
+            created.extend(ordered)
+            selected_results.append(result)
+            repairs.append(repair)
+        project = store.commit_assets_existing(
+            project_id, created, active_asset_id=selected_results[-1].id
+        )
+        return {
+            "project": project.model_dump(),
+            "source_asset_ids": request.asset_ids,
+            "results": [item.model_dump() for item in selected_results],
+            "repairs": repairs,
+            "atomic": True,
+        }
+    except HTTPException:
+        for item in created:
+            _remove_asset_files(item)
+        raise
+    except (ProcessingError, AIModelError) as exc:
+        for item in created:
+            _remove_asset_files(item)
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (ValueError, ProjectStoreError) as exc:
+        for item in created:
+            _remove_asset_files(item)
+        status = 404 if "не найден" in str(exc).lower() else 400
+        raise HTTPException(status_code=status, detail=str(exc)) from exc
+
+
 @app.post("/api/projects/{project_id}/export", response_model=ExportResponse)
 def export_project_asset(project_id: str, request: ExportRequest) -> ExportResponse:
     try:
-        project = store.get_or_create(project_id)
+        project = store.get(project_id)
         source = next((item for item in project.assets if item.id == request.asset_id), None)
         if source is None:
             raise HTTPException(status_code=404, detail="Исходный файл не найден в проекте")
@@ -461,7 +563,7 @@ def export_project_asset(project_id: str, request: ExportRequest) -> ExportRespo
             project = store.set_active_asset(project_id, source.id)
         result = export_asset(source, request.format, request.parameters)
         try:
-            project = store.add_assets(project_id, [result])
+            project = store.commit_derived_assets(project_id, source.id, [result], active_asset_id=result.id)
         except Exception:
             _remove_asset_files(result)
             raise

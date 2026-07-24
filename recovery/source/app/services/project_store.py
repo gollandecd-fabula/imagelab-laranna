@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from app.config import settings
-from app.models import AssetRecord, ProjectRecord
+from app.models import AssetRecord, ProjectRecord, validate_project_identifier
 
 
 class ProjectStoreError(ValueError):
@@ -84,9 +84,10 @@ class ProjectStore:
         self._lock = threading.RLock()
 
     def _path(self, project_id: str) -> Path:
-        safe = "".join(ch for ch in project_id if ch.isalnum() or ch in {"-", "_"})
-        if not safe or safe != project_id or len(project_id) > 64:
-            raise ProjectStoreError("Некорректный идентификатор проекта")
+        try:
+            safe = validate_project_identifier(project_id)
+        except ValueError as exc:
+            raise ProjectStoreError(str(exc)) from exc
         path = (self.directory / f"{safe}.json").resolve()
         if path.parent != self.directory:
             raise ProjectStoreError("Путь проекта выходит за каталог проектов")
@@ -185,11 +186,70 @@ class ProjectStore:
         with self._lock, self._project_lock(project_id):
             return self._get_or_create_unlocked(project_id)
 
+    def get(self, project_id: str) -> ProjectRecord:
+        with self._lock, self._project_lock(project_id):
+            return self._get_unlocked(project_id)
+
+    def create(self, project_id: str, title: str | None = None) -> ProjectRecord:
+        with self._lock, self._project_lock(project_id):
+            path = self._path(project_id)
+            if path.exists():
+                raise ProjectStoreError("Проект уже существует")
+            project = self._new_project(project_id)
+            if title is not None:
+                project.title = title
+            self._save_unlocked(project)
+            return project
+
+    def list_projects(self) -> list[ProjectRecord]:
+        projects: list[ProjectRecord] = []
+        with self._lock:
+            for project_file in sorted(self.directory.glob("*.json")):
+                try:
+                    project_id = project_file.stem
+                    with self._project_lock(project_id):
+                        projects.append(self._read(project_file))
+                except ProjectStoreError:
+                    # Corrupt unrelated files are excluded, not allowed to disable inventory.
+                    continue
+        return sorted(projects, key=lambda item: (item.updated_at, item.id), reverse=True)
+
+    def rename(self, project_id: str, title: str) -> ProjectRecord:
+        title = title.strip()
+        if not title or len(title) > 160:
+            raise ProjectStoreError("Название проекта должно содержать от 1 до 160 символов")
+        with self._lock, self._project_lock(project_id):
+            project = self._get_unlocked(project_id)
+            project.title = title
+            self._save_unlocked(project)
+            return project
+
+    def set_preset(self, project_id: str, name: str, module: str, parameters: dict) -> ProjectRecord:
+        with self._lock, self._project_lock(project_id):
+            project = self._get_unlocked(project_id)
+            presets = dict(project.workspace.get("presets") or {})
+            presets[name] = {"module": module, "parameters": parameters}
+            project.workspace["presets"] = presets
+            self._save_unlocked(project)
+            return project
+
+    def delete_preset(self, project_id: str, name: str) -> ProjectRecord:
+        with self._lock, self._project_lock(project_id):
+            project = self._get_unlocked(project_id)
+            presets = dict(project.workspace.get("presets") or {})
+            if name not in presets:
+                raise ProjectStoreError("Профиль не найден")
+            del presets[name]
+            project.workspace["presets"] = presets
+            self._save_unlocked(project)
+            return project
+
     def save(self, project: ProjectRecord) -> None:
         with self._lock, self._project_lock(project.id):
             self._save_unlocked(project)
 
     def add_assets(self, project_id: str, assets: list[AssetRecord]) -> ProjectRecord:
+        """Explicit upload/import transaction; creates the project when absent."""
         with self._lock, self._project_lock(project_id):
             project = self._get_or_create_unlocked(project_id)
             self._validate_new_assets(project, assets)
@@ -197,6 +257,28 @@ class ProjectStore:
             if assets:
                 project.workspace["active_asset_id"] = assets[-1].id
                 project.workspace["active_revision"] = int(project.workspace.get("active_revision", 0)) + 1
+            self._save_unlocked(project)
+            return project
+
+    def commit_assets_existing(
+        self,
+        project_id: str,
+        assets: list[AssetRecord],
+        *,
+        active_asset_id: str | None = None,
+    ) -> ProjectRecord:
+        """Atomically append a validated multi-source batch to an existing project."""
+        if not assets:
+            raise ProjectStoreError("Нет файлов для сохранения")
+        with self._lock, self._project_lock(project_id):
+            project = self._get_unlocked(project_id)
+            self._validate_new_assets(project, assets)
+            selected = active_asset_id or assets[-1].id
+            if selected not in {asset.id for asset in assets}:
+                raise ProjectStoreError("Активный результат отсутствует в атомарном наборе")
+            project.assets.extend(assets)
+            project.workspace["active_asset_id"] = selected
+            project.workspace["active_revision"] = int(project.workspace.get("active_revision", 0)) + 1
             self._save_unlocked(project)
             return project
 
@@ -234,7 +316,7 @@ class ProjectStore:
 
     def set_active_asset(self, project_id: str, asset_id: str) -> ProjectRecord:
         with self._lock, self._project_lock(project_id):
-            project = self._get_or_create_unlocked(project_id)
+            project = self._get_unlocked(project_id)
             if not any(asset.id == asset_id for asset in project.assets):
                 raise ProjectStoreError("Активный файл не найден в проекте")
             project.workspace["active_asset_id"] = asset_id
@@ -244,7 +326,7 @@ class ProjectStore:
 
     def clear_assets(self, project_id: str) -> tuple[ProjectRecord, list[AssetRecord]]:
         with self._lock, self._project_lock(project_id):
-            project = self._get_or_create_unlocked(project_id)
+            project = self._get_unlocked(project_id)
             removed = list(project.assets)
             project.assets = []
             project.workspace.pop("active_asset_id", None)

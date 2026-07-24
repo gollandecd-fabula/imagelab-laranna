@@ -22,6 +22,10 @@ def make_png() -> bytes:
 
 
 def cleanup() -> None:
+    # Missing-project mutations are fail-closed; create the explicit test project.
+    if not (settings.project_dir / f"{PROJECT}.json").exists():
+        created = client.post(f"/api/projects/{PROJECT}", json={"title": PROJECT})
+        assert created.status_code in {200, 400}
     response = client.delete(f"/api/projects/{PROJECT}/assets")
     assert response.status_code == 200
     project_path = settings.project_dir / f"{PROJECT}.json"
@@ -33,7 +37,7 @@ def test_health_and_dark_sidebar_ui() -> None:
     health = client.get("/api/health")
     assert health.status_code == 200
     assert health.json()["status"] == "ok"
-    assert health.json()["scope"] == "IUL_M6_UPDATE_LOCK_CANDIDATE"
+    assert health.json()["scope"] == f"IMAGELAB_{settings.build_id}"
     assert health.json()["ai"]["status"] == "ready"
 
     page = client.get("/")

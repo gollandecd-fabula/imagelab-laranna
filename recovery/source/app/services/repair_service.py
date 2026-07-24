@@ -18,6 +18,7 @@ OPERATION_MODULE = {
     "select": "selection",
     "background": "cleanup",
     "cleanup": "cleanup",
+    "logo": "cleanup",
     "halftone": "halftone",
     "vectorize": "vector",
     "geometry": "geometry",

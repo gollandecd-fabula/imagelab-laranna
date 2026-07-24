@@ -650,6 +650,35 @@ def _cleanup(image: Image.Image, params: dict[str, Any]) -> Image.Image:
         rgba[:, :, :3] = cv2.medianBlur(rgba[:, :, :3], kernel)
         min_area = max(2, int(round(defect * rgba.shape[0] * rgba.shape[1] / 2_000_000)))
         rgba[:, :, 3] = _remove_small_alpha_islands(rgba[:, :, 3], min_area)
+    if _bool(params, "binary_alpha", False):
+        threshold = _integer(params, "alpha_threshold", 128, 0, 255)
+        rgba[:, :, 3] = np.where(rgba[:, :, 3] >= threshold, 255, 0).astype(np.uint8)
+    return _pil_from_rgba(rgba)
+
+
+def _prepare_logo(image: Image.Image, params: dict[str, Any]) -> Image.Image:
+    rgba = _rgba_array(_cleanup(image, {
+        "remove_color": _bool(params, "remove_background", True),
+        "target_color": params.get("target_color", "#ffffff"),
+        "tolerance": params.get("tolerance", 18),
+        "remove_halo": True,
+        "binary_alpha": _bool(params, "binary_alpha", False),
+        "alpha_threshold": params.get("alpha_threshold", 128),
+    }))
+    visible = rgba[:, :, 3] > 8
+    if not np.any(visible):
+        raise ProcessingError("После подготовки логотип стал пустым")
+    ys, xs = np.where(visible)
+    padding = _integer(params, "padding_px", 2, 0, 200)
+    x0, x1 = max(0, int(xs.min()) - padding), min(rgba.shape[1], int(xs.max()) + 1 + padding)
+    y0, y1 = max(0, int(ys.min()) - padding), min(rgba.shape[0], int(ys.max()) + 1 + padding)
+    rgba = rgba[y0:y1, x0:x1].copy()
+    color_mode = str(params.get("color_mode", "original")).strip().lower()
+    if color_mode not in {"original", "black", "gray"}:
+        raise ProcessingError("Цвет логотипа должен быть original, black или gray")
+    if color_mode != "original":
+        value = 0 if color_mode == "black" else 96
+        rgba[:, :, :3][rgba[:, :, 3] > 0] = value
     return _pil_from_rgba(rgba)
 
 
@@ -1589,6 +1618,13 @@ def process_image(asset: AssetRecord, operation: str, params: dict[str, Any]) ->
         ai_chain["analysis"] = engine.analyze(result, module="cleanup")
         return _save_result(result, ppi, asset, normalized, recorded, ai=ai_chain)
 
+    if normalized == "logo":
+        result = _prepare_logo(image, params)
+        ai = engine.analyze(result, module="cleanup")
+        recorded["workflow"] = "logo_prepare"
+        recorded["color_mode"] = str(params.get("color_mode", "original")).strip().lower()
+        return _save_result(result, ppi, asset, normalized, recorded, ai=ai)
+
     if normalized == "geometry":
         ai = engine.recommend_size(image, module="geometry")
         if _bool(params, "ai_auto_crop", False):
@@ -1610,9 +1646,12 @@ def process_image(asset: AssetRecord, operation: str, params: dict[str, Any]) ->
     if normalized == "halftone":
         ai = engine.recommend_halftone(image, module="halftone")
         if _bool(params, "ai_auto", True):
-            recorded["raster"] = ai["details"]["raster"]
-            recorded["size_mm"] = ai["details"]["size_mm"]
-            recorded["density"] = ai["details"]["density"]
+            if not _provided(params.get("raster")):
+                recorded["raster"] = ai["details"]["raster"]
+            if not _provided(params.get("size_mm")):
+                recorded["size_mm"] = ai["details"]["size_mm"]
+            if not _provided(params.get("density")):
+                recorded["density"] = ai["details"]["density"]
         safe_cell_mm = _minimum_halftone_size_mm(image, ppi)
         max_safe_lpi = max(5.0, min(300.0, 25.4 / max(safe_cell_mm, 1e-6)))
         requested_lpi = _number(recorded, "lpi", 45.0, 5.0, 300.0)

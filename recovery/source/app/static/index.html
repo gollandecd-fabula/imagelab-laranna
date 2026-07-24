@@ -4,14 +4,16 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ImageLab by LarannA</title>
-  <link rel="stylesheet" href="/static/styles.css?v=1.4.1-update-lock">
+  <link rel="stylesheet" href="/static/styles.css?v=1.4.5-recovery">
 </head>
 <body>
   <header class="topbar">
     <div class="brand"><span class="brand-mark">IL</span><strong>ImageLab</strong><span>by LarannA</span></div>
     <div class="project-chip">Проект: <strong id="projectName">TS-001</strong></div><div class="ai-health-chip" id="aiHealthChip"><span></span><strong>AI</strong><em id="aiHealthText">проверка…</em></div>
       <div class="build-version-chip" id="buildVersionChip" title="Версия фактически запущенного сервера">версия: проверка…</div>
-    <div class="top-spacer"></div><label class="top-auto-repair"><input id="globalAutoRepair" type="checkbox" checked> AI автоисправление</label>
+    <div class="top-spacer"></div>
+    <label class="top-mode">Режим<select id="globalOperationMode"><option value="fast">Быстро</option><option value="professional" selected>Профессионально</option><option value="autoparams">Автопараметры</option><option value="check-only">Только проверка</option></select></label>
+    <label class="top-auto-repair"><input id="globalAutoRepair" type="checkbox" checked> AI автоисправление</label>
     <button class="icon-button" id="refreshButton" type="button" title="Обновить проект">↻</button>
     <button class="primary-button compact" id="downloadButton" type="button" disabled>Экспорт</button>
   </header>
@@ -123,6 +125,7 @@
           <label class="range-row"><span>Допуск</span><input id="cleanupTolerance" type="range" min="0" max="100" value="18"><output data-for="cleanupTolerance">18%</output></label>
           <label class="range-row"><span>Мягкость края, px</span><input id="backgroundFeather" type="range" min="0" max="40" value="2"><output data-for="backgroundFeather">2 px</output></label>
           <label class="check-row"><input id="cleanupDefects" type="checkbox"> Очистка дефектов</label>
+          <label class="check-row"><input id="cleanupBinaryAlpha" type="checkbox"> Бинарный Alpha (0/255)</label>
           <label class="check-row ai-control"><input id="cleanupAiAuto" type="checkbox" checked> AI-маска и AI-preflight</label><button class="primary-button wide" id="applyCleanup" type="button">Применить очистку</button>
         </div>
 
@@ -174,7 +177,13 @@
           <div class="divider"></div>
           <button class="secondary-button wide" id="runQaButton" type="button">Проверить выбранный файл</button>
           <button class="secondary-button wide" id="runReportButton" type="button">Сформировать отчёт</button>
+          <div class="divider"></div><strong class="field-group-title">Производственные мастера</strong>
+          <button class="secondary-button wide" id="masterCleanButton" type="button">Clean Master</button>
+          <button class="secondary-button wide" id="masterCardButton" type="button">Card Master</button>
+          <button class="secondary-button wide" id="masterDtfButton" type="button">DTF Master</button>
+          <button class="secondary-button wide" id="logoPrepareButton" type="button">Подготовить логотип</button>
           <a class="secondary-button wide link-button" id="bundleButton" href="#">ZIP проекта</a>
+          <a class="secondary-button wide link-button" id="cardlabButton" href="#">Пакет CardLab выбранного файла</a>
         </div>
       </section>
 
@@ -209,6 +218,6 @@
 
   <div class="toast" id="toast"></div>
   <div class="busy-overlay" id="busyOverlay"><div class="spinner"></div><strong>Обработка…</strong></div>
-  <script src="/static/app.js?v=1.4.1-update-lock"></script>
+  <script src="/static/app.js?v=1.4.5-recovery"></script>
 </body>
 </html>

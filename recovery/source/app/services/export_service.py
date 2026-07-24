@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import math
@@ -122,12 +123,19 @@ def export_asset(asset: AssetRecord, fmt: str, params: dict[str, Any]) -> AssetR
         matte.save(buffer, format="JPEG", quality=max(60, quality), optimize=True, **dpi_args)
         filename = f"{source_stem}.jpg"
     elif normalized == "WEBP":
+        webp_args: dict[str, Any] = {"quality": max(60, quality), "method": 6}
+        if not strip_metadata:
+            exif = Image.Exif()
+            exif[282] = float(ppi)  # XResolution
+            exif[283] = float(ppi)  # YResolution
+            exif[296] = 2  # inches
+            webp_args["exif"] = exif.tobytes()
         if keep_alpha:
-            image.save(buffer, format="WEBP", quality=max(60, quality), method=6)
+            image.save(buffer, format="WEBP", **webp_args)
         else:
             matte = Image.new("RGB", image.size, (255, 255, 255))
             matte.paste(image, mask=image.getchannel("A"))
-            matte.save(buffer, format="WEBP", quality=max(60, quality), method=6)
+            matte.save(buffer, format="WEBP", **webp_args)
         filename = f"{source_stem}.webp"
     else:
         raise ExportError("Неподдерживаемый формат экспорта")
@@ -168,3 +176,78 @@ def build_project_bundle(project: ProjectRecord) -> tuple[bytes, str]:
                 if preview_path.exists():
                     _zip_write(archive, f"previews/{asset.preview_name}", preview_path.read_bytes())
     return buffer.getvalue(), f"{project.id}_bundle.zip"
+
+
+def _lineage_for_asset(project: ProjectRecord, asset: AssetRecord) -> list[dict[str, Any]]:
+    by_id = {item.id: item for item in project.assets}
+    lineage: list[dict[str, Any]] = []
+    current = asset
+    visited: set[str] = set()
+    while True:
+        if current.id in visited:
+            raise ExportError("Lineage выбранного файла содержит цикл")
+        visited.add(current.id)
+        lineage.append({
+            "asset_id": current.id,
+            "source_asset_id": current.source_asset_id,
+            "operation": current.operation,
+            "sha256": current.sha256,
+            "stored_name": current.stored_name,
+        })
+        if current.source_asset_id is None:
+            break
+        parent = by_id.get(current.source_asset_id)
+        if parent is None:
+            raise ExportError("Lineage выбранного файла повреждён")
+        current = parent
+    return lineage
+
+
+def build_cardlab_package(project: ProjectRecord, asset: AssetRecord) -> tuple[bytes, str]:
+    """Build a deterministic selected-asset handoff with explicit evidence boundary."""
+    if asset.id not in {item.id for item in project.assets}:
+        raise ExportError("Выбранный файл отсутствует в проекте")
+    source_path = (settings.upload_dir / asset.stored_name).resolve()
+    try:
+        source_path.relative_to(settings.upload_dir.resolve())
+    except ValueError as exc:
+        raise ExportError("Некорректный путь выбранного файла") from exc
+    if not source_path.is_file():
+        raise ExportError("Выбранный файл отсутствует на диске")
+    files: dict[str, bytes] = {f"print/{asset.stored_name}": source_path.read_bytes()}
+    preview_path = (settings.preview_dir / asset.preview_name).resolve()
+    try:
+        preview_path.relative_to(settings.preview_dir.resolve())
+    except ValueError as exc:
+        raise ExportError("Некорректный путь предпросмотра") from exc
+    if preview_path.is_file():
+        files[f"preview/{asset.preview_name}"] = preview_path.read_bytes()
+
+    lineage = _lineage_for_asset(project, asset)
+    lineage_bytes = json.dumps(lineage, ensure_ascii=False, indent=2, sort_keys=True, allow_nan=False).encode("utf-8")
+    qa_boundary = {
+        "status": "IMAGE_LAB_HANDOFF_ONLY",
+        "selected_asset_id": asset.id,
+        "verified": ["selected file SHA-256", "project lineage", "deterministic package integrity"],
+        "not_verified": ["CardLab receiving-side layout", "marketplace card rendering", "installed Windows L4/L5"],
+    }
+    qa_bytes = json.dumps(qa_boundary, ensure_ascii=False, indent=2, sort_keys=True).encode("utf-8")
+    files["lineage.json"] = lineage_bytes
+    files["qa-boundary.json"] = qa_bytes
+    manifest = {
+        "schema": 1,
+        "package_type": "ImageLab-CardLab-selected-asset",
+        "project_id": project.id,
+        "asset_id": asset.id,
+        "asset_sha256": asset.sha256,
+        "files": {
+            name: {"sha256": hashlib.sha256(payload).hexdigest(), "size_bytes": len(payload)}
+            for name, payload in sorted(files.items())
+        },
+    }
+    files["manifest.json"] = json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True, allow_nan=False).encode("utf-8")
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
+        for name, payload in sorted(files.items()):
+            _zip_write(archive, name, payload)
+    return buffer.getvalue(), f"{project.id}_{asset.id}_cardlab.zip"

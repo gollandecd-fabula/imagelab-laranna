@@ -114,6 +114,34 @@ def _fill_enclosed_holes(mask: np.ndarray) -> tuple[np.ndarray, int]:
     return cv2.bitwise_or(binary, holes), int(np.count_nonzero(holes))
 
 
+def _bounded_adjacent_support(
+    learned_mask: np.ndarray,
+    score: np.ndarray,
+    subject_pixels: np.ndarray,
+    *,
+    threshold: float,
+    cap_ratio: float = 0.15,
+) -> tuple[np.ndarray, int, int]:
+    """Recover only high-score pixels adjacent to the learned mask, with a hard cap."""
+    base = learned_mask > 16
+    base_count = int(base.sum())
+    if base_count == 0:
+        return learned_mask, 0, 0
+    adjacent = cv2.dilate(base.astype(np.uint8), np.ones((3, 3), np.uint8), iterations=2).astype(bool) & ~base
+    candidates = adjacent & subject_pixels & (score >= float(threshold))
+    candidate_indices = np.flatnonzero(candidates)
+    cap = max(0, int(base_count * cap_ratio))
+    if cap == 0 or candidate_indices.size == 0:
+        return learned_mask, 0, cap
+    if candidate_indices.size > cap:
+        candidate_scores = score.reshape(-1)[candidate_indices]
+        order = np.argsort(candidate_scores, kind="stable")[-cap:]
+        candidate_indices = candidate_indices[order]
+    supported = base.reshape(-1).copy()
+    supported[candidate_indices] = True
+    return np.where(supported.reshape(base.shape), 255, 0).astype(np.uint8), int(candidate_indices.size), cap
+
+
 def _mask_border_ratio(mask: np.ndarray, border_fraction: float = 0.02) -> float:
     binary = mask > 16
     h, w = binary.shape
@@ -495,8 +523,9 @@ class AIEngine:
         started = time.perf_counter()
         probability, source_alpha, rgb, inference_size = self._probability_map(image, model_id)
         features = image_features(rgb, source_alpha)
-        feedback_factor = self.feedback.adaptive_factor(module, features, 0.12)
-        effective_threshold = float(np.clip(threshold / feedback_factor, 0.20, 0.80))
+        # Feedback may calibrate confidence and recommendations, never geometry.
+        feedback_factor = 1.0
+        effective_threshold = float(np.clip(threshold, 0.20, 0.80))
         mask = _normalize_mask(probability, effective_threshold, feather=feather, keep_largest=keep_largest)
         mask = np.minimum(mask, source_alpha)
         coverage = float((mask > 16).mean())
@@ -530,8 +559,10 @@ class AIEngine:
         started = time.perf_counter()
         probability, source_alpha, rgb, inference_size = self._probability_map(image, "pixel_subject")
         features = image_features(rgb, source_alpha)
-        feedback_factor = self.feedback.adaptive_factor(module, features, 0.10)
-        effective_threshold = float(np.clip(threshold / feedback_factor, 0.28, 0.72))
+        # Segmentation geometry is fixed by the model/request. Promoted feedback
+        # can calibrate confidence but cannot move the subject boundary.
+        feedback_factor = 1.0
+        effective_threshold = float(np.clip(threshold, 0.28, 0.72))
         # Keep the learned refinement thread-safe. OpenCV GrabCut can stall when
         # repeated requests are executed by different ASGI worker threads, so the
         # probability map is refined with deterministic morphology instead.
@@ -638,8 +669,9 @@ class AIEngine:
         inner_subject = cv2.erode(subject_pixels.astype(np.uint8), cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7)), iterations=1).astype(bool)
         fused *= inner_subject.astype(np.float32)
         features = image_features(rgb, source_alpha)
-        feedback_factor = self.feedback.adaptive_factor(module, features, 0.12)
-        effective_threshold = float(np.clip((threshold * 0.42) / feedback_factor, 0.16, 0.60))
+        # Keep print geometry invariant under feedback promotion.
+        feedback_factor = 1.0
+        effective_threshold = float(np.clip(threshold * 0.42, 0.16, 0.60))
         mask = np.where(fused >= effective_threshold, 255, 0).astype(np.uint8)
         mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8), iterations=1)
         mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8), iterations=1)
@@ -702,6 +734,12 @@ class AIEngine:
                 if overlaps_neighborhood:
                     cleaned[labels == index] = 255
         mask = cleaned
+        # The learned/filtered mask remains authoritative. Support can recover only
+        # adjacent high-score pixels and is capped to 15% of the authoritative area.
+        support_threshold = max(0.12, effective_threshold * 0.78)
+        mask, support_pixels, support_cap_pixels = _bounded_adjacent_support(
+            mask, fused, subject_pixels, threshold=support_threshold, cap_ratio=0.15
+        )
         # Recover enclosed dark ink while leaving outside-connected garment pixels transparent.
         mask, filled_hole_pixels = _fill_enclosed_holes(mask)
         mask = np.minimum(mask, subject)
@@ -733,6 +771,10 @@ class AIEngine:
                 "outside_subject_ratio": outside_subject,
                 "border_ratio": border_ratio,
                 "filled_hole_pixels": filled_hole_pixels,
+                "support_policy": "adjacent_only_capped_15_percent",
+                "support_threshold": support_threshold,
+                "support_pixels": support_pixels,
+                "support_cap_pixels": support_cap_pixels,
                 "mean_probability": mean_probability,
                 "inference_size": inference_size,
                 "garment_lab": [round(float(v), 3) for v in fabric_center],

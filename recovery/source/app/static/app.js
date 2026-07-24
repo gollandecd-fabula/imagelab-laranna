@@ -18,6 +18,7 @@ const state = {
   halftonePreview: 'transparent',
   activeSelectionEpoch: 0,
   pendingSelectionId: null,
+  operationMode: 'professional',
 };
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
@@ -355,6 +356,13 @@ async function pinActiveAsset(assetId) {
     toast(error.message, true);
   }
 }
+async function divertCheckOnly(actionLabel) {
+  if (state.operationMode !== 'check-only') return false;
+  toast(`Режим «Только проверка»: ${actionLabel} не изменяет проект`);
+  await runQa();
+  return true;
+}
+
 async function loadProject() {
   try {
     state.project = await api(`/api/projects/${PROJECT_ID}`);
@@ -370,6 +378,7 @@ async function uploadFiles(files) {
   finally { setBusy(false); $('#fileInput').value = ''; }
 }
 async function processSelected(operation, parameters, message) {
+  if (await divertCheckOnly(operationNames[operation] || operation)) return null;
   const asset = requireAsset(); if (!asset || state.busy) return null; setBusy(true);
   try {
     const result = await api(`/api/projects/${PROJECT_ID}/process`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({asset_id:asset.id,operation,parameters:{...parameters,auto_repair:$('#globalAutoRepair')?.checked ?? true}})});
@@ -390,6 +399,7 @@ async function processSelected(operation, parameters, message) {
   finally { setBusy(false); }
 }
 async function applyCleanupFlow() {
+  if (await divertCheckOnly('Очистка')) return;
   const asset = requireAsset(); if (!asset || state.busy) return; setBusy(true);
   try {
     let currentId = asset.id; let project = state.project; const reports=[];
@@ -399,7 +409,7 @@ async function applyCleanupFlow() {
       project = response.project; currentId = response.result.id; if(response.repair) reports.push(response.repair);
     }
     if ($('#removeHalo').checked || $('#removeColor').checked || $('#cleanupDefects').checked) {
-      const response = await api(`/api/projects/${PROJECT_ID}/process`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({asset_id:currentId,operation:'cleanup',parameters:{remove_halo:$('#removeHalo').checked,remove_color:$('#removeColor').checked,target_color:$('#cleanupColor').value,tolerance:number('#cleanupTolerance',18),defect_cleanup:$('#cleanupDefects').checked?35:0,ai_auto:$('#cleanupAiAuto').checked,auto_repair:autoRepair}})});
+      const response = await api(`/api/projects/${PROJECT_ID}/process`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({asset_id:currentId,operation:'cleanup',parameters:{remove_halo:$('#removeHalo').checked,remove_color:$('#removeColor').checked,target_color:$('#cleanupColor').value,tolerance:number('#cleanupTolerance',18),defect_cleanup:$('#cleanupDefects').checked?35:0,binary_alpha:$('#cleanupBinaryAlpha').checked,alpha_threshold:128,ai_auto:$('#cleanupAiAuto').checked,auto_repair:autoRepair}})});
       project = response.project; currentId = response.result.id; if(response.repair) reports.push(response.repair);
     }
     state.project = project; state.selectedId = currentId; renderProject();
@@ -410,6 +420,7 @@ async function applyCleanupFlow() {
   finally { setBusy(false); }
 }
 async function exportSelected() {
+  if (await divertCheckOnly('Экспорт')) return;
   const asset = requireAsset(); if (!asset || state.busy) return; setBusy(true);
   try {
     const result = await api(`/api/projects/${PROJECT_ID}/export`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({asset_id:asset.id,format:state.exportFormat,parameters:{ppi:number('#exportPpi',300),quality:number('#exportQuality',92),keep_alpha:$('#exportAlpha').checked,ai_auto:$('#exportAiAuto').checked}})});
@@ -439,7 +450,7 @@ $('#dropzone').addEventListener('click', () => $('#fileInput').click()); $('#dro
 ['dragenter','dragover'].forEach((name) => $('#dropzone').addEventListener(name,(event)=>{event.preventDefault();$('#dropzone').classList.add('dragover');}));
 ['dragleave','drop'].forEach((name) => $('#dropzone').addEventListener(name,(event)=>{event.preventDefault();$('#dropzone').classList.remove('dragover');}));
 $('#dropzone').addEventListener('drop',(event)=>uploadFiles(event.dataTransfer.files));
-$('#clearButton').addEventListener('click', async () => { if (!confirm('Удалить все файлы проекта TS-001?')) return; setBusy(true); try { state.project = await api(`/api/projects/${PROJECT_ID}/assets`,{method:'DELETE'}); state.selectedId = null; renderProject(); toast('Проект очищен'); } catch(error){toast(error.message,true);} finally{setBusy(false);} });
+$('#clearButton').addEventListener('click', async () => { if (await divertCheckOnly('Очистка проекта')) return; if (!confirm('Удалить все файлы проекта TS-001?')) return; setBusy(true); try { state.project = await api(`/api/projects/${PROJECT_ID}/assets`,{method:'DELETE'}); state.selectedId = null; renderProject(); toast('Проект очищен'); } catch(error){toast(error.message,true);} finally{setBusy(false);} });
 
 $$('[data-improve-mode]').forEach((button)=>button.addEventListener('click',()=>{ $$('[data-improve-mode]').forEach((item)=>item.classList.toggle('active',item===button)); $('#improveManual').classList.toggle('compact-hidden',button.dataset.improveMode==='quick'); }));
 $('#applyEnhance').addEventListener('click',()=>processSelected('enhance',{preset:$('#enhancePreset').value,brightness:1,contrast:number('#enhanceContrast',100)/100,saturation:number('#enhanceSaturation',100)/100,sharpness:number('#enhanceSharpness',100)/100,denoise:number('#enhanceDenoise',0),ai_auto:$('#improveAiAuto').checked,...improvePhysicalParams()},'Улучшение применено'));
@@ -469,6 +480,12 @@ $('#applyVectorize').addEventListener('click',()=>processSelected('vectorize',{m
 $('#applyGeometry').addEventListener('click',()=>{ const params={width_mm:$('#widthMm').value,height_mm:$('#heightMm').value,ppi:number('#geometryPpi',300),preserve_aspect:$('#preserveAspect').checked,rotate:number('#rotateAngle'),crop:{x:number('#cropX'),y:number('#cropY'),width:number('#cropWidth',100),height:number('#cropHeight',100)},ai_auto_crop:$('#geometryAiCrop').checked}; if($('#usePerspective').checked)params.perspective=pointValues('p'); processSelected('geometry',params,'Размер и геометрия применены'); });
 $$('[data-export-format]').forEach((button)=>button.addEventListener('click',()=>{ state.exportFormat=button.dataset.exportFormat; $$('[data-export-format]').forEach((item)=>item.classList.toggle('active',item===button)); }));
 $('#applyExport').addEventListener('click',exportSelected); $('#runQaButton').addEventListener('click',runQa); $('#runReportButton').addEventListener('click',runReport);
+$('#masterCleanButton').addEventListener('click',()=>processSelected('master_clean',{},'Clean Master создан'));
+$('#masterCardButton').addEventListener('click',()=>processSelected('master_card',{width_mm:300,height_mm:400,ppi:300},'Card Master создан'));
+$('#masterDtfButton').addEventListener('click',()=>processSelected('master_dtf',{},'DTF Master создан'));
+$('#logoPrepareButton').addEventListener('click',()=>processSelected('logo',{remove_background:true,color_mode:'black',binary_alpha:false},'Логотип подготовлен'));
+$('#cardlabButton').addEventListener('click',(event)=>{ const asset=selectedAsset(); if(!asset){event.preventDefault();toast('Выберите файл',true);return;} event.currentTarget.href=`/api/projects/${PROJECT_ID}/cardlab-package?asset_id=${encodeURIComponent(asset.id)}`; });
+$('#globalOperationMode').addEventListener('change',(event)=>{ state.operationMode=event.target.value; const checkOnly=state.operationMode==='check-only'; $('#globalAutoRepair').disabled=checkOnly; toast(checkOnly?'Включён режим «Только проверка»':'Режим: '+event.target.options[event.target.selectedIndex].text); });
 
 
 $$('[data-ai-analyze]').forEach((button)=>button.addEventListener('click',()=>analyzeSelectedAI(button.dataset.aiAnalyze)));

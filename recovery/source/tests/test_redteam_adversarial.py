@@ -140,14 +140,14 @@ def test_upload_rolls_back_files_when_ai_fails(monkeypatch: pytest.MonkeyPatch) 
 def test_process_rolls_back_result_when_project_commit_fails(monkeypatch: pytest.MonkeyPatch) -> None:
     asset = _upload()
     before_uploads = {p.name for p in settings.upload_dir.iterdir() if p.is_file()}
-    original = main_module.store.add_assets
+    original = main_module.store.commit_derived_assets
 
-    def fail_add(project_id, assets):
+    def fail_add(project_id, source_asset_id, assets, *, active_asset_id=None):
         if assets and assets[0].operation:
             raise ValueError("forced store failure")
-        return original(project_id, assets)
+        return original(project_id, source_asset_id, assets, active_asset_id=active_asset_id)
 
-    monkeypatch.setattr(main_module.store, "add_assets", fail_add)
+    monkeypatch.setattr(main_module.store, "commit_derived_assets", fail_add)
     response = client.post(f"/api/projects/{PROJECT}/process", json={"asset_id": asset["id"], "operation": "color", "parameters": {"hue": 10}})
     assert response.status_code == 400
     assert {p.name for p in settings.upload_dir.iterdir() if p.is_file()} == before_uploads
