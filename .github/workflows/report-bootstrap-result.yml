@@ -1,0 +1,77 @@
+name: Report ImageLab Bootstrap Result
+
+on:
+  workflow_run:
+    workflows:
+      - ImageLab Bootstrap Windows Gate
+    types:
+      - completed
+
+permissions:
+  actions: read
+  contents: read
+  issues: write
+
+jobs:
+  report-bootstrap-result:
+    name: Publish bootstrap result to issue 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Collect exact run and job results
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPOSITORY: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_NUMBER: ${{ github.event.workflow_run.run_number }}
+          RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+          RUN_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          api="https://api.github.com/repos/${GH_REPOSITORY}"
+          auth=(-H "Authorization: Bearer ${GH_TOKEN}" -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28")
+
+          curl -fsSL "${auth[@]}" \
+            "${api}/actions/runs/${RUN_ID}/jobs?per_page=100" > jobs.json
+
+          jq -r '.jobs[] | [.name, .status, (.conclusion // "none"), (.html_url // "")] | @tsv' jobs.json > jobs.tsv
+
+          {
+            echo "## ImageLab Bootstrap Windows Gate #${RUN_NUMBER}"
+            echo
+            echo "- **Run:** [#${RUN_NUMBER}, attempt ${RUN_ATTEMPT}](${RUN_URL})"
+            echo "- **Branch:** \`${HEAD_BRANCH}\`"
+            echo "- **Commit:** \`${HEAD_SHA}\`"
+            echo "- **Workflow conclusion:** \`${RUN_CONCLUSION}\`"
+            echo
+            echo "| Job | Status | Conclusion | Link |"
+            echo "|---|---|---|---|"
+            while IFS=$'\t' read -r name status conclusion url; do
+              printf '| %s | `%s` | `%s` | [open](%s) |\n' "$name" "$status" "$conclusion" "$url"
+            done < jobs.tsv
+            echo
+            echo "### Release state"
+            echo
+            echo "\`RELEASE_BLOCKED\` — bootstrap cannot authorize a release until update and rollback gates against a previously authorized installer are also proven."
+          } > comment.md
+
+          jq -n --rawfile body comment.md '{body:$body}' > payload.json
+          curl -fsSL -X POST "${auth[@]}" \
+            "${api}/issues/1/comments" \
+            --data-binary @payload.json > posted-comment.json
+
+      - name: Store reporter evidence
+        uses: actions/upload-artifact@v5
+        with:
+          name: bootstrap-run-report-${{ github.event.workflow_run.id }}
+          path: |
+            jobs.json
+            jobs.tsv
+            comment.md
+            posted-comment.json
+          retention-days: 30
+          if-no-files-found: error
