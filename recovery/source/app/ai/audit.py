@@ -1,0 +1,169 @@
+from __future__ import annotations
+
+import hashlib
+import json
+import math
+import os
+import threading
+import uuid
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+from app.config import settings
+
+
+MAX_AUDIT_FILE_BYTES = 20 * 1024 * 1024
+GENESIS_HASH = "0" * 64
+
+
+def _sanitize(value: Any, depth: int = 0) -> Any:
+    if depth > 6:
+        return "[depth-limit]"
+    if isinstance(value, dict):
+        result: dict[str, Any] = {}
+        for key, nested in value.items():
+            if key == "features":
+                if isinstance(nested, list):
+                    result["feature_count"] = len(nested)
+                continue
+            result[str(key)[:80]] = _sanitize(nested, depth + 1)
+        return result
+    if isinstance(value, list):
+        return [_sanitize(item, depth + 1) for item in value[:100]]
+    if isinstance(value, str):
+        return value[:2000]
+    if isinstance(value, float):
+        return value if math.isfinite(value) else "[non-finite]"
+    if value is None or isinstance(value, (bool, int)):
+        return value
+    return str(value)[:500]
+
+
+def _record_hash(item: dict[str, Any]) -> str:
+    canonical = json.dumps(item, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
+
+
+class AIAuditStore:
+    def __init__(self) -> None:
+        settings.ai_audit_dir.mkdir(parents=True, exist_ok=True)
+        self._lock = threading.RLock()
+
+    def _current_path(self, day: str) -> Path:
+        base = settings.ai_audit_dir / f"ai-audit-{day}.jsonl"
+        if not base.exists() or base.stat().st_size < MAX_AUDIT_FILE_BYTES:
+            return base
+        index = 1
+        while True:
+            candidate = settings.ai_audit_dir / f"ai-audit-{day}-{index:03d}.jsonl"
+            if not candidate.exists() or candidate.stat().st_size < MAX_AUDIT_FILE_BYTES:
+                return candidate
+            index += 1
+
+    @staticmethod
+    def _previous_hash(path: Path) -> str:
+        if not path.exists() or path.stat().st_size == 0:
+            return GENESIS_HASH
+        try:
+            with path.open("rb") as stream:
+                stream.seek(0, os.SEEK_END)
+                position = stream.tell() - 1
+                while position >= 0:
+                    stream.seek(position)
+                    if stream.read(1) not in {b"\n", b"\r"}:
+                        break
+                    position -= 1
+                end = position + 1
+                while position >= 0:
+                    stream.seek(position)
+                    if stream.read(1) == b"\n":
+                        break
+                    position -= 1
+                stream.seek(position + 1)
+                line = stream.read(end - position - 1).decode("utf-8")
+            item = json.loads(line)
+            value = item.get("record_hash") if isinstance(item, dict) else None
+            return value if isinstance(value, str) and len(value) == 64 else "legacy-unverified"
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            return "corrupt-unverified"
+
+    def append(self, record: dict[str, Any]) -> dict[str, Any]:
+        created_at = datetime.now(timezone.utc).isoformat()
+        day = created_at[:10]
+        with self._lock:
+            path = self._current_path(day)
+            item = {
+                "id": uuid.uuid4().hex,
+                "created_at": created_at,
+                "previous_hash": self._previous_hash(path),
+                **_sanitize(record),
+            }
+            item["record_hash"] = _record_hash(item)
+            encoded = json.dumps(item, ensure_ascii=False, separators=(",", ":"), allow_nan=False) + "\n"
+            with path.open("a", encoding="utf-8", newline="\n") as stream:
+                stream.write(encoded)
+                stream.flush()
+                os.fsync(stream.fileno())
+        return item
+
+    def verify_file(self, path: Path) -> dict[str, Any]:
+        valid = True
+        checked = 0
+        previous = GENESIS_HASH
+        legacy_seen = False
+        try:
+            lines = path.read_text("utf-8").splitlines()
+        except (OSError, UnicodeDecodeError) as exc:
+            return {"path": path.name, "valid": False, "checked": 0, "error": str(exc)}
+        for number, line in enumerate(lines, 1):
+            if not line.strip():
+                continue
+            try:
+                item = json.loads(line)
+            except json.JSONDecodeError:
+                return {"path": path.name, "valid": False, "checked": checked, "line": number, "error": "invalid_json"}
+            if not isinstance(item, dict) or "record_hash" not in item:
+                legacy_seen = True
+                previous = "legacy-unverified"
+                continue
+            stored = item.get("record_hash")
+            content = dict(item)
+            content.pop("record_hash", None)
+            if stored != _record_hash(content):
+                valid = False
+                return {"path": path.name, "valid": False, "checked": checked, "line": number, "error": "record_hash_mismatch"}
+            expected_previous = previous
+            if item.get("previous_hash") != expected_previous:
+                valid = False
+                return {"path": path.name, "valid": False, "checked": checked, "line": number, "error": "chain_mismatch"}
+            previous = str(stored)
+            checked += 1
+        return {"path": path.name, "valid": valid, "checked": checked, "legacy_seen": legacy_seen, "last_hash": previous}
+
+    def verify_all(self) -> list[dict[str, Any]]:
+        with self._lock:
+            return [self.verify_file(path) for path in sorted(settings.ai_audit_dir.glob("ai-audit-*.jsonl"))]
+
+    def recent(self, limit: int = 100) -> list[dict[str, Any]]:
+        limit = max(1, min(int(limit), 100_000))
+        items: list[dict[str, Any]] = []
+        with self._lock:
+            paths = sorted(settings.ai_audit_dir.glob("ai-audit-*.jsonl"), reverse=True)
+            for path in paths:
+                try:
+                    lines = path.read_text("utf-8").splitlines()
+                except (OSError, UnicodeDecodeError):
+                    continue
+                for line in reversed(lines):
+                    if not line.strip():
+                        continue
+                    try:
+                        item = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if isinstance(item, dict):
+                        items.append(item)
+                    if len(items) >= limit:
+                        return items
+        return items

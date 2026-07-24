@@ -1,0 +1,114 @@
+{
+  "schema": 1,
+  "suite": "ImageLab Built-in AI",
+  "version": "1.0.0",
+  "training_seed": 20260723,
+  "models": [
+    {
+      "id": "pixel_subject",
+      "version": "1.0.0",
+      "task": "segmentation",
+      "filename": "pixel_subject_v1.json",
+      "sha256": "0096d4265e81e16931e531193a7fc6fa56b98507cadebaf6ace87c1b415a8781",
+      "runtime": "numpy-linear-ml"
+    },
+    {
+      "id": "pixel_print",
+      "version": "1.0.0",
+      "task": "segmentation",
+      "filename": "pixel_print_v1.json",
+      "sha256": "504da94a3b3ea5a37d69c35c6ac476a04e56c0767f19b7e9cfc4627ef58cd466",
+      "runtime": "numpy-linear-ml"
+    },
+    {
+      "id": "content_classifier",
+      "version": "1.0.0",
+      "task": "classification",
+      "filename": "content_classifier_v1.json",
+      "sha256": "c47ade80b4d318f73637e4b352afa7543fa56681acb4fbc4acf32cfa7aa7c89e",
+      "runtime": "numpy-linear-ml"
+    },
+    {
+      "id": "quality_risk",
+      "version": "1.0.0",
+      "task": "quality",
+      "filename": "quality_risk_v1.json",
+      "sha256": "4f7a1cf77abc5480c7a77cab91e4dc37aa1e8035661f42b8ea56857489305e86",
+      "runtime": "numpy-linear-ml"
+    },
+    {
+      "id": "restoration_profile",
+      "version": "1.0.0",
+      "task": "recommendation",
+      "filename": "restoration_profile_v1.json",
+      "sha256": "efbac722318d162f826e818bad5886f86de7e1da31ede6b0ed262bd491c4046b",
+      "runtime": "numpy-linear-ml"
+    },
+    {
+      "id": "tiny_restorer",
+      "version": "1.0.0",
+      "task": "restoration",
+      "filename": "tiny_restorer_v1.json",
+      "sha256": "3268f75549e3a5dffae016d054007ec3dd65bf0717903925437774701a460c66",
+      "runtime": "numpy-linear-ml"
+    },
+    {
+      "id": "halftone_recommender",
+      "version": "1.0.0",
+      "task": "recommendation",
+      "filename": "halftone_recommender_v1.json",
+      "sha256": "59a7837b429cc89889b6947076fc1605a530e22d04a4205ead3cdb0ed2f01ca6",
+      "runtime": "numpy-linear-ml"
+    },
+    {
+      "id": "vector_recommender",
+      "version": "1.0.0",
+      "task": "recommendation",
+      "filename": "vector_recommender_v1.json",
+      "sha256": "7b2ed26f6ad72df61807c460d6dddb55b2e8b7776fbf9e88d0003fe5b85a51df",
+      "runtime": "numpy-linear-ml"
+    },
+    {
+      "id": "export_recommender",
+      "version": "1.0.0",
+      "task": "recommendation",
+      "filename": "export_recommender_v1.json",
+      "sha256": "c9722b0f405a1e3b52ccc14868100ff16412264d2a226c9eaae31b9f4c322c53",
+      "runtime": "numpy-linear-ml"
+    },
+    {
+      "id": "size_assistant",
+      "version": "1.0.0",
+      "task": "recommendation",
+      "filename": "size_assistant_v1.json",
+      "sha256": "e959c5a08da6d04d2616938ea6a49be6e821ade9fce40107dc6be1398915dc47",
+      "runtime": "numpy-linear-ml"
+    },
+    {
+      "id": "qa_anomaly",
+      "version": "1.0.0",
+      "task": "qa",
+      "filename": "qa_anomaly_v1.json",
+      "sha256": "0dcd6abf6937bbcb92a6fc269042a9451e4733d0c43bddc140db4915df6a18e0",
+      "runtime": "numpy-linear-ml"
+    }
+  ],
+  "metrics": {
+    "pixel_subject_train_accuracy": 0.9695061728395061,
+    "pixel_print_train_accuracy": 0.8323425925925926,
+    "content_train_accuracy": 1.0,
+    "quality_blur_accuracy": 0.885,
+    "quality_noise_accuracy": 1.0,
+    "quality_low_contrast_accuracy": 0.95,
+    "quality_compression_accuracy": 0.7583333333333333,
+    "restoration_profile_train_accuracy": 0.8116666666666666,
+    "halftone_train_accuracy": 0.9716666666666667,
+    "export_train_accuracy": 0.8933333333333333,
+    "tiny_restorer_training_mse": 0.0024178640451282263,
+    "qa_anomaly_train_accuracy": 1.0
+  },
+  "limitations": [
+    "Built-in compact models are trained on synthetic garment/product scenes.",
+    "They provide offline AI assistance and require user verification on complex real photographs."
+  ]
+}

@@ -1,0 +1,343 @@
+name: ImageLab Zero-Trust Release Gate
+
+on:
+  workflow_dispatch:
+    inputs:
+      baseline_release_tag:
+        description: GitHub Release tag containing the last authorized Windows installer
+        required: true
+        type: string
+      baseline_installer_sha256:
+        description: Externally pinned SHA-256 of the last authorized installer
+        required: true
+        type: string
+      enable_attestation:
+        description: Generate GitHub artifact attestation when repository plan supports it
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: imagelab-zero-trust-release
+  cancel-in-progress: false
+
+env:
+  PYTHONUTF8: '1'
+  PIP_DISABLE_PIP_VERSION_CHECK: '1'
+  CANDIDATE_LABEL: ZERO_TRUST
+
+jobs:
+  source-gate:
+    name: G0 Source, identity and backend self-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - name: Install exact application dependencies
+        run: python -m pip install --requirement requirements.txt
+      - name: Run source gate
+        run: python release_gate/source_gate.py --output evidence-zero-trust/source-gate.json
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: ztr-source-evidence
+          path: evidence-zero-trust/
+          retention-days: 30
+          if-no-files-found: error
+
+  unit-matrix:
+    name: G1 Unit ${{ matrix.id }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { id: a0, file: tests/test_a0.py }
+          - { id: a1, file: tests/test_a1.py }
+          - { id: a2-a4, file: tests/test_a2_a4.py }
+          - { id: ai-contours, file: tests/test_ai_contours.py }
+          - { id: bootstrap, file: tests/test_bootstrap.py }
+          - { id: core-failure, file: tests/test_core_failure_regression.py }
+          - { id: installer-lock, file: tests/test_installer_update_lock.py }
+          - { id: l5-iz017, file: tests/test_l5_iz017_regression.py }
+          - { id: m1-ui, file: tests/test_m1_ui.py }
+          - { id: print-extraction, file: tests/test_print_extraction.py }
+          - { id: redteam, file: tests/test_redteam_adversarial.py }
+          - { id: second-core, file: tests/test_second_core_failure_regression.py }
+          - { id: slu-m1, file: tests/test_slu_m1_units.py }
+          - { id: slu-m2-m5, file: tests/test_slu_m2_m5.py }
+          - { id: slu-m3, file: tests/test_slu_m3_segmentation.py }
+          - { id: slu-m5-e2e, file: tests/test_slu_m5_e2e.py }
+          - { id: windows-packaging, file: tests/test_windows_packaging_config.py }
+          - { id: zero-trust, file: tests/test_zero_trust_release_gate.py }
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Install exact application dependencies
+        run: python -m pip install --requirement requirements.txt
+      - name: Run one isolated test file and always write evidence
+        run: >-
+          python release_gate/run_unit_case.py
+          --case-id "${{ matrix.id }}"
+          --test-file "${{ matrix.file }}"
+          --output "evidence-unit/${{ matrix.id }}.json"
+          --timeout 600
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: ztr-unit-${{ matrix.id }}
+          path: evidence-unit/
+          retention-days: 30
+          if-no-files-found: warn
+
+  unit-verdict:
+    name: G1 Fail-closed unit matrix verdict
+    needs: unit-matrix
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        continue-on-error: true
+        with:
+          pattern: ztr-unit-*
+          path: aggregate-unit/cases
+          merge-multiple: true
+      - name: Require every expected isolated test case to pass
+        run: >-
+          python release_gate/finalize_unit_matrix.py
+          --input-dir aggregate-unit/cases
+          --output aggregate-unit/unit-matrix-verdict.json
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: ztr-unit-verdict
+          path: aggregate-unit/
+          retention-days: 30
+          if-no-files-found: error
+
+  build-exact-candidate:
+    name: G2 Build exact immutable candidate
+    needs: [source-gate, unit-verdict]
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.25.x'
+      - name: Build candidate A
+        shell: pwsh
+        run: python scripts/build_zero_trust_candidate.py --output-dir dist-a --label $env:CANDIDATE_LABEL
+      - name: Build candidate B for reproducibility
+        shell: pwsh
+        run: python scripts/build_zero_trust_candidate.py --output-dir dist-b --label $env:CANDIDATE_LABEL
+      - name: Require byte-identical installer rebuild
+        shell: pwsh
+        run: |
+          $a = (Get-Content -Raw dist-a/candidate-manifest.json | ConvertFrom-Json)
+          $b = (Get-Content -Raw dist-b/candidate-manifest.json | ConvertFrom-Json)
+          if ($a.installer.sha256 -ne $b.installer.sha256) { throw "Non-reproducible installer build" }
+          New-Item -ItemType Directory -Force exact-candidate | Out-Null
+          Copy-Item dist-a/* exact-candidate/ -Force
+          @{schema=1;status='PASS';installer_sha256=$a.installer.sha256;second_build_sha256=$b.installer.sha256} | ConvertTo-Json | Set-Content exact-candidate/reproducibility.json -Encoding utf8
+      - uses: actions/upload-artifact@v5
+        with:
+          name: UNVERIFIED_INTERNAL_EXACT_CANDIDATE
+          path: exact-candidate/
+          retention-days: 2
+          if-no-files-found: error
+
+  clean-install-ui:
+    name: G3-G5 Clean Windows install and browser path
+    needs: build-exact-candidate
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - uses: actions/download-artifact@v5
+        with:
+          name: UNVERIFIED_INTERNAL_EXACT_CANDIDATE
+          path: exact-candidate
+      - name: Install Playwright harness
+        run: |
+          python -m pip install --requirement requirements.txt
+          python -m pip install --requirement requirements-release.txt
+          python -m playwright install chromium
+      - name: Install exact candidate and drive installed UI
+        shell: pwsh
+        run: |
+          $installer = (Get-ChildItem exact-candidate -Filter *.exe -File | Select-Object -First 1).FullName
+          ./release_gate/run_clean_install_gate.ps1 -InstallerPath $installer -CandidateManifestPath exact-candidate/candidate-manifest.json -EvidenceDir evidence-clean -Mode clean -BrowserChannel msedge
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: ztr-clean-install-evidence
+          path: evidence-clean/
+          retention-days: 30
+          if-no-files-found: warn
+
+  update-rollback:
+    name: G6-G7 Running update and forced rollback
+    needs: build-exact-candidate
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - uses: actions/download-artifact@v5
+        with:
+          name: UNVERIFIED_INTERNAL_EXACT_CANDIDATE
+          path: exact-candidate
+      - name: Download and pin the last authorized installer
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASELINE_TAG: ${{ inputs.baseline_release_tag }}
+          BASELINE_SHA256: ${{ inputs.baseline_installer_sha256 }}
+        run: |
+          New-Item -ItemType Directory -Force baseline | Out-Null
+          gh release download $env:BASELINE_TAG --pattern 'ImageLab_by_LarannA_RELEASE_AUTHORIZED*_Setup_x64.exe' --dir baseline --clobber
+          $files = @(Get-ChildItem baseline -Filter *.exe -File)
+          if ($files.Count -ne 1) { throw "Expected exactly one authorized baseline installer, found $($files.Count)" }
+          $actual = (Get-FileHash -Algorithm SHA256 $files[0].FullName).Hash.ToLowerInvariant()
+          if ($actual -ne $env:BASELINE_SHA256.ToLowerInvariant()) { throw "Baseline installer SHA-256 mismatch" }
+          @{schema=1;status='PASS';release_tag=$env:BASELINE_TAG;installer_sha256=$actual;name=$files[0].Name} | ConvertTo-Json | Set-Content baseline/baseline-verification.json -Encoding utf8
+      - name: Update real previous version and inject post-promotion failure
+        shell: pwsh
+        run: |
+          $baseline = (Get-ChildItem baseline -Filter *.exe -File | Select-Object -First 1).FullName
+          $installer = (Get-ChildItem exact-candidate -Filter *.exe -File | Select-Object -First 1).FullName
+          ./release_gate/run_update_rollback_gate.ps1 -BaselineInstallerPath $baseline -InstallerPath $installer -CandidateManifestPath exact-candidate/candidate-manifest.json -EvidenceDir evidence-update
+          Copy-Item baseline/baseline-verification.json evidence-update/baseline-verification.json -Force
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: ztr-update-rollback-evidence
+          path: evidence-update/
+          retention-days: 30
+          if-no-files-found: warn
+
+  independent-verification:
+    name: G8 Independent exact-SHA rerun
+    needs: build-exact-candidate
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - uses: actions/download-artifact@v5
+        with:
+          name: UNVERIFIED_INTERNAL_EXACT_CANDIDATE
+          path: exact-candidate
+      - name: Install independent Playwright harness
+        run: |
+          python -m pip install --requirement requirements.txt
+          python -m pip install --requirement requirements-release.txt
+          python -m playwright install chromium
+      - name: Independently install and repeat the user path
+        shell: pwsh
+        run: |
+          $installer = (Get-ChildItem exact-candidate -Filter *.exe -File | Select-Object -First 1).FullName
+          ./release_gate/run_clean_install_gate.ps1 -InstallerPath $installer -CandidateManifestPath exact-candidate/candidate-manifest.json -EvidenceDir evidence-independent -Mode independent -BrowserChannel bundled
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: ztr-independent-evidence
+          path: evidence-independent/
+          retention-days: 30
+          if-no-files-found: warn
+
+  final-verdict:
+    name: Final fail-closed release authorization
+    if: ${{ always() }}
+    needs: [source-gate, unit-verdict, build-exact-candidate, clean-install-ui, update-rollback, independent-verification]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        continue-on-error: true
+        with:
+          name: ztr-source-evidence
+          path: aggregate/source
+      - uses: actions/download-artifact@v5
+        continue-on-error: true
+        with:
+          name: ztr-unit-verdict
+          path: aggregate/unit
+      - uses: actions/download-artifact@v5
+        continue-on-error: true
+        with:
+          name: UNVERIFIED_INTERNAL_EXACT_CANDIDATE
+          path: aggregate/build
+      - uses: actions/download-artifact@v5
+        continue-on-error: true
+        with:
+          name: ztr-clean-install-evidence
+          path: aggregate/clean
+      - uses: actions/download-artifact@v5
+        continue-on-error: true
+        with:
+          name: ztr-update-rollback-evidence
+          path: aggregate/update
+      - uses: actions/download-artifact@v5
+        continue-on-error: true
+        with:
+          name: ztr-independent-evidence
+          path: aggregate/independent
+      - name: Generate final verdict and authorized copy
+        id: finalize
+        continue-on-error: true
+        run: python release_gate/finalize_gate.py --aggregate-dir aggregate --output-dir authorized-release
+      - name: Attest exact authorized installer
+        if: ${{ steps.finalize.outcome == 'success' && inputs.enable_attestation }}
+        uses: actions/attest@v4
+        with:
+          subject-path: authorized-release/*.exe
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: ImageLab-RELEASE-VERDICT
+          path: authorized-release/
+          retention-days: 90
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v5
+        if: ${{ steps.finalize.outcome == 'success' }}
+        with:
+          name: ImageLab-RELEASE-AUTHORIZED
+          path: authorized-release/*.exe
+          retention-days: 90
+          if-no-files-found: error
+      - name: Enforce fail-closed final verdict
+        if: ${{ steps.finalize.outcome != 'success' }}
+        run: |
+          echo "Release blocked. See ImageLab-RELEASE-VERDICT evidence artifact."
+          exit 1
