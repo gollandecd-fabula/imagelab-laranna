@@ -20,17 +20,13 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
-
-concurrency:
-  group: imagelab-bootstrap-windows-gate
-  cancel-in-progress: false
+  contents: write
 
 env:
   PYTHONUTF8: '1'
   PIP_DISABLE_PIP_VERSION_CHECK: '1'
   EXACT_PYTHON_VERSION: '3.13.14'
-  GATE_REVISION: 'RC10-WINDOWS-RERUN-2'
+  GATE_REVISION: 'RC10-WINDOWS-RERUN-3'
   EXPECTED_SOURCE_SHA256: '476b68ee2ddea5f2985c1c8fd2fc841de490a866bb3a9676aca9411b463e6538'
   EXPECTED_APP_VERSION: '1.4.6-recovery-candidate'
   EXPECTED_BUILD_ID: 'REC-RT8-M6-20260724-03'
@@ -274,20 +270,63 @@ jobs:
       - clean-install-ui
       - independent-windows-rerun
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
-      - name: Write fail-closed bootstrap verdict
+      - name: Checkout evidence branch
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+        with:
+          ref: bootstrap/zero-trust-gate
+          fetch-depth: 0
+      - name: Download B0 evidence
+        continue-on-error: true
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          name: bootstrap-bundle-evidence
+          path: captured/b0
+      - name: Download B1 evidence
+        continue-on-error: true
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          name: bootstrap-source-regression-evidence
+          path: captured/b1
+      - name: Download B2 candidate metadata
+        continue-on-error: true
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          name: UNVERIFIED_BOOTSTRAP_WINDOWS_CANDIDATE
+          path: captured/b2
+      - name: Download B3-B5 evidence
+        continue-on-error: true
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          name: bootstrap-clean-install-evidence
+          path: captured/b3-b5
+      - name: Download B8 evidence
+        continue-on-error: true
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          name: bootstrap-independent-evidence
+          path: captured/b8
+      - name: Write fail-closed bootstrap verdict and capture JSON evidence
         shell: bash
         run: |
-          mkdir -p bootstrap-verdict
-          cat > bootstrap-verdict/final-verdict.json <<JSON
+          set -euo pipefail
+          evidence_root="recovery/evidence/windows-gate/run-${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}"
+          mkdir -p "$evidence_root/json"
+          cat > "$evidence_root/final-verdict.json" <<JSON
           {
-            "schema": 3,
+            "schema": 4,
             "status": "RELEASE_BLOCKED",
-            "expected_source_sha256": "${{ env.EXPECTED_SOURCE_SHA256 }}",
-            "expected_version": "${{ env.EXPECTED_APP_VERSION }}",
-            "expected_build_id": "${{ env.EXPECTED_BUILD_ID }}",
-            "reason": "Bootstrap cannot authorize release. It requires exact source identity, clean installed Windows evidence, and later update/rollback evidence against a separately authorized baseline.",
+            "run_id": "${GITHUB_RUN_ID}",
+            "run_number": "${GITHUB_RUN_NUMBER}",
+            "run_attempt": "${GITHUB_RUN_ATTEMPT}",
+            "event": "${GITHUB_EVENT_NAME}",
+            "head_sha": "${GITHUB_SHA}",
+            "gate_revision": "${GATE_REVISION}",
+            "expected_source_sha256": "${EXPECTED_SOURCE_SHA256}",
+            "expected_version": "${EXPECTED_APP_VERSION}",
+            "expected_build_id": "${EXPECTED_BUILD_ID}",
+            "reason": "Bootstrap cannot authorize release. Update/rollback and physical L5 remain separate mandatory gates.",
             "verify_source_bundle": "${{ needs.verify-source-bundle.result }}",
             "source_and_regression_gate": "${{ needs.source-and-regression-gate.result }}",
             "build_exact_windows_candidate": "${{ needs.build-exact-windows-candidate.result }}",
@@ -295,10 +334,44 @@ jobs:
             "independent_windows_rerun": "${{ needs.independent-windows-rerun.result }}"
           }
           JSON
+          if [ -d captured ]; then
+            find captured -type f \( -name '*.json' -o -name '*.log' -o -name '*.txt' \) -print0 | while IFS= read -r -d '' file; do
+              relative="${file#captured/}"
+              target="$evidence_root/json/$relative"
+              mkdir -p "$(dirname "$target")"
+              cp "$file" "$target"
+            done
+          fi
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          root = Path('recovery/evidence/windows-gate') / f"run-{os.environ['GITHUB_RUN_NUMBER']}-{os.environ['GITHUB_RUN_ATTEMPT']}"
+          verdict = json.loads((root / 'final-verdict.json').read_text('utf-8'))
+          assert verdict['status'] == 'RELEASE_BLOCKED'
+          assert verdict['expected_source_sha256'] == '476b68ee2ddea5f2985c1c8fd2fc841de490a866bb3a9676aca9411b463e6538'
+          assert verdict['expected_version'] == '1.4.6-recovery-candidate'
+          assert verdict['expected_build_id'] == 'REC-RT8-M6-20260724-03'
+          print(json.dumps(verdict, ensure_ascii=False, indent=2))
+          PY
+      - name: Commit fail-closed evidence snapshot
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'ImageLab Windows Gate Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add recovery/evidence/windows-gate
+          if git diff --cached --quiet; then
+            echo 'No new evidence snapshot.'
+          else
+            git commit -m "evidence: capture Windows gate run ${GITHUB_RUN_NUMBER} [skip ci]"
+            git push origin HEAD:bootstrap/zero-trust-gate
+          fi
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         with:
           name: ImageLab-BOOTSTRAP-VERDICT
-          path: bootstrap-verdict/
+          path: recovery/evidence/windows-gate/
           retention-days: 90
           if-no-files-found: error
       - name: Enforce fail-closed bootstrap state
