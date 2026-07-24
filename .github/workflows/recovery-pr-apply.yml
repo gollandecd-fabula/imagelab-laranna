@@ -60,11 +60,14 @@ jobs:
           grep -F 'REC-RT8-M6-20260724-01' recovery/source/app/config.py
           echo 'already_applied=false' >> "$GITHUB_OUTPUT"
 
-      - name: Install source dependencies
+      - name: Install source and test dependencies
         shell: bash
         run: |
           set -euo pipefail
-          python -m pip install --disable-pip-version-check -r recovery/source/requirements.txt
+          python -m pip install --disable-pip-version-check \
+            -r recovery/source/requirements.txt \
+            pytest==9.0.2 \
+            httpx==0.28.1
 
       - name: Compile Python source
         shell: bash
