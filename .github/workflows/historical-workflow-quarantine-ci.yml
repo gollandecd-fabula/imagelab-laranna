@@ -1,0 +1,64 @@
+name: ImageLab Historical Workflow Quarantine CI
+
+on:
+  pull_request:
+    branches:
+      - bootstrap/zero-trust-gate
+    paths:
+      - .github/workflows/bootstrap-windows-gate-rc11-execution.yml
+      - .github/workflows/bootstrap-windows-gate.yml
+      - .github/workflows/diagnostic-update-rollback-148-to-149.yml
+      - .github/workflows/rc12-windows-gate.yml
+      - .github/workflows/rc13-windows-gate.yml
+      - .github/workflows/recovery-pr-apply-rc12.yml
+      - .github/workflows/recovery-pr-apply-rc13.yml
+      - .github/workflows/recovery-promote-bootstrap-rc13.yml
+      - .github/workflows/historical-workflow-quarantine-ci.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  quarantine-contract:
+    name: Historical workflows cannot auto-run or write
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      - name: Verify retirement boundaries
+        shell: python
+        run: |
+          from pathlib import Path
+
+          historical = (
+              ".github/workflows/bootstrap-windows-gate-rc11-execution.yml",
+              ".github/workflows/bootstrap-windows-gate.yml",
+              ".github/workflows/diagnostic-update-rollback-148-to-149.yml",
+              ".github/workflows/rc12-windows-gate.yml",
+              ".github/workflows/rc13-windows-gate.yml",
+              ".github/workflows/recovery-pr-apply-rc12.yml",
+              ".github/workflows/recovery-pr-apply-rc13.yml",
+              ".github/workflows/recovery-promote-bootstrap-rc13.yml",
+          )
+          failures = []
+          for name in historical:
+              path = Path(name)
+              if not path.is_file():
+                  failures.append(f"missing:{name}")
+                  continue
+              text = path.read_text("utf-8")
+              if "pull_request:" in text:
+                  failures.append(f"automatic_pr_trigger:{name}")
+              if "contents: write" in text:
+                  failures.append(f"write_permission:{name}")
+              if "RETIRED_WORKFLOW" not in text:
+                  failures.append(f"retirement_marker_missing:{name}")
+              if "on:\n  workflow_dispatch:" not in text:
+                  failures.append(f"manual_only_trigger_missing:{name}")
+          current_gate = Path("recovery/source/.github/workflows/zero-trust-release.yml")
+          if not current_gate.is_file():
+              failures.append("current_zero_trust_gate_missing")
+          if failures:
+              raise SystemExit("\n".join(failures))
+          print(f"PASS: {len(historical)} historical workflows are quarantined; current zero-trust gate is present.")
