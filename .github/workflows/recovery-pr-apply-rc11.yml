@@ -1,0 +1,173 @@
+name: Recovery PR Apply RC11
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/recovery-pr-apply-rc11.yml
+      - recovery/patches/rc-11-stable-gate-python.patch.gz.b64
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply-verify-publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout exact recovery branch
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+        with:
+          ref: bootstrap/zero-trust-gate
+          fetch-depth: 0
+
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.13.14'
+
+      - name: Admit and apply exact RC-11 patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -Fq '1.4.7-recovery-candidate' recovery/source/app/config.py && \
+             grep -Fq 'REC-RT8-M6-20260724-04' recovery/source/app/config.py; then
+            echo 'RC-11 identity already present.'
+            exit 0
+          fi
+          python - <<'PY'
+          import base64, gzip, hashlib, subprocess
+          from pathlib import Path
+          payload = Path('recovery/patches/rc-11-stable-gate-python.patch.gz.b64').read_bytes()
+          assert hashlib.sha256(payload).hexdigest() == '80ad980577acd4dfe6d9e90d17b4f6eda39ca8c07c84e2c0700879c4b4b70fee'
+          compressed = base64.b64decode(payload, validate=True)
+          assert hashlib.sha256(compressed).hexdigest() == '363cc163be76b61050450e27f1c9b0579448104a85c2036767b9ba0a79e0fe05'
+          patch_bytes = gzip.decompress(compressed)
+          assert hashlib.sha256(patch_bytes).hexdigest() == '6f985c269e6519815881764568ee8e316c607200ce2b11fdfa3432437a9340c2'
+          patch = Path('/tmp/rc11.patch'); patch.write_bytes(patch_bytes)
+          subprocess.run(['git','apply','--check','--directory=recovery/source',str(patch)],check=True)
+          subprocess.run(['git','apply','--directory=recovery/source',str(patch)],check=True)
+          PY
+          grep -F '1.4.7-recovery-candidate' recovery/source/app/config.py
+          grep -F 'REC-RT8-M6-20260724-04' recovery/source/app/config.py
+
+      - name: Install exact source and test dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check \
+            -r recovery/source/requirements.txt \
+            pytest==9.0.2 \
+            httpx==0.28.1
+
+      - name: Run exact 144-test regression
+        shell: bash
+        env:
+          PYTHONPATH: ${{ github.workspace }}/recovery/source
+          IMAGELAB_DATA_DIR: ${{ runner.temp }}/imagelab-rc11-regression-data
+        run: |
+          set -euo pipefail
+          cd recovery/source
+          python -m compileall -q app release_gate scripts tests
+          node --check app/static/app.js
+          python -m pytest -q --junitxml="$RUNNER_TEMP/pytest-full.xml" | tee "$RUNNER_TEMP/pytest-full.log"
+          python - <<'PY'
+          import os, xml.etree.ElementTree as ET
+          from pathlib import Path
+          root = ET.parse(Path(os.environ['RUNNER_TEMP']) / 'pytest-full.xml').getroot()
+          suites = [root] if root.tag == 'testsuite' else list(root.findall('testsuite'))
+          counts = {k: sum(int(s.attrib.get(k, '0')) for s in suites) for k in ('tests','failures','errors','skipped')}
+          assert counts == {'tests': 144, 'failures': 0, 'errors': 0, 'skipped': 0}, counts
+          print('PYTEST_144_OF_144_PASS')
+          PY
+
+      - name: Run exact 26-file Source Gate
+        shell: bash
+        env:
+          PYTHONPATH: ${{ github.workspace }}/recovery/source
+          IMAGELAB_DATA_DIR: ${{ runner.temp }}/imagelab-rc11-source-gate-data
+        run: |
+          set -euo pipefail
+          mkdir -p recovery/evidence
+          python recovery/source/release_gate/source_gate.py --output recovery/evidence/source-gate-recovery-1.4.7.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          result = json.loads(Path('recovery/evidence/source-gate-recovery-1.4.7.json').read_text('utf-8'))
+          assert result['status'] == 'PASS', result
+          assert result['identity'] == {'version':'1.4.7-recovery-candidate','build_id':'REC-RT8-M6-20260724-04'}
+          critical = result['checks']['critical_pytest']
+          assert critical['exit_code'] == 0 and len(critical['files']) == 26
+          assert all(item['exit_code'] == 0 for item in critical['files'].values())
+          assert result['checks']['javascript']['exit_code'] == 0
+          assert result['backend_selftest']['status'] == 'PASS'
+          print('SOURCE_GATE_26_OF_26_PASS')
+          PY
+
+      - name: Build deterministic 1.4.7 source ZIP twice and write evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib, json, stat, zipfile
+          from pathlib import Path
+          root=Path('recovery/source'); dist=Path('recovery/dist'); evidence=Path('recovery/evidence')
+          dist.mkdir(parents=True,exist_ok=True); evidence.mkdir(parents=True,exist_ok=True)
+          deny={'.git','__pycache__','.pytest_cache','data','runtime-data','user-data'}
+          files=[]
+          for source in root.rglob('*'):
+              if not source.is_file(): continue
+              rel=source.relative_to(root)
+              if set(rel.parts)&deny or source.suffix=='.pyc': continue
+              files.append((rel.as_posix(),source))
+          files.sort()
+          def build(path):
+              with zipfile.ZipFile(path,'w') as z:
+                  for rel,source in files:
+                      info=zipfile.ZipInfo(rel,date_time=(2026,7,24,0,0,0)); info.create_system=3
+                      info.external_attr=(stat.S_IFREG|0o644)<<16; info.compress_type=zipfile.ZIP_DEFLATED
+                      z.writestr(info,source.read_bytes(),compress_type=zipfile.ZIP_DEFLATED,compresslevel=9)
+          a=dist/'source-147-a.zip'; b=dist/'source-147-b.zip'; build(a); build(b)
+          data=a.read_bytes(); assert data==b.read_bytes()
+          sha=hashlib.sha256(data).hexdigest(); assert sha=='e130ce027c2d54b72161afe6b9882f66a4311f01d7249b6c7e9bbd9ce4645327'
+          members_sha=hashlib.sha256('\n'.join(r for r,_ in files).encode()).hexdigest()
+          assert len(files)==87 and members_sha=='b0c43a785c437bf649750a5541386b81b6436c160aad07a5aa6903265581e2fe'
+          final=dist/'ImageLab_by_LarannA_RECOVERY_1.4.7_SOURCE.zip'; final.write_bytes(data); a.unlink(); b.unlink()
+          manifest={'schema':1,'status':'PASS','identity':{'version':'1.4.7-recovery-candidate','build_id':'REC-RT8-M6-20260724-04'},'file':final.name,'sha256':sha,'size_bytes':len(data),'member_count':len(files),'members_sha256':members_sha,'reproducible_builds':2,'builds_byte_identical':True}
+          (dist/'source-manifest-1.4.7.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+'\n','utf-8')
+          gate=json.loads((evidence/'source-gate-recovery-1.4.7.json').read_text('utf-8'))
+          complete={'schema':1,'status':'PASS_SOURCE_RECOVERY_INCREMENT','identity':manifest['identity'],'parent':{'version':'1.4.6-recovery-candidate','build_id':'REC-RT8-M6-20260724-03','source_sha256':'476b68ee2ddea5f2985c1c8fd2fc841de490a866bb3a9676aca9411b463e6538'},'patch_sha256':'6f985c269e6519815881764568ee8e316c607200ce2b11fdfa3432437a9340c2','recovered_cluster':{'id':'RC-11','name':'stable external Python executable for installed UI gate','status':'PASS'},'checks':{'full_pytest':'144/144 PASS','required_test_files':'26/26 PASS','compileall':'PASS','javascript_syntax':'PASS','backend_selftest':gate['backend_selftest']['status'],'source_zip_reproducibility':'2/2 BYTE_IDENTICAL'},'source_bundle':manifest,'claim_boundary':{'source_recovery_increment':'PASS','windows_clean_install':'NOT_YET_REPEATED_FOR_1.4.7','windows_independent_rerun':'NOT_YET_REPEATED_FOR_1.4.7','update_rollback':'UNVERIFIED','physical_user_path_L5':'UNVERIFIED','release':'BLOCKED'}}
+          (evidence/'recovery-increment-1.4.7.json').write_text(json.dumps(complete,ensure_ascii=False,indent=2)+'\n','utf-8')
+          print(json.dumps(complete,ensure_ascii=False,indent=2))
+          PY
+
+      - name: Commit verified RC-11 source and bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'ImageLab Recovery Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add recovery/source recovery/evidence recovery/dist
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'recovery: pin release gate to stable external Python [recovery-rc11-output]'
+          for attempt in 1 2 3; do
+            if git push origin HEAD:bootstrap/zero-trust-gate; then exit 0; fi
+            if [ "$attempt" -eq 3 ]; then exit 1; fi
+            git fetch origin bootstrap/zero-trust-gate
+            git rebase origin/bootstrap/zero-trust-gate
+          done
+
+      - name: Upload RC-11 evidence
+        if: always()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        with:
+          name: imagelab-recovery-1.4.7-rc11
+          path: |
+            recovery/evidence/source-gate-recovery-1.4.7.json
+            recovery/evidence/recovery-increment-1.4.7.json
+            recovery/dist/ImageLab_by_LarannA_RECOVERY_1.4.7_SOURCE.zip
+            recovery/dist/source-manifest-1.4.7.json
+            ${{ runner.temp }}/pytest-full.log
+            ${{ runner.temp }}/pytest-full.xml
+          if-no-files-found: warn
+          retention-days: 30
