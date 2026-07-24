@@ -1,11 +1,6 @@
 name: Archive Exact Diagnostic Inputs 1.4.8 and 1.4.9
 
 on:
-  pull_request:
-    branches:
-      - bootstrap/zero-trust-gate
-    paths:
-      - .github/workflows/archive-diagnostic-inputs-148-149.yml
   workflow_dispatch:
 
 permissions:
