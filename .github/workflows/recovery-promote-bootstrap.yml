@@ -58,14 +58,17 @@ jobs:
           bundle = Path('recovery/dist/ImageLab_by_LarannA_RECOVERY_1.4.5_SOURCE.zip')
           manifest_path = Path('recovery/dist/source-manifest.json')
           complete_path = Path('recovery/evidence/recovery-complete.json')
+          bootstrap_workflow = Path('.github/workflows/bootstrap-windows-gate.yml')
           failures: list[str] = []
 
-          if not bundle.is_file():
-              failures.append('RECOVERY_SOURCE_BUNDLE_MISSING')
-          if not manifest_path.is_file():
-              failures.append('RECOVERY_SOURCE_MANIFEST_MISSING')
-          if not complete_path.is_file():
-              failures.append('RECOVERY_COMPLETE_EVIDENCE_MISSING')
+          for path, code in (
+              (bundle, 'RECOVERY_SOURCE_BUNDLE_MISSING'),
+              (manifest_path, 'RECOVERY_SOURCE_MANIFEST_MISSING'),
+              (complete_path, 'RECOVERY_COMPLETE_EVIDENCE_MISSING'),
+              (bootstrap_workflow, 'BOOTSTRAP_WORKFLOW_MISSING'),
+          ):
+              if not path.is_file():
+                  failures.append(code)
 
           actual_sha = hashlib.sha256(bundle.read_bytes()).hexdigest() if bundle.is_file() else None
           if actual_sha != expected_sha:
@@ -106,6 +109,16 @@ jobs:
           if boundary.get('source_recovery') != 'PASS' or boundary.get('release') != 'BLOCKED':
               failures.append('RECOVERY_CLAIM_BOUNDARY_MISMATCH')
 
+          workflow_text = bootstrap_workflow.read_text('utf-8') if bootstrap_workflow.is_file() else ''
+          workflow_contract = {
+              f"EXPECTED_SOURCE_SHA256: '{expected_sha}'": 'BOOTSTRAP_EXPECTED_SOURCE_SHA256_MISMATCH',
+              f"EXPECTED_APP_VERSION: '{expected_version}'": 'BOOTSTRAP_EXPECTED_APP_VERSION_MISMATCH',
+              f"EXPECTED_BUILD_ID: '{expected_build_id}'": 'BOOTSTRAP_EXPECTED_BUILD_ID_MISMATCH',
+          }
+          for exact_line, code in workflow_contract.items():
+              if workflow_text.count(exact_line) != 1:
+                  failures.append(code)
+
           archive_members: list[str] = []
           crc_failure = None
           if bundle.is_file():
@@ -121,7 +134,7 @@ jobs:
               failures.append('RECOVERY_ARCHIVE_MEMBERS_SHA256_MISMATCH')
 
           evidence = {
-              'schema': 1,
+              'schema': 2,
               'status': 'PASS' if not failures else 'FAIL',
               'mode': 'RECOVERY_TO_BOOTSTRAP_PROMOTION_ADMISSION',
               'identity': expected_identity,
@@ -133,6 +146,7 @@ jobs:
                   'members_sha256': members_sha,
                   'crc_failure': crc_failure,
               },
+              'bootstrap_workflow_identity_pinned': not any(code.startswith('BOOTSTRAP_EXPECTED_') for code in failures),
               'checks': checks,
               'claim_boundary': boundary,
               'failures': failures,
@@ -143,33 +157,12 @@ jobs:
           raise SystemExit(0 if not failures else 1)
           PY
 
-      - name: Promote exact bytes and update expected identity
+      - name: Promote exact source bytes and checksum
         shell: bash
         run: |
           set -euo pipefail
           cp recovery/dist/ImageLab_by_LarannA_RECOVERY_1.4.5_SOURCE.zip bootstrap/imagelab-source.zip
           printf '%s  imagelab-source.zip\n' "$RECOVERY_SOURCE_SHA256" > bootstrap/imagelab-source.sha256
-          python - <<'PY'
-          from pathlib import Path
-          path = Path('.github/workflows/bootstrap-windows-gate.yml')
-          text = path.read_text('utf-8')
-          replacements = {
-              "EXPECTED_SOURCE_SHA256: '272e825aa4dc320bc6c287fe44700d1c234a9cd97414b719fc62a74b0fc37ab5'":
-                  "EXPECTED_SOURCE_SHA256: 'e4268157d6abc5495eefa9799b09a5352d43102019c4f0047f7303597f6c2ea7'",
-              "EXPECTED_APP_VERSION: '1.4.3-redteam-cycle6-candidate'":
-                  "EXPECTED_APP_VERSION: '1.4.5-recovery-candidate'",
-              "EXPECTED_BUILD_ID: 'RT8-M6-20260724-02'":
-                  "EXPECTED_BUILD_ID: 'REC-RT8-M6-20260724-02'",
-          }
-          for old, new in replacements.items():
-              if old in text:
-                  if text.count(old) != 1:
-                      raise SystemExit(f'non-unique old identity field: {old}')
-                  text = text.replace(old, new)
-              elif text.count(new) != 1:
-                  raise SystemExit(f'neither exact old nor exact new identity field found: {old}')
-          path.write_text(text, 'utf-8')
-          PY
           echo "$RECOVERY_SOURCE_SHA256  bootstrap/imagelab-source.zip" | sha256sum --check --strict
 
       - name: Execute B0 admission before branch mutation
@@ -191,11 +184,12 @@ jobs:
           evidence = json.loads(Path('recovery/evidence/bootstrap-promotion/b0-source-bundle.json').read_text('utf-8'))
           assert evidence['status'] == 'PASS', evidence
           assert evidence['observed']['actual_sha256'] == 'e4268157d6abc5495eefa9799b09a5352d43102019c4f0047f7303597f6c2ea7'
+          assert evidence['extract_state'] == 'PUBLISHED'
           print('RECOVERY_BOOTSTRAP_B0_PASS')
           PY
           rm -rf recovery/evidence/bootstrap-promotion/source-tree
 
-      - name: Commit exact promoted source and gate identity
+      - name: Commit exact promoted source with branch-race recovery
         shell: bash
         run: |
           set -euo pipefail
@@ -204,14 +198,23 @@ jobs:
           git add \
             bootstrap/imagelab-source.zip \
             bootstrap/imagelab-source.sha256 \
-            .github/workflows/bootstrap-windows-gate.yml \
             recovery/evidence/bootstrap-promotion
           if git diff --cached --quiet; then
             echo 'Exact recovery source is already promoted.'
             exit 0
           fi
           git commit -m 'recovery: promote exact 1.4.5 source to Windows gate [recovery-bootstrap-output]'
-          git push origin HEAD:bootstrap/zero-trust-gate
+          for attempt in 1 2 3; do
+            if git push origin HEAD:bootstrap/zero-trust-gate; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              echo 'Promotion push failed after three branch-race recovery attempts.' >&2
+              exit 1
+            fi
+            git fetch origin bootstrap/zero-trust-gate
+            git rebase origin/bootstrap/zero-trust-gate
+          done
 
       - name: Upload promotion evidence
         if: always()
