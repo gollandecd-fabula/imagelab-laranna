@@ -1,13 +1,8 @@
 name: Recovery Promote Bootstrap RC13
 
+# Historical one-time promotion. RC13 is already the exact bootstrap source;
+# automatic write access on every PR synchronization is no longer permitted.
 on:
-  pull_request:
-    branches: [main]
-    paths:
-      - .github/workflows/recovery-promote-bootstrap-rc13.yml
-      - recovery/evidence/recovery-increment-1.4.9.json
-      - recovery/dist/ImageLab_by_LarannA_RECOVERY_1.4.9_SOURCE.zip
-      - recovery/dist/source-manifest-1.4.9.json
   workflow_dispatch:
 
 permissions:
