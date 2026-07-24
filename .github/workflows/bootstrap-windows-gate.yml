@@ -20,55 +20,196 @@ concurrency:
 env:
   PYTHONUTF8: '1'
   PIP_DISABLE_PIP_VERSION_CHECK: '1'
+  EXACT_PYTHON_VERSION: '3.13.14'
+  EXPECTED_APP_VERSION: '1.4.3-redteam-cycle6-candidate'
+  EXPECTED_BUILD_ID: 'RT8-M6-20260724-02'
 
 jobs:
   verify-source-bundle:
-    name: B0 Verify and unpack exact source bundle
+    name: B0 Verify exact source bundle and identity
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v5
-      - name: Require pinned source archive
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+
+      - name: Verify SHA-256, archive safety, privacy and exact build identity
         shell: bash
         run: |
           set -euo pipefail
-          test -f bootstrap/imagelab-source.zip
-          test -f bootstrap/imagelab-source.sha256
-          cd bootstrap
-          sha256sum --check imagelab-source.sha256
-          rm -rf ../source-tree
-          mkdir -p ../source-tree
-          unzip -q imagelab-source.zip -d ../source-tree
-          test -f ../source-tree/app/main.py
-          test -f ../source-tree/release_gate/source_gate.py
-          test -f ../source-tree/scripts/build_zero_trust_candidate.py
-          test -f ../source-tree/windows_installer/installer/main.go
+          rm -rf source-tree bundle-evidence
+          mkdir -p bundle-evidence
           python - <<'PY'
-          from pathlib import Path
-          import hashlib, json
-          archive = Path('bootstrap/imagelab-source.zip')
-          digest = hashlib.sha256(archive.read_bytes()).hexdigest()
-          files = sorted(p.relative_to('source-tree').as_posix() for p in Path('source-tree').rglob('*') if p.is_file())
-          Path('bundle-evidence').mkdir(exist_ok=True)
-          Path('bundle-evidence/source-bundle.json').write_text(json.dumps({
-              'schema': 1,
-              'status': 'PASS',
-              'sha256': digest,
-              'file_count': len(files),
-              'required_files_present': True,
-          }, indent=2), encoding='utf-8')
+          from __future__ import annotations
+
+          import hashlib
+          import json
+          import os
+          from pathlib import Path, PurePosixPath
+          import re
+          import shutil
+          import stat
+          import sys
+          import zipfile
+
+          archive = Path("bootstrap/imagelab-source.zip")
+          checksum_file = Path("bootstrap/imagelab-source.sha256")
+          output = Path("bundle-evidence/source-bundle.json")
+          root = Path("source-tree")
+          expected_version = os.environ["EXPECTED_APP_VERSION"]
+          expected_build_id = os.environ["EXPECTED_BUILD_ID"]
+          failures: list[str] = []
+          evidence: dict[str, object] = {
+              "schema": 2,
+              "status": "FAIL",
+              "expected_identity": {
+                  "version": expected_version,
+                  "build_id": expected_build_id,
+              },
+              "failures": failures,
+          }
+
+          try:
+              if not archive.is_file():
+                  failures.append("SOURCE_ARCHIVE_MISSING")
+              if not checksum_file.is_file():
+                  failures.append("SOURCE_CHECKSUM_FILE_MISSING")
+              if failures:
+                  raise RuntimeError("missing bootstrap inputs")
+
+              checksum_tokens = checksum_file.read_text(encoding="utf-8").strip().split()
+              if len(checksum_tokens) < 2:
+                  failures.append("SOURCE_CHECKSUM_FORMAT_INVALID")
+                  raise RuntimeError("invalid checksum file")
+              pinned_sha256, pinned_name = checksum_tokens[0].lower(), checksum_tokens[-1]
+              actual_sha256 = hashlib.sha256(archive.read_bytes()).hexdigest()
+              evidence["pinned_sha256"] = pinned_sha256
+              evidence["actual_sha256"] = actual_sha256
+              evidence["pinned_filename"] = pinned_name
+              if pinned_name != archive.name:
+                  failures.append("SOURCE_CHECKSUM_FILENAME_MISMATCH")
+              if not re.fullmatch(r"[0-9a-f]{64}", pinned_sha256):
+                  failures.append("SOURCE_CHECKSUM_NOT_SHA256")
+              if actual_sha256 != pinned_sha256:
+                  failures.append("SOURCE_SHA256_MISMATCH")
+
+              with zipfile.ZipFile(archive) as bundle:
+                  bad_crc = bundle.testzip()
+                  if bad_crc is not None:
+                      failures.append(f"SOURCE_ZIP_CRC_FAILURE:{bad_crc}")
+
+                  safe_members: list[zipfile.ZipInfo] = []
+                  forbidden: list[str] = []
+                  total_uncompressed = 0
+                  for member in bundle.infolist():
+                      path = PurePosixPath(member.filename)
+                      normalized = path.as_posix().lstrip("./")
+                      parts = tuple(part for part in path.parts if part not in {"", "."})
+                      total_uncompressed += int(member.file_size)
+                      mode = (member.external_attr >> 16) & 0xFFFF
+                      if (
+                          path.is_absolute()
+                          or ".." in parts
+                          or "\\" in member.filename
+                          or stat.S_ISLNK(mode)
+                      ):
+                          failures.append(f"UNSAFE_ZIP_MEMBER:{member.filename}")
+                          continue
+                      lower = normalized.lower()
+                      base = path.name.lower()
+                      if (
+                          lower.startswith(("data/", "output/", "dist/", "build/", "evidence/"))
+                          or "__pycache__" in {part.lower() for part in parts}
+                          or lower.endswith((".pyc", ".pyo"))
+                          or base in {".env", "launcher.log", "feedback.json", "audit.json"}
+                      ):
+                          forbidden.append(normalized)
+                      safe_members.append(member)
+
+                  evidence["member_count"] = len(bundle.infolist())
+                  evidence["total_uncompressed_bytes"] = total_uncompressed
+                  evidence["forbidden_members"] = sorted(forbidden)
+                  if len(bundle.infolist()) > 5000:
+                      failures.append("SOURCE_ZIP_MEMBER_LIMIT_EXCEEDED")
+                  if total_uncompressed > 1_000_000_000:
+                      failures.append("SOURCE_ZIP_UNCOMPRESSED_LIMIT_EXCEEDED")
+                  if forbidden:
+                      failures.append("SOURCE_BUNDLE_PRIVACY_DENYLIST_VIOLATION")
+
+                  if not failures:
+                      shutil.rmtree(root, ignore_errors=True)
+                      root.mkdir(parents=True, exist_ok=True)
+                      for member in safe_members:
+                          target = root / PurePosixPath(member.filename)
+                          target_resolved = target.resolve()
+                          if root.resolve() not in target_resolved.parents and target_resolved != root.resolve():
+                              failures.append(f"ZIP_EXTRACTION_ESCAPE:{member.filename}")
+                              break
+                          if member.is_dir():
+                              target.mkdir(parents=True, exist_ok=True)
+                          else:
+                              target.parent.mkdir(parents=True, exist_ok=True)
+                              with bundle.open(member) as source, target.open("wb") as destination:
+                                  shutil.copyfileobj(source, destination)
+
+              required = [
+                  "app/main.py",
+                  "app/config.py",
+                  "release_gate/source_gate.py",
+                  "release_gate/run_clean_install_gate.ps1",
+                  "scripts/build_zero_trust_candidate.py",
+                  "windows_installer/installer/main.go",
+                  "requirements.txt",
+              ]
+              missing = [item for item in required if not (root / item).is_file()]
+              evidence["required_files"] = required
+              evidence["missing_required_files"] = missing
+              if missing:
+                  failures.append("SOURCE_REQUIRED_FILES_MISSING")
+
+              if (root / "app/config.py").is_file():
+                  config_text = (root / "app/config.py").read_text(encoding="utf-8")
+                  version_present = expected_version in config_text
+                  build_id_present = expected_build_id in config_text
+                  evidence["observed_identity"] = {
+                      "expected_version_text_present": version_present,
+                      "expected_build_id_text_present": build_id_present,
+                  }
+                  if not version_present:
+                      failures.append("SOURCE_VERSION_IDENTITY_MISMATCH")
+                  if not build_id_present:
+                      failures.append("SOURCE_BUILD_IDENTITY_MISMATCH")
+
+          except Exception as exc:
+              evidence["exception_type"] = type(exc).__name__
+              evidence["exception"] = str(exc)
+              if not failures:
+                  failures.append("SOURCE_BUNDLE_VERIFICATION_EXCEPTION")
+
+          evidence["status"] = "PASS" if not failures else "FAIL"
+          output.parent.mkdir(parents=True, exist_ok=True)
+          output.write_text(
+              json.dumps(evidence, ensure_ascii=False, sort_keys=True, indent=2) + "\n",
+              encoding="utf-8",
+          )
+          print(output.read_text(encoding="utf-8"))
+          if failures:
+              raise SystemExit(1)
           PY
-      - uses: actions/upload-artifact@v5
-        with:
-          name: bootstrap-source-tree
-          path: source-tree/
-          retention-days: 7
-          if-no-files-found: error
-      - uses: actions/upload-artifact@v5
+
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        if: always()
         with:
           name: bootstrap-bundle-evidence
           path: bundle-evidence/
           retention-days: 30
+          if-no-files-found: warn
+
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        if: success()
+        with:
+          name: bootstrap-source-tree
+          path: source-tree/
+          retention-days: 7
           if-no-files-found: error
 
   source-and-regression-gate:
@@ -77,17 +218,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
         with:
           name: bootstrap-source-tree
           path: source-tree
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
-          python-version: '3.13'
-      - name: Install exact dependencies
+          python-version: ${{ env.EXACT_PYTHON_VERSION }}
+      - name: Install locked application dependencies
         working-directory: source-tree
         run: python -m pip install --requirement requirements.txt
-      - name: Run source gate
+      - name: Run mandatory source gate
         working-directory: source-tree
         run: python release_gate/source_gate.py --output evidence-bootstrap/source-gate.json
       - name: Run critical isolated regression files
@@ -105,6 +246,7 @@ jobs:
             tests/test_zero_trust_release_gate.py
           )
           for test_file in "${cases[@]}"; do
+            test -f "$test_file"
             case_id="$(basename "$test_file" .py)"
             python release_gate/run_unit_case.py \
               --case-id "$case_id" \
@@ -112,7 +254,7 @@ jobs:
               --output "evidence-bootstrap/unit/$case_id.json" \
               --timeout 600
           done
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         if: always()
         with:
           name: bootstrap-source-regression-evidence
@@ -126,30 +268,42 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 35
     steps:
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
         with:
           name: bootstrap-source-tree
           path: source-tree
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
-          python-version: '3.13'
-      - uses: actions/setup-go@v6
+          python-version: ${{ env.EXACT_PYTHON_VERSION }}
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
         with:
           go-version: '1.25.x'
-      - name: Build candidate twice and require exact reproducibility
+      - name: Build candidate twice and require exact reproducibility and identity
         working-directory: source-tree
         shell: pwsh
         run: |
           python scripts/build_zero_trust_candidate.py --output-dir dist-a --label BOOTSTRAP_ZERO_TRUST
           python scripts/build_zero_trust_candidate.py --output-dir dist-b --label BOOTSTRAP_ZERO_TRUST
-          $a = Get-Content -Raw dist-a/candidate-manifest.json | ConvertFrom-Json
-          $b = Get-Content -Raw dist-b/candidate-manifest.json | ConvertFrom-Json
+          $aText = Get-Content -Raw dist-a/candidate-manifest.json
+          $bText = Get-Content -Raw dist-b/candidate-manifest.json
+          $a = $aText | ConvertFrom-Json
+          $b = $bText | ConvertFrom-Json
           if ($a.installer.sha256 -ne $b.installer.sha256) { throw 'Non-reproducible installer build' }
+          if (-not $aText.Contains($env:EXPECTED_APP_VERSION)) { throw 'Candidate manifest version mismatch' }
+          if (-not $aText.Contains($env:EXPECTED_BUILD_ID)) { throw 'Candidate manifest build ID mismatch' }
+          if (-not $bText.Contains($env:EXPECTED_APP_VERSION)) { throw 'Second manifest version mismatch' }
+          if (-not $bText.Contains($env:EXPECTED_BUILD_ID)) { throw 'Second manifest build ID mismatch' }
           New-Item -ItemType Directory -Force exact-candidate | Out-Null
           Copy-Item dist-a/* exact-candidate/ -Force
-          @{schema=1;status='PASS';installer_sha256=$a.installer.sha256;second_build_sha256=$b.installer.sha256} |
-            ConvertTo-Json | Set-Content exact-candidate/reproducibility.json -Encoding utf8
-      - uses: actions/upload-artifact@v5
+          @{
+            schema = 2
+            status = 'PASS'
+            expected_version = $env:EXPECTED_APP_VERSION
+            expected_build_id = $env:EXPECTED_BUILD_ID
+            installer_sha256 = $a.installer.sha256
+            second_build_sha256 = $b.installer.sha256
+          } | ConvertTo-Json | Set-Content exact-candidate/reproducibility.json -Encoding utf8
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         with:
           name: UNVERIFIED_BOOTSTRAP_WINDOWS_CANDIDATE
           path: source-tree/exact-candidate/
@@ -162,17 +316,17 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 70
     steps:
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
         with:
           name: bootstrap-source-tree
           path: source-tree
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
         with:
           name: UNVERIFIED_BOOTSTRAP_WINDOWS_CANDIDATE
           path: exact-candidate
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
-          python-version: '3.13'
+          python-version: ${{ env.EXACT_PYTHON_VERSION }}
       - name: Install browser harness
         working-directory: source-tree
         run: |
@@ -183,13 +337,14 @@ jobs:
         shell: pwsh
         run: |
           $installer = (Get-ChildItem exact-candidate -Filter *.exe -File | Select-Object -First 1).FullName
-          ./source-tree/release_gate/run_clean_install_gate.ps1 \
-            -InstallerPath $installer \
-            -CandidateManifestPath exact-candidate/candidate-manifest.json \
-            -EvidenceDir evidence-clean \
-            -Mode clean \
+          if (-not $installer) { throw 'Exact installer missing' }
+          ./source-tree/release_gate/run_clean_install_gate.ps1 `
+            -InstallerPath $installer `
+            -CandidateManifestPath exact-candidate/candidate-manifest.json `
+            -EvidenceDir evidence-clean `
+            -Mode clean `
             -BrowserChannel msedge
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         if: always()
         with:
           name: bootstrap-clean-install-evidence
@@ -203,17 +358,17 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 70
     steps:
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
         with:
           name: bootstrap-source-tree
           path: source-tree
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
         with:
           name: UNVERIFIED_BOOTSTRAP_WINDOWS_CANDIDATE
           path: exact-candidate
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
-          python-version: '3.13'
+          python-version: ${{ env.EXACT_PYTHON_VERSION }}
       - name: Install independent browser harness
         working-directory: source-tree
         run: |
@@ -224,13 +379,14 @@ jobs:
         shell: pwsh
         run: |
           $installer = (Get-ChildItem exact-candidate -Filter *.exe -File | Select-Object -First 1).FullName
-          ./source-tree/release_gate/run_clean_install_gate.ps1 \
-            -InstallerPath $installer \
-            -CandidateManifestPath exact-candidate/candidate-manifest.json \
-            -EvidenceDir evidence-independent \
-            -Mode independent \
+          if (-not $installer) { throw 'Exact installer missing' }
+          ./source-tree/release_gate/run_clean_install_gate.ps1 `
+            -InstallerPath $installer `
+            -CandidateManifestPath exact-candidate/candidate-manifest.json `
+            -EvidenceDir evidence-independent `
+            -Mode independent `
             -BrowserChannel bundled
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         if: always()
         with:
           name: bootstrap-independent-evidence
@@ -256,9 +412,11 @@ jobs:
           mkdir -p bootstrap-verdict
           cat > bootstrap-verdict/final-verdict.json <<JSON
           {
-            "schema": 1,
+            "schema": 2,
             "status": "RELEASE_BLOCKED",
-            "reason": "Bootstrap validates clean Windows installation and UI behavior but does not yet prove update and rollback against a previously authorized release.",
+            "expected_version": "${{ env.EXPECTED_APP_VERSION }}",
+            "expected_build_id": "${{ env.EXPECTED_BUILD_ID }}",
+            "reason": "Bootstrap cannot authorize release. It requires the exact current source identity, clean installed Windows evidence, and later update/rollback evidence against a separately authorized baseline.",
             "verify_source_bundle": "${{ needs.verify-source-bundle.result }}",
             "source_and_regression_gate": "${{ needs.source-and-regression-gate.result }}",
             "build_exact_windows_candidate": "${{ needs.build-exact-windows-candidate.result }}",
@@ -266,7 +424,7 @@ jobs:
             "independent_windows_rerun": "${{ needs.independent-windows-rerun.result }}"
           }
           JSON
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         with:
           name: ImageLab-BOOTSTRAP-VERDICT
           path: bootstrap-verdict/
