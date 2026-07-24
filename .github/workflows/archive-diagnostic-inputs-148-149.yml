@@ -1,0 +1,83 @@
+name: Archive Exact Diagnostic Inputs 1.4.8 and 1.4.9
+
+on:
+  pull_request:
+    branches:
+      - bootstrap/zero-trust-gate
+    paths:
+      - .github/workflows/archive-diagnostic-inputs-148-149.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: imagelab-archive-diagnostic-inputs-148-149
+  cancel-in-progress: false
+
+env:
+  BASELINE_RUN_ID: '30110254072'
+  BASELINE_ARTIFACT: 'RC12_UNVERIFIED_WINDOWS_CANDIDATE'
+  BASELINE_VERSION: '1.4.8-recovery-candidate'
+  BASELINE_BUILD_ID: 'REC-RT8-M6-20260724-05'
+  BASELINE_INSTALLER_SHA256: 'b456994c002187ccf88e0e7f4695c756c0aa9f955d3b78eff78a38fd22d9be1c'
+  CANDIDATE_RUN_ID: '30111216367'
+  CANDIDATE_ARTIFACT: 'RC13_UNVERIFIED_WINDOWS_CANDIDATE'
+  CANDIDATE_VERSION: '1.4.9-recovery-candidate'
+  CANDIDATE_BUILD_ID: 'REC-RT8-M6-20260724-06'
+  CANDIDATE_INSTALLER_SHA256: '12817550c2fac6a6453945c38eefe86368cd4cfa1991c1565e49b092bd818d56'
+
+jobs:
+  archive-exact-inputs:
+    name: Verify and archive exact internal diagnostic inputs
+    runs-on: windows-2022
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+
+      - name: Download expiring exact candidate artifacts
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force archive-inputs/baseline,archive-inputs/candidate | Out-Null
+          gh run download $env:BASELINE_RUN_ID --repo $env:GITHUB_REPOSITORY --name $env:BASELINE_ARTIFACT --dir archive-inputs/baseline
+          gh run download $env:CANDIDATE_RUN_ID --repo $env:GITHUB_REPOSITORY --name $env:CANDIDATE_ARTIFACT --dir archive-inputs/candidate
+
+      - name: Verify exact binary and manifest identities
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $baselineManifestPath = (Get-ChildItem archive-inputs/baseline -Filter candidate-manifest.json -File -Recurse | Select-Object -First 1).FullName
+          $candidateManifestPath = (Get-ChildItem archive-inputs/candidate -Filter candidate-manifest.json -File -Recurse | Select-Object -First 1).FullName
+          $baselineInstaller = (Get-ChildItem archive-inputs/baseline -Filter *.exe -File -Recurse | Select-Object -First 1).FullName
+          $candidateInstaller = (Get-ChildItem archive-inputs/candidate -Filter *.exe -File -Recurse | Select-Object -First 1).FullName
+          if (-not $baselineManifestPath -or -not $candidateManifestPath -or -not $baselineInstaller -or -not $candidateInstaller) { throw 'Exact diagnostic inputs are incomplete' }
+          $baselineManifest = Get-Content -Raw -LiteralPath $baselineManifestPath | ConvertFrom-Json
+          $candidateManifest = Get-Content -Raw -LiteralPath $candidateManifestPath | ConvertFrom-Json
+          $baselineSha = (Get-FileHash -Algorithm SHA256 -LiteralPath $baselineInstaller).Hash.ToLowerInvariant()
+          $candidateSha = (Get-FileHash -Algorithm SHA256 -LiteralPath $candidateInstaller).Hash.ToLowerInvariant()
+          if ($baselineSha -ne $env:BASELINE_INSTALLER_SHA256 -or $baselineManifest.installer.sha256 -ne $baselineSha) { throw 'Baseline exact identity mismatch' }
+          if ($candidateSha -ne $env:CANDIDATE_INSTALLER_SHA256 -or $candidateManifest.installer.sha256 -ne $candidateSha) { throw 'Candidate exact identity mismatch' }
+          if ($baselineManifest.identity.version -ne $env:BASELINE_VERSION -or $baselineManifest.identity.build_id -ne $env:BASELINE_BUILD_ID) { throw 'Baseline version/build mismatch' }
+          if ($candidateManifest.identity.version -ne $env:CANDIDATE_VERSION -or $candidateManifest.identity.build_id -ne $env:CANDIDATE_BUILD_ID) { throw 'Candidate version/build mismatch' }
+          [ordered]@{
+            schema = 1
+            status = 'PASS_INTERNAL_DIAGNOSTIC_INPUT_ARCHIVE'
+            authorization = 'NON_AUTHORIZING_DIAGNOSTIC_ONLY'
+            source_runs = [ordered]@{baseline=$env:BASELINE_RUN_ID; candidate=$env:CANDIDATE_RUN_ID}
+            baseline = [ordered]@{version=$env:BASELINE_VERSION; build_id=$env:BASELINE_BUILD_ID; installer_sha256=$baselineSha; release_authorized=$false}
+            candidate = [ordered]@{version=$env:CANDIDATE_VERSION; build_id=$env:CANDIDATE_BUILD_ID; installer_sha256=$candidateSha; release_authorized=$false}
+            release = 'BLOCKED'
+          } | ConvertTo-Json -Depth 6 | Set-Content archive-inputs/diagnostic-input-manifest.json -Encoding utf8
+
+      - name: Upload longer-lived bounded internal archive
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        with:
+          name: imagelab-exact-diagnostic-inputs-148-149
+          path: archive-inputs/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 90
