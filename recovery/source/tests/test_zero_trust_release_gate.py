@@ -73,6 +73,8 @@ def test_zero_trust_workflow_has_all_gates_and_exact_candidate_flow() -> None:
     assert "-BaselineInstallerPath" in workflow
     assert "-BrowserChannel msedge" in workflow
     assert "finalize_gate.py" in workflow
+    assert "release_authorized=$true" in workflow
+    assert "authorization_source='github_release_asset'" in workflow
 
 
 def test_finalizer_requires_all_g0_g8_evidence() -> None:
@@ -100,6 +102,9 @@ def test_finalizer_requires_all_g0_g8_evidence() -> None:
     assert 'status = "RELEASE_AUTHORIZED" if not failed else "RELEASE_BLOCKED"' in source
     assert "selftest_identity_mismatch" in source
     assert "selftest_case_set_mismatch" in source
+    assert "baseline_not_release_authorized" in source
+    assert "project_data_not_preserved" in source
+    assert "project_handoff_mismatch" in source
 
 
 def _write_json(path: Path, value: object) -> None:
@@ -119,6 +124,20 @@ def _selftest(version: str, build_id: str, install_id: str) -> dict[str, object]
     }
 
 
+def _project_snapshot(canonical_sha: str) -> dict[str, object]:
+    return {
+        "project_id": "ZTR-UPDATE-PROJECT",
+        "title": "Zero Trust Update baseline-install",
+        "asset_id": "asset-1",
+        "stored_name": "asset-1.svg",
+        "asset_record_sha256": canonical_sha,
+        "asset_file_sha256": canonical_sha,
+        "asset_size_bytes": 306,
+        "project_file_sha256": "4" * 64,
+        "active_asset_id": "asset-1",
+    }
+
+
 def _build_complete_release_evidence(root: Path) -> tuple[str, str]:
     version = "9.9.9-test"
     build_id = "TEST-BUILD"
@@ -129,6 +148,11 @@ def _build_complete_release_evidence(root: Path) -> tuple[str, str]:
     installer.write_bytes(b"synthetic exact installer evidence")
     installer_sha = hashlib.sha256(installer.read_bytes()).hexdigest()
     baseline_sha = "1" * 64
+    original_fixture_sha = "2" * 64
+    canonical_uploaded_sha = "3" * 64
+    project_before = _project_snapshot(canonical_uploaded_sha)
+    project_after_update = dict(project_before)
+    project_after_rollback = dict(project_before)
 
     _write_json(root / "source" / "source-gate.json", {"status": "PASS"})
     _write_json(root / "unit" / "unit-matrix-verdict.json", {"status": "PASS"})
@@ -165,12 +189,52 @@ def _build_complete_release_evidence(root: Path) -> tuple[str, str]:
     _write_json(root / "clean" / "ui-gate.json", {"status": "PASS", "installer_sha256": installer_sha})
     _write_json(root / "clean" / "output-validation.json", {"status": "PASS", "installer_sha256": installer_sha})
 
-    _write_json(root / "update" / "baseline-verification.json", {"status": "PASS", "installer_sha256": baseline_sha})
+    _write_json(
+        root / "update" / "baseline-verification.json",
+        {
+            "schema": 2,
+            "status": "PASS",
+            "release_authorized": True,
+            "authorization_source": "github_release_asset",
+            "release_tag": "v9.9.8-release-authorized",
+            "installer_sha256": baseline_sha,
+            "name": "ImageLab_by_LarannA_RELEASE_AUTHORIZED_Setup_x64.exe",
+        },
+    )
     _write_json(
         root / "update" / "update-test.json",
-        {"status": "PASS", "installer_sha256": installer_sha, "baseline_installer_sha256": baseline_sha},
+        {
+            "schema": 2,
+            "status": "PASS",
+            "installer_sha256": installer_sha,
+            "baseline_installer_sha256": baseline_sha,
+            "first_install_id": "baseline-install",
+            "second_install_id": "candidate-install",
+            "old_process_stopped": True,
+            "project_data_preserved": True,
+            "original_fixture_sha256": original_fixture_sha,
+            "canonical_uploaded_sha256": canonical_uploaded_sha,
+            "project_evidence_before": project_before,
+            "project_evidence_after_update": project_after_update,
+        },
     )
-    _write_json(root / "update" / "rollback-test.json", {"status": "PASS", "installer_sha256": installer_sha})
+    _write_json(
+        root / "update" / "rollback-test.json",
+        {
+            "schema": 2,
+            "status": "PASS",
+            "installer_sha256": installer_sha,
+            "restored_install_id": "candidate-install",
+            "expected_install_id": "candidate-install",
+            "fault_exit_code": 1,
+            "critical_hashes_restored": True,
+            "project_data_preserved": True,
+            "original_fixture_sha256": original_fixture_sha,
+            "canonical_uploaded_sha256": canonical_uploaded_sha,
+            "project_evidence_before": project_after_update,
+            "project_evidence_after_rollback": project_after_rollback,
+        },
+    )
 
     _write_json(root / "independent" / "independent-verification.json", independent)
     _write_json(root / "independent" / "preinstall-selftest.json", _selftest(version, build_id, independent_install_id))
@@ -199,7 +263,7 @@ def _run_finalizer(root: Path, output: Path) -> tuple[subprocess.CompletedProces
     return result, verdict
 
 
-def test_finalizer_accepts_complete_embedded_selftest_evidence(tmp_path: Path) -> None:
+def test_finalizer_accepts_complete_embedded_selftest_and_project_evidence(tmp_path: Path) -> None:
     evidence = tmp_path / "evidence"
     _build_complete_release_evidence(evidence)
     result, verdict = _run_finalizer(evidence, tmp_path / "output")
@@ -207,6 +271,7 @@ def test_finalizer_accepts_complete_embedded_selftest_evidence(tmp_path: Path) -
     assert verdict["status"] == "RELEASE_AUTHORIZED"
     assert verdict["gates"]["G3_preinstall_selftest"] == "PASS"
     assert verdict["gates"]["G8_postinstall_selftest"] == "PASS"
+    assert verdict["schema"] == 3
 
 
 def test_finalizer_blocks_missing_or_malformed_selftest_evidence(tmp_path: Path) -> None:
@@ -236,6 +301,47 @@ def test_finalizer_blocks_tampered_selftest_identity_and_case_set(tmp_path: Path
     assert "selftest_identity_mismatch:G3_postinstall_selftest:install_id" in verdict["failed_conditions"]
     assert "selftest_case_set_mismatch:G3_postinstall_selftest" in verdict["failed_conditions"]
     assert "selftest_case_failed:G3_postinstall_selftest:export" in verdict["failed_conditions"]
+
+
+def test_finalizer_blocks_untrusted_baseline_and_sentinel_only_evidence(tmp_path: Path) -> None:
+    evidence = tmp_path / "evidence"
+    _build_complete_release_evidence(evidence)
+    baseline_path = evidence / "update" / "baseline-verification.json"
+    baseline = json.loads(baseline_path.read_text("utf-8"))
+    baseline["schema"] = 1
+    baseline["release_authorized"] = False
+    _write_json(baseline_path, baseline)
+    update_path = evidence / "update" / "update-test.json"
+    update = json.loads(update_path.read_text("utf-8"))
+    update["schema"] = 1
+    update.pop("project_data_preserved")
+    update.pop("project_evidence_before")
+    update.pop("project_evidence_after_update")
+    _write_json(update_path, update)
+    result, verdict = _run_finalizer(evidence, tmp_path / "output")
+    assert result.returncode != 0
+    assert verdict["status"] == "RELEASE_BLOCKED"
+    assert "baseline_evidence_schema" in verdict["failed_conditions"]
+    assert "baseline_not_release_authorized" in verdict["failed_conditions"]
+    assert "project_transition_schema:update" in verdict["failed_conditions"]
+    assert "project_data_not_preserved:update" in verdict["failed_conditions"]
+    assert "project_snapshot_missing:update:before" in verdict["failed_conditions"]
+
+
+def test_finalizer_blocks_tampered_project_transition(tmp_path: Path) -> None:
+    evidence = tmp_path / "evidence"
+    _build_complete_release_evidence(evidence)
+    update_path = evidence / "update" / "update-test.json"
+    update = json.loads(update_path.read_text("utf-8"))
+    update["project_evidence_after_update"]["asset_file_sha256"] = "5" * 64
+    update["old_process_stopped"] = False
+    _write_json(update_path, update)
+    result, verdict = _run_finalizer(evidence, tmp_path / "output")
+    assert result.returncode != 0
+    assert verdict["status"] == "RELEASE_BLOCKED"
+    assert "project_asset_file_sha_mismatch:update:after" in verdict["failed_conditions"]
+    assert "project_transition_mismatch:update:asset_file_sha256" in verdict["failed_conditions"]
+    assert "update_old_process_not_stopped" in verdict["failed_conditions"]
 
 
 def test_release_identity_is_consistent_across_python_and_go() -> None:
@@ -311,6 +417,9 @@ def test_update_gate_uses_real_pinned_baseline_and_preserves_real_project() -> N
     assert "project-before-update.json" in source
     assert "project-after-update.json" in source
     assert "project-after-rollback.json" in source
+    assert "original_fixture_sha256" in source
+    assert "canonical_uploaded_sha256" in source
+    assert "uploadedAssetSha" in source
     assert "zero-trust-update-sentinel.txt" in source
     assert "do not use it as the project-preservation proof" in source
     assert "project_data_preserved=$true" in source
