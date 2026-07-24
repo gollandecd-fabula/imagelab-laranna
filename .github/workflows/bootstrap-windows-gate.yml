@@ -1,14 +1,6 @@
 name: ImageLab Bootstrap Windows Gate
 
 on:
-  push:
-    branches:
-      - bootstrap/zero-trust-gate
-    paths:
-      - bootstrap/imagelab-source.zip
-      - bootstrap/imagelab-source.sha256
-      - bootstrap/verify_source_bundle.py
-      - .github/workflows/bootstrap-windows-gate.yml
   pull_request:
     branches:
       - main
