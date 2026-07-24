@@ -55,7 +55,17 @@ function Invoke-Installer([string]$InstallerPath, [string]$EvidenceDir, [string]
     try {
         $env:IMAGELAB_INSTALLER_CI = '1'
         if ($Fault) { $env:IMAGELAB_INSTALLER_FAULT = $Fault } else { Remove-Item Env:IMAGELAB_INSTALLER_FAULT -ErrorAction SilentlyContinue }
-        $process = Start-Process -FilePath $InstallerPath -WorkingDirectory (Split-Path -Parent $InstallerPath) -Wait -PassThru -NoNewWindow -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+        # Start-Process -Wait waits for the entire descendant process tree. The
+        # installer intentionally launches the persistent ImageLab server, so -Wait
+        # would block the release gate until the outer job timeout. Wait only for
+        # the installer PID and bound that wait explicitly.
+        $process = Start-Process -FilePath $InstallerPath -WorkingDirectory (Split-Path -Parent $InstallerPath) -PassThru -NoNewWindow -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+        $installerTimeoutMilliseconds = 30 * 60 * 1000
+        if (-not $process.WaitForExit($installerTimeoutMilliseconds)) {
+            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            throw "Installer process did not exit within 30 minutes"
+        }
+        $process.Refresh()
         return $process.ExitCode
     } finally {
         if ($null -eq $oldCi) { Remove-Item Env:IMAGELAB_INSTALLER_CI -ErrorAction SilentlyContinue } else { $env:IMAGELAB_INSTALLER_CI = $oldCi }

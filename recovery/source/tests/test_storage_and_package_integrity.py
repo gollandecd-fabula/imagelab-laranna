@@ -66,3 +66,15 @@ def test_cardlab_package_is_deterministic_and_self_verifying() -> None:
     finally:
         (settings.upload_dir / asset.stored_name).unlink(missing_ok=True)
         (settings.preview_dir / asset.preview_name).unlink(missing_ok=True)
+
+
+def test_installer_harness_waits_only_for_installer_pid_with_timeout() -> None:
+    common = (Path(__file__).resolve().parents[1] / "release_gate" / "common.ps1").read_text(encoding="utf-8")
+
+    assert "Start-Process -FilePath $InstallerPath" in common
+    assert "-Wait -PassThru" not in common
+    assert "$process.WaitForExit($installerTimeoutMilliseconds)" in common
+    assert "$installerTimeoutMilliseconds = 30 * 60 * 1000" in common
+    assert "Stop-Process -Id $process.Id -Force" in common
+    assert "Installer process did not exit within 30 minutes" in common
+
