@@ -18,8 +18,8 @@ def _env_path(name: str, default: Path) -> Path:
 @dataclass(frozen=True)
 class Settings:
     app_name: str = "ImageLab by LarannA"
-    app_version: str = "1.4.8-recovery-candidate"
-    build_id: str = "REC-RT8-M6-20260724-05"
+    app_version: str = "1.4.9-recovery-candidate"
+    build_id: str = "REC-RT8-M6-20260724-06"
     install_id: str = os.environ.get("IMAGELAB_INSTALL_ID", "source-tree").strip() or "source-tree"
     host: str = "127.0.0.1"
     port: int = 8765

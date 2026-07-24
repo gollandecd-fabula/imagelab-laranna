@@ -118,3 +118,15 @@ def test_clean_install_harness_does_not_reuse_source_toolcache_python_after_inst
     assert '& $gatePython "$PSScriptRoot\\ui_gate.py"' in post_install
     assert '& $gatePython "$PSScriptRoot\\validate_outputs.py"' in post_install
     assert 'Get-Sha256 $gatePython' in post_install
+
+
+def test_ui_gate_validates_visible_version_install_and_build_title_contract() -> None:
+    source = (Path(__file__).resolve().parents[1] / "release_gate" / "ui_gate.py").read_text(encoding="utf-8")
+
+    assert "arg=[args.expected_version, args.expected_build_id, args.expected_install_id]" in source
+    assert "text.includes(version)" in source
+    assert "text.includes(String(install).slice(0, 8))" in source
+    assert "title.includes(build)" in source
+    assert "title.includes(install)" in source
+    assert "chip.classList.contains('ready')" in source
+    assert "textContent.includes(build)" not in source

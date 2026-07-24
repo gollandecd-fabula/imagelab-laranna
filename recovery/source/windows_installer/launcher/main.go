@@ -18,8 +18,8 @@ import (
 
 const (
 	appName    = "ImageLab by LarannA"
-	appVersion = "1.4.8-recovery-candidate"
-	buildID    = "REC-RT8-M6-20260724-05"
+	appVersion = "1.4.9-recovery-candidate"
+	buildID    = "REC-RT8-M6-20260724-06"
 	basePort   = 8765
 	portCount  = 10
 )

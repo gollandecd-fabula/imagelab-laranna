@@ -125,8 +125,18 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             page.goto(args.base_url, wait_until="networkidle", timeout=90_000)
             page.locator("#buildVersionChip").wait_for(state="visible")
             page.wait_for_function(
-                "([version, build]) => document.querySelector('#buildVersionChip')?.textContent.includes(version) && document.querySelector('#buildVersionChip')?.textContent.includes(build)",
-                arg=[args.expected_version, args.expected_build_id],
+                """([version, build, install]) => {
+                  const chip = document.querySelector('#buildVersionChip');
+                  if (!chip) return false;
+                  const text = chip.textContent || '';
+                  const title = chip.getAttribute('title') || '';
+                  return chip.classList.contains('ready')
+                    && text.includes(version)
+                    && text.includes(String(install).slice(0, 8))
+                    && title.includes(build)
+                    && title.includes(install);
+                }""",
+                arg=[args.expected_version, args.expected_build_id, args.expected_install_id],
                 timeout=30_000,
             )
             page.screenshot(path=str(screenshots / "00-start.png"), full_page=True)
