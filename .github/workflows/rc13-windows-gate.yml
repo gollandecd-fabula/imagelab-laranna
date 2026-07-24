@@ -1,19 +1,166 @@
-name: RETIRED — ImageLab RC13 Windows Gate Execution
+name: ImageLab RC13 Windows Gate Execution
 
+# Current exact 1.4.9 hosted gate. Manual only: routine PR synchronization
+# must not rebuild or republish historical candidate artifacts automatically.
 on:
   workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: imagelab-rc13-windows-gate
+  cancel-in-progress: false
+
+env:
+  PYTHONUTF8: '1'
+  PIP_DISABLE_PIP_VERSION_CHECK: '1'
+  EXACT_PYTHON_VERSION: '3.13.14'
+  GATE_REVISION: 'RC13-WINDOWS-1'
+  EXPECTED_SOURCE_SHA256: '83bcfcc9e9d6dfaa29ef2827f3a967d9719cbff2650672b7d5d9d3eac1af4885'
+  EXPECTED_APP_VERSION: '1.4.9-recovery-candidate'
+  EXPECTED_BUILD_ID: 'REC-RT8-M6-20260724-06'
+
 jobs:
-  retired:
+  b0:
+    name: B0 RC13 exact bundle admission
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+        with: {ref: bootstrap/zero-trust-gate}
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with: {python-version: '${{ env.EXACT_PYTHON_VERSION }}'}
+      - name: Verify exact source and extract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python bootstrap/verify_source_bundle.py --archive bootstrap/imagelab-source.zip --checksum bootstrap/imagelab-source.sha256 --output evidence-b0/source-bundle.json --extract-to source-tree --expected-sha256 "$EXPECTED_SOURCE_SHA256" --expected-version "$EXPECTED_APP_VERSION" --expected-build-id "$EXPECTED_BUILD_ID"
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        if: always()
+        with: {name: rc13-b0-evidence, path: evidence-b0/, if-no-files-found: warn, retention-days: 30}
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        if: success()
+        with: {name: rc13-source-tree, path: source-tree/, include-hidden-files: true, if-no-files-found: error, retention-days: 7}
+
+  b1:
+    name: B1 RC13 source gate
+    needs: b0
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with: {name: rc13-source-tree, path: source-tree}
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with: {python-version: '${{ env.EXACT_PYTHON_VERSION }}'}
+      - name: Install exact dependencies and execute gates
+        working-directory: source-tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --requirement requirements.txt pytest==9.0.2 httpx==0.28.1
+          python release_gate/source_gate.py --output evidence-rc13/source-gate.json
+          mkdir -p evidence-rc13/unit
+          for test_file in tests/test_core_failure_regression.py tests/test_second_core_failure_regression.py tests/test_l5_iz017_regression.py tests/test_slu_m1_units.py tests/test_slu_m5_e2e.py tests/test_storage_and_package_integrity.py tests/test_zero_trust_release_gate.py; do
+            case_id="$(basename "$test_file" .py)"
+            python release_gate/run_unit_case.py --case-id "$case_id" --test-file "$test_file" --output "evidence-rc13/unit/$case_id.json" --timeout 600
+          done
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        if: always()
+        with: {name: rc13-b1-evidence, path: source-tree/evidence-rc13/, if-no-files-found: warn, retention-days: 30}
+
+  b2:
+    name: B2 RC13 reproducible Windows candidate
+    needs: b1
+    runs-on: windows-2022
+    timeout-minutes: 40
+    steps:
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with: {name: rc13-source-tree, path: source-tree}
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with: {python-version: '${{ env.EXACT_PYTHON_VERSION }}'}
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with: {go-version: '1.25.x', cache: false}
+      - name: Build exact candidate twice
+        working-directory: source-tree
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          python scripts/build_zero_trust_candidate.py --output-dir dist-a --label RC13_WINDOWS
+          python scripts/build_zero_trust_candidate.py --output-dir dist-b --label RC13_WINDOWS
+          $aText=Get-Content -Raw dist-a/candidate-manifest.json; $bText=Get-Content -Raw dist-b/candidate-manifest.json
+          $a=$aText|ConvertFrom-Json; $b=$bText|ConvertFrom-Json
+          if($a.installer.sha256 -ne $b.installer.sha256){throw 'Non-reproducible RC13 installer'}
+          foreach($text in @($aText,$bText)){if(-not $text.Contains($env:EXPECTED_APP_VERSION)){throw 'Version mismatch'};if(-not $text.Contains($env:EXPECTED_BUILD_ID)){throw 'Build mismatch'}}
+          New-Item -ItemType Directory -Force exact-candidate|Out-Null; Copy-Item dist-a/* exact-candidate/ -Force
+          @{schema=1;status='PASS';source_sha256=$env:EXPECTED_SOURCE_SHA256;version=$env:EXPECTED_APP_VERSION;build_id=$env:EXPECTED_BUILD_ID;installer_sha256=$a.installer.sha256;second_build_sha256=$b.installer.sha256}|ConvertTo-Json|Set-Content exact-candidate/reproducibility.json -Encoding utf8
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        with: {name: RC13_UNVERIFIED_WINDOWS_CANDIDATE, path: source-tree/exact-candidate/, if-no-files-found: error, retention-days: 2}
+
+  b3_b5:
+    name: B3-B5 RC13 clean install and UI
+    needs: b2
+    runs-on: windows-2022
+    timeout-minutes: 80
+    steps:
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with: {name: rc13-source-tree, path: source-tree}
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with: {name: RC13_UNVERIFIED_WINDOWS_CANDIDATE, path: exact-candidate}
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with: {python-version: '${{ env.EXACT_PYTHON_VERSION }}'}
+      - name: Install external UI harness
+        working-directory: source-tree
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'; python -m pip install --requirement requirements.txt; python -m pip install --requirement requirements-release.txt; python -m playwright install chromium; python -c "import PIL; import playwright.sync_api"
+      - name: Install and drive exact UI
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'; $installer=(Get-ChildItem exact-candidate -Filter *.exe -File|Select-Object -First 1).FullName; if(-not $installer){throw 'Installer missing'}
+          ./source-tree/release_gate/run_clean_install_gate.ps1 -InstallerPath $installer -CandidateManifestPath exact-candidate/candidate-manifest.json -EvidenceDir evidence-clean -Mode clean -BrowserChannel msedge
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        if: always()
+        with: {name: rc13-clean-install-evidence, path: evidence-clean/, include-hidden-files: true, if-no-files-found: warn, retention-days: 30}
+
+  b8:
+    name: B8 RC13 independent Windows rerun
+    needs: b2
+    runs-on: windows-2022
+    timeout-minutes: 80
+    steps:
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with: {name: rc13-source-tree, path: source-tree}
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with: {name: RC13_UNVERIFIED_WINDOWS_CANDIDATE, path: exact-candidate}
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with: {python-version: '${{ env.EXACT_PYTHON_VERSION }}'}
+      - name: Install independent external UI harness
+        working-directory: source-tree
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'; python -m pip install --requirement requirements.txt; python -m pip install --requirement requirements-release.txt; python -m playwright install chromium; python -c "import PIL; import playwright.sync_api"
+      - name: Repeat exact installed UI path
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'; $installer=(Get-ChildItem exact-candidate -Filter *.exe -File|Select-Object -First 1).FullName; if(-not $installer){throw 'Installer missing'}
+          ./source-tree/release_gate/run_clean_install_gate.ps1 -InstallerPath $installer -CandidateManifestPath exact-candidate/candidate-manifest.json -EvidenceDir evidence-independent -Mode independent -BrowserChannel bundled
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        if: always()
+        with: {name: rc13-independent-evidence, path: evidence-independent/, include-hidden-files: true, if-no-files-found: warn, retention-days: 30}
+
+  verdict:
+    name: RC13 verdict — release remains blocked
+    if: ${{ always() }}
+    needs: [b0,b1,b2,b3_b5,b8]
     runs-on: ubuntu-24.04
     steps:
-      - name: Enforce retirement boundary
+      - name: Write fail-closed verdict
+        shell: bash
         run: |
-          echo "RETIRED_WORKFLOW"
-          echo "The exact RC13 hosted result is preserved in recovery/evidence/windows-gate/."
-          echo "New release decisions must use recovery/source/.github/workflows/zero-trust-release.yml."
-          echo "This historical workflow must not be used for release authorization."
-          exit 1
+          mkdir -p verdict
+          printf '%s\n' '{' '  "schema": 1,' '  "status": "RELEASE_BLOCKED",' '  "run_id": "'"$GITHUB_RUN_ID"'",' '  "source_sha256": "'"$EXPECTED_SOURCE_SHA256"'",' '  "version": "'"$EXPECTED_APP_VERSION"'",' '  "build_id": "'"$EXPECTED_BUILD_ID"'",' '  "b0": "${{ needs.b0.result }}",' '  "b1": "${{ needs.b1.result }}",' '  "b2": "${{ needs.b2.result }}",' '  "b3_b5": "${{ needs.b3_b5.result }}",' '  "b8": "${{ needs.b8.result }}",' '  "reason": "Update/rollback and physical L5 remain separate mandatory gates."' '}' > verdict/final-verdict.json
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        with: {name: RC13_FAIL_CLOSED_VERDICT, path: verdict/, if-no-files-found: error, retention-days: 90}
+      - name: Enforce release block
+        run: exit 1
