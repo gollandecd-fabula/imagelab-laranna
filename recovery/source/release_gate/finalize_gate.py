@@ -18,6 +18,17 @@ SELFTEST_CASES = {
     "history_lineage",
     "export",
 }
+PROJECT_EVIDENCE_FIELDS = (
+    "project_id",
+    "title",
+    "asset_id",
+    "stored_name",
+    "asset_record_sha256",
+    "asset_file_sha256",
+    "asset_size_bytes",
+    "project_file_sha256",
+    "active_asset_id",
+)
 
 
 def sha256(path: Path) -> str:
@@ -28,12 +39,20 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def valid_sha256(value: object) -> bool:
+    text = str(value or "")
+    return len(text) == 64 and all(ch in "0123456789abcdef" for ch in text.lower())
+
+
 def read_optional(path: Path, missing: list[str]) -> dict[str, Any]:
     if not path.exists():
         missing.append(path.as_posix())
         return {"status": "MISSING", "evidence_path": path.as_posix()}
     try:
-        return json.loads(path.read_text("utf-8-sig"))
+        value = json.loads(path.read_text("utf-8-sig"))
+        if not isinstance(value, dict):
+            raise TypeError("top-level JSON evidence must be an object")
+        return value
     except Exception as exc:
         missing.append(f"{path.as_posix()}:malformed:{type(exc).__name__}")
         return {"status": "MALFORMED", "evidence_path": path.as_posix(), "error": str(exc)}
@@ -70,6 +89,90 @@ def validate_selftest(
         case = tests.get(case_name)
         if not isinstance(case, dict) or case.get("status") != "PASS":
             failed.append(f"selftest_case_failed:{name}:{case_name}")
+
+
+def validate_project_snapshot(
+    name: str,
+    snapshot: object,
+    *,
+    expected_asset_sha256: str,
+    failed: list[str],
+) -> dict[str, Any]:
+    if not isinstance(snapshot, dict):
+        failed.append(f"project_snapshot_missing:{name}")
+        return {}
+
+    for field in ("project_id", "title", "asset_id", "stored_name", "active_asset_id"):
+        if not isinstance(snapshot.get(field), str) or not str(snapshot.get(field)).strip():
+            failed.append(f"project_snapshot_field:{name}:{field}")
+    for field in ("asset_record_sha256", "asset_file_sha256", "project_file_sha256"):
+        if not valid_sha256(snapshot.get(field)):
+            failed.append(f"project_snapshot_sha:{name}:{field}")
+    size = snapshot.get("asset_size_bytes")
+    if isinstance(size, bool) or not isinstance(size, int) or size <= 0:
+        failed.append(f"project_snapshot_size:{name}")
+    if snapshot.get("asset_record_sha256") != expected_asset_sha256:
+        failed.append(f"project_asset_record_sha_mismatch:{name}")
+    if snapshot.get("asset_file_sha256") != expected_asset_sha256:
+        failed.append(f"project_asset_file_sha_mismatch:{name}")
+    if snapshot.get("active_asset_id") != snapshot.get("asset_id"):
+        failed.append(f"project_active_asset_mismatch:{name}")
+    return snapshot
+
+
+def validate_project_transition(
+    name: str,
+    data: dict[str, Any],
+    *,
+    failed: list[str],
+) -> tuple[dict[str, Any], dict[str, Any], str, str]:
+    if data.get("schema") != 2:
+        failed.append(f"project_transition_schema:{name}")
+    if data.get("project_data_preserved") is not True:
+        failed.append(f"project_data_not_preserved:{name}")
+
+    original_sha = str(data.get("original_fixture_sha256", ""))
+    canonical_sha = str(data.get("canonical_uploaded_sha256", ""))
+    if not valid_sha256(original_sha):
+        failed.append(f"original_fixture_sha:{name}")
+    if not valid_sha256(canonical_sha):
+        failed.append(f"canonical_uploaded_sha:{name}")
+
+    before = validate_project_snapshot(
+        f"{name}:before",
+        data.get("project_evidence_before"),
+        expected_asset_sha256=canonical_sha,
+        failed=failed,
+    )
+    after = validate_project_snapshot(
+        f"{name}:after",
+        data.get("project_evidence_after_update") if name == "update" else data.get("project_evidence_after_rollback"),
+        expected_asset_sha256=canonical_sha,
+        failed=failed,
+    )
+    for field in PROJECT_EVIDENCE_FIELDS:
+        if before.get(field) != after.get(field):
+            failed.append(f"project_transition_mismatch:{name}:{field}")
+
+    if name == "update":
+        if data.get("old_process_stopped") is not True:
+            failed.append("update_old_process_not_stopped")
+        first_install_id = str(data.get("first_install_id", ""))
+        second_install_id = str(data.get("second_install_id", ""))
+        if not first_install_id or not second_install_id or first_install_id == second_install_id:
+            failed.append("update_install_identity_not_changed")
+    else:
+        if data.get("critical_hashes_restored") is not True:
+            failed.append("rollback_critical_hashes_not_restored")
+        restored = str(data.get("restored_install_id", ""))
+        expected = str(data.get("expected_install_id", ""))
+        if not restored or restored != expected:
+            failed.append("rollback_install_identity_not_restored")
+        fault_exit = data.get("fault_exit_code")
+        if isinstance(fault_exit, bool) or not isinstance(fault_exit, int) or fault_exit == 0:
+            failed.append("rollback_fault_not_observed")
+
+    return before, after, original_sha, canonical_sha
 
 
 def main() -> int:
@@ -126,7 +229,7 @@ def main() -> int:
             failed.append("required_evidence_missing_or_malformed")
 
         installer_sha = str(candidate.get("installer", {}).get("sha256", ""))
-        if len(installer_sha) != 64 or any(ch not in "0123456789abcdef" for ch in installer_sha.lower()):
+        if not valid_sha256(installer_sha):
             failed.append("candidate_installer_sha")
 
         repro_sha = str(reproducibility.get("installer_sha256", ""))
@@ -138,8 +241,21 @@ def main() -> int:
             observed = data.get("installer_sha256")
             if observed is not None and name != "G6_baseline_pinned" and observed != installer_sha:
                 failed.append(f"sha_mismatch:{name}")
+
         baseline_sha = str(baseline.get("installer_sha256", ""))
         update_baseline_sha = str(update.get("baseline_installer_sha256", ""))
+        if baseline.get("schema") != 2:
+            failed.append("baseline_evidence_schema")
+        if baseline.get("release_authorized") is not True:
+            failed.append("baseline_not_release_authorized")
+        release_tag = str(baseline.get("release_tag", "")).strip()
+        baseline_name = str(baseline.get("name", "")).strip()
+        if not release_tag:
+            failed.append("baseline_release_tag_missing")
+        if "RELEASE_AUTHORIZED" not in baseline_name or not baseline_name.endswith("_Setup_x64.exe"):
+            failed.append("baseline_authorized_asset_name_invalid")
+        if not valid_sha256(baseline_sha):
+            failed.append("baseline_installer_sha")
         if baseline_sha and update_baseline_sha and baseline_sha != update_baseline_sha:
             failed.append("baseline_sha_mismatch:update")
         if baseline_sha and baseline_sha == installer_sha:
@@ -178,6 +294,22 @@ def main() -> int:
             failed=failed,
         )
 
+        update_before, update_after, update_original_sha, update_canonical_sha = validate_project_transition(
+            "update", update, failed=failed
+        )
+        rollback_before, rollback_after, rollback_original_sha, rollback_canonical_sha = validate_project_transition(
+            "rollback", rollback, failed=failed
+        )
+        if update_original_sha != rollback_original_sha:
+            failed.append("project_fixture_sha_mismatch:update_rollback")
+        if update_canonical_sha != rollback_canonical_sha:
+            failed.append("project_canonical_sha_mismatch:update_rollback")
+        for field in PROJECT_EVIDENCE_FIELDS:
+            if update_after.get(field) != rollback_before.get(field):
+                failed.append(f"project_handoff_mismatch:update_rollback:{field}")
+            if update_before.get(field) != rollback_after.get(field):
+                failed.append(f"project_end_to_end_mismatch:{field}")
+
         installer_candidates = list((root / "build").glob("*.exe")) if (root / "build").exists() else []
         if len(installer_candidates) != 1:
             failed.append("exact_installer_missing_or_ambiguous")
@@ -193,7 +325,7 @@ def main() -> int:
 
         status = "RELEASE_AUTHORIZED" if not failed else "RELEASE_BLOCKED"
         verdict = {
-            "schema": 2,
+            "schema": 3,
             "status": status,
             "installer_sha256": installer_sha,
             "identity": candidate.get("identity"),
@@ -218,7 +350,7 @@ def main() -> int:
         return 0 if status == "RELEASE_AUTHORIZED" else 1
     except Exception as exc:
         verdict = {
-            "schema": 2,
+            "schema": 3,
             "status": "RELEASE_BLOCKED",
             "failed_conditions": [f"{type(exc).__name__}: {exc}"],
             "missing_or_malformed_evidence": sorted(set(missing_evidence)),
