@@ -78,3 +78,19 @@ def test_installer_harness_waits_only_for_installer_pid_with_timeout() -> None:
     assert "Stop-Process -Id $process.Id -Force" in common
     assert "Installer process did not exit within 30 minutes" in common
 
+
+def test_clean_install_harness_pins_release_gate_python_before_installer() -> None:
+    source = (Path(__file__).resolve().parents[1] / "release_gate" / "run_clean_install_gate.ps1").read_text(encoding="utf-8")
+
+    resolve = '$gatePython = (& python -c "import sys; print(sys.executable)").Trim()'
+    install = '$exitCode = Invoke-Installer -InstallerPath $InstallerPath'
+    assert resolve in source
+    assert source.index(resolve) < source.index(install)
+    assert 'Test-Path -LiteralPath $gatePython' in source
+    assert '& $gatePython -c "import PIL; import playwright.sync_api"' in source
+    assert r'& $gatePython "$PSScriptRoot\ui_gate.py"' in source
+    assert r'& $gatePython "$PSScriptRoot\validate_outputs.py"' in source
+    assert r'python "$PSScriptRoot\ui_gate.py"' not in source
+    assert r'python "$PSScriptRoot\validate_outputs.py"' not in source
+    assert 'release_gate_python = $gatePython' in source
+

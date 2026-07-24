@@ -14,6 +14,16 @@ $candidate = Get-Content -Raw -LiteralPath $CandidateManifestPath | ConvertFrom-
 $installerSha = Get-Sha256 $InstallerPath
 if ($installerSha -ne $candidate.installer.sha256) { throw "Candidate installer SHA mismatch" }
 
+# Resolve the external release-gate interpreter before the installer starts.
+# The installed application launches its own private Python runtime; relying on
+# a later bare `python` command can select that runtime and lose Playwright/PIL.
+$gatePython = (& python -c "import sys; print(sys.executable)").Trim()
+if ($LASTEXITCODE -ne 0 -or -not $gatePython -or -not (Test-Path -LiteralPath $gatePython)) {
+    throw "Release gate Python executable not found"
+}
+& $gatePython -c "import PIL; import playwright.sync_api"
+if ($LASTEXITCODE -ne 0) { throw "Release gate Python dependencies are unavailable" }
+
 $verdictName = if ($Mode -eq 'independent') { 'independent-verification.json' } else { 'clean-install.json' }
 try {
     Stop-ImageLabProcesses
@@ -49,12 +59,13 @@ try {
         installed_manifest = $manifest
         health = $health.Health
         base_url = $health.Url
+        release_gate_python = $gatePython
     }
     Write-Json $envInfo (Join-Path $EvidenceDir 'environment.json')
 
-    python "$PSScriptRoot\ui_gate.py" --base-url $health.Url --evidence-dir $EvidenceDir --installer-sha256 $installerSha --expected-version $manifest.version --expected-build-id $manifest.build_id --expected-install-id $manifest.install_id --browser-channel $BrowserChannel
+    & $gatePython "$PSScriptRoot\ui_gate.py" --base-url $health.Url --evidence-dir $EvidenceDir --installer-sha256 $installerSha --expected-version $manifest.version --expected-build-id $manifest.build_id --expected-install-id $manifest.install_id --browser-channel $BrowserChannel
     if ($LASTEXITCODE -ne 0) { throw "Playwright UI gate failed" }
-    python "$PSScriptRoot\validate_outputs.py" --evidence-dir $EvidenceDir --installer-sha256 $installerSha
+    & $gatePython "$PSScriptRoot\validate_outputs.py" --evidence-dir $EvidenceDir --installer-sha256 $installerSha
     if ($LASTEXITCODE -ne 0) { throw "Output validation failed" }
 
     $verdict = [ordered]@{
