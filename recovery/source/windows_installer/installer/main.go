@@ -27,8 +27,8 @@ var payloadFS embed.FS
 
 const (
 	appName       = "ImageLab by LarannA"
-	appVersion    = "1.4.7-recovery-candidate"
-	buildID       = "REC-RT8-M6-20260724-04"
+	appVersion    = "1.4.8-recovery-candidate"
+	buildID       = "REC-RT8-M6-20260724-05"
 	pythonURL     = "https://www.python.org/ftp/python/3.13.14/python-3.13.14-amd64.exe"
 	pythonSHA256  = "c54d9b9bbb8a36e6489363ddd01139707fd781d72f1f9e90c7ec65d0061368e0"
 	basePort      = 8765

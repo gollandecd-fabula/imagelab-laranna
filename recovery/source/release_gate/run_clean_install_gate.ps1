@@ -14,15 +14,32 @@ $candidate = Get-Content -Raw -LiteralPath $CandidateManifestPath | ConvertFrom-
 $installerSha = Get-Sha256 $InstallerPath
 if ($installerSha -ne $candidate.installer.sha256) { throw "Candidate installer SHA mismatch" }
 
-# Resolve the external release-gate interpreter before the installer starts.
-# The installed application launches its own private Python runtime; relying on
-# a later bare `python` command can select that runtime and lose Playwright/PIL.
-$gatePython = (& python -c "import sys; print(sys.executable)").Trim()
-if ($LASTEXITCODE -ne 0 -or -not $gatePython -or -not (Test-Path -LiteralPath $gatePython)) {
-    throw "Release gate Python executable not found"
+# Materialize a private copy of the external release-gate interpreter before
+# the installer starts. Installing ImageLab's private Python can invalidate the
+# GitHub toolcache interpreter path even though that path worked moments earlier.
+# The full runtime copy keeps Python, its stdlib, DLLs and already-installed
+# Playwright/Pillow packages outside both toolcache and the ImageLab install tree.
+$sourceGatePython = (& python -c "import sys; print(sys.executable)").Trim()
+if ($LASTEXITCODE -ne 0 -or -not $sourceGatePython -or -not (Test-Path -LiteralPath $sourceGatePython)) {
+    throw "Release gate source Python executable not found"
 }
-& $gatePython -c "import PIL; import playwright.sync_api"
-if ($LASTEXITCODE -ne 0) { throw "Release gate Python dependencies are unavailable" }
+$sourceGateRoot = Split-Path -Parent $sourceGatePython
+$gateTempBase = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { [System.IO.Path]::GetTempPath() }
+$gateRuntimeRoot = Join-Path $gateTempBase ("imagelab-release-gate-python-" + [Guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Force -Path $gateRuntimeRoot | Out-Null
+& robocopy.exe $sourceGateRoot $gateRuntimeRoot /E /COPY:DAT /DCOPY:DAT /R:2 /W:1 /NFL /NDL /NJH /NJS /NP | Out-Null
+$robocopyExitCode = $LASTEXITCODE
+$global:LASTEXITCODE = 0
+if ($robocopyExitCode -gt 7) {
+    throw "Release gate Python runtime copy failed with robocopy code $robocopyExitCode"
+}
+$gatePython = Join-Path $gateRuntimeRoot 'python.exe'
+if (-not (Test-Path -LiteralPath $gatePython)) {
+    throw "Copied release gate Python executable not found"
+}
+$gatePythonSha = Get-Sha256 $gatePython
+& $gatePython -c "import sys, PIL; import playwright.sync_api; print(sys.executable)"
+if ($LASTEXITCODE -ne 0) { throw "Copied release gate Python dependencies are unavailable" }
 
 $verdictName = if ($Mode -eq 'independent') { 'independent-verification.json' } else { 'clean-install.json' }
 try {
@@ -48,8 +65,17 @@ try {
     $post = Get-Content -Raw $postSelfTest | ConvertFrom-Json
     if ($pre.status -ne 'PASS' -or $post.status -ne 'PASS') { throw "Embedded self-test did not pass" }
 
+    if (-not (Test-Path -LiteralPath $gatePython)) {
+        throw "Copied release gate Python disappeared after installation"
+    }
+    if ((Get-Sha256 $gatePython) -ne $gatePythonSha) {
+        throw "Copied release gate Python changed during installation"
+    }
+    & $gatePython -c "import sys, PIL; import playwright.sync_api; print(sys.executable)"
+    if ($LASTEXITCODE -ne 0) { throw "Copied release gate Python failed after installation" }
+
     $envInfo = [ordered]@{
-        schema = 1
+        schema = 2
         status = 'PASS'
         mode = $Mode
         os = (Get-CimInstance Win32_OperatingSystem | Select-Object Caption,Version,BuildNumber,OSArchitecture)
@@ -59,7 +85,10 @@ try {
         installed_manifest = $manifest
         health = $health.Health
         base_url = $health.Url
+        release_gate_python_source = $sourceGatePython
         release_gate_python = $gatePython
+        release_gate_python_sha256 = $gatePythonSha
+        release_gate_runtime_isolated = $true
     }
     Write-Json $envInfo (Join-Path $EvidenceDir 'environment.json')
 
@@ -87,4 +116,8 @@ try {
     $failure = [ordered]@{ schema=1; status='FAIL'; mode=$Mode; installer_sha256=$installerSha; error=$_.Exception.Message }
     Write-Json $failure (Join-Path $EvidenceDir $verdictName)
     throw
+} finally {
+    if ($gateRuntimeRoot -and (Test-Path -LiteralPath $gateRuntimeRoot)) {
+        Remove-Item -Recurse -Force -LiteralPath $gateRuntimeRoot -ErrorAction SilentlyContinue
+    }
 }

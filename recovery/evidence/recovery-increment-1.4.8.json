@@ -1,0 +1,50 @@
+{
+  "schema": 1,
+  "status": "PASS_SOURCE_RECOVERY_INCREMENT",
+  "identity": {
+    "version": "1.4.8-recovery-candidate",
+    "build_id": "REC-RT8-M6-20260724-05"
+  },
+  "parent": {
+    "version": "1.4.7-recovery-candidate",
+    "build_id": "REC-RT8-M6-20260724-04",
+    "source_sha256": "e130ce027c2d54b72161afe6b9882f66a4311f01d7249b6c7e9bbd9ce4645327"
+  },
+  "patch_sha256": "26ede3f57ed2686d7395fd49ee4d8c13f8f6acd52bef7fb4c6a0b588a727b51f",
+  "recovered_cluster": {
+    "id": "RC-12",
+    "name": "isolated copied release-gate Python runtime survives installer mutation",
+    "status": "PASS"
+  },
+  "checks": {
+    "full_pytest": "145/145 PASS",
+    "required_test_files": "26/26 PASS",
+    "compileall": "PASS",
+    "javascript_syntax": "PASS",
+    "backend_selftest": "PASS",
+    "source_zip_reproducibility": "2/2 BYTE_IDENTICAL"
+  },
+  "source_bundle": {
+    "schema": 1,
+    "status": "PASS",
+    "identity": {
+      "version": "1.4.8-recovery-candidate",
+      "build_id": "REC-RT8-M6-20260724-05"
+    },
+    "file": "ImageLab_by_LarannA_RECOVERY_1.4.8_SOURCE.zip",
+    "sha256": "fa5809e797c57164bc0eed8b111902731d2dad0a903f142cfcf95a378474ca17",
+    "size_bytes": 378719,
+    "member_count": 87,
+    "members_sha256": "b0c43a785c437bf649750a5541386b81b6436c160aad07a5aa6903265581e2fe",
+    "reproducible_builds": 2,
+    "builds_byte_identical": true
+  },
+  "claim_boundary": {
+    "source_recovery_increment": "PASS",
+    "windows_clean_install": "NOT_YET_REPEATED_FOR_1.4.8",
+    "windows_independent_rerun": "NOT_YET_REPEATED_FOR_1.4.8",
+    "update_rollback": "UNVERIFIED",
+    "physical_user_path_L5": "UNVERIFIED",
+    "release": "BLOCKED"
+  }
+}

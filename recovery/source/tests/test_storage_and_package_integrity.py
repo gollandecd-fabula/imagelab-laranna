@@ -79,18 +79,42 @@ def test_installer_harness_waits_only_for_installer_pid_with_timeout() -> None:
     assert "Installer process did not exit within 30 minutes" in common
 
 
-def test_clean_install_harness_pins_release_gate_python_before_installer() -> None:
+def test_clean_install_harness_materializes_isolated_gate_runtime_before_installer() -> None:
     source = (Path(__file__).resolve().parents[1] / "release_gate" / "run_clean_install_gate.ps1").read_text(encoding="utf-8")
 
-    resolve = '$gatePython = (& python -c "import sys; print(sys.executable)").Trim()'
+    resolve = '$sourceGatePython = (& python -c "import sys; print(sys.executable)").Trim()'
+    copy_runtime = '& robocopy.exe $sourceGateRoot $gateRuntimeRoot /E /COPY:DAT /DCOPY:DAT'
     install = '$exitCode = Invoke-Installer -InstallerPath $InstallerPath'
+    post_install_check = 'throw "Copied release gate Python disappeared after installation"'
+
     assert resolve in source
-    assert source.index(resolve) < source.index(install)
-    assert 'Test-Path -LiteralPath $gatePython' in source
-    assert '& $gatePython -c "import PIL; import playwright.sync_api"' in source
+    assert copy_runtime in source
+    assert source.index(resolve) < source.index(copy_runtime) < source.index(install)
+    assert "$robocopyExitCode -gt 7" in source
+    assert "$gatePython = Join-Path $gateRuntimeRoot 'python.exe'" in source
+    assert "$gatePythonSha = Get-Sha256 $gatePython" in source
+    assert source.index(install) < source.index(post_install_check)
+    assert "Copied release gate Python changed during installation" in source
+    assert "Copied release gate Python failed after installation" in source
+    assert source.count('& $gatePython -c "import sys, PIL; import playwright.sync_api; print(sys.executable)"') == 2
     assert r'& $gatePython "$PSScriptRoot\ui_gate.py"' in source
     assert r'& $gatePython "$PSScriptRoot\validate_outputs.py"' in source
     assert r'python "$PSScriptRoot\ui_gate.py"' not in source
     assert r'python "$PSScriptRoot\validate_outputs.py"' not in source
-    assert 'release_gate_python = $gatePython' in source
+    assert 'release_gate_python_source = $sourceGatePython' in source
+    assert 'release_gate_python_sha256 = $gatePythonSha' in source
+    assert 'release_gate_runtime_isolated = $true' in source
+    assert 'Remove-Item -Recurse -Force -LiteralPath $gateRuntimeRoot' in source
 
+
+def test_clean_install_harness_does_not_reuse_source_toolcache_python_after_installer() -> None:
+    source = (Path(__file__).resolve().parents[1] / "release_gate" / "run_clean_install_gate.ps1").read_text(encoding="utf-8")
+
+    install = '$exitCode = Invoke-Installer -InstallerPath $InstallerPath'
+    install_index = source.index(install)
+    post_install = source[install_index:]
+    assert '& $sourceGatePython ' not in post_install
+    assert '& python ' not in post_install
+    assert '& $gatePython "$PSScriptRoot\\ui_gate.py"' in post_install
+    assert '& $gatePython "$PSScriptRoot\\validate_outputs.py"' in post_install
+    assert 'Get-Sha256 $gatePython' in post_install
