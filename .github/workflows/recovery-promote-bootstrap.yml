@@ -5,23 +5,19 @@ on:
     branches: [main]
     paths:
       - .github/workflows/recovery-promote-bootstrap.yml
-      - recovery/evidence/recovery-complete.json
-      - recovery/dist/ImageLab_by_LarannA_RECOVERY_1.4.5_SOURCE.zip
-      - recovery/dist/source-manifest.json
+      - recovery/evidence/recovery-increment-1.4.6.json
+      - recovery/dist/ImageLab_by_LarannA_RECOVERY_1.4.6_SOURCE.zip
+      - recovery/dist/source-manifest-1.4.6.json
   workflow_dispatch:
 
 permissions:
   contents: write
 
-concurrency:
-  group: imagelab-recovery-promote-bootstrap
-  cancel-in-progress: false
-
 env:
   EXACT_PYTHON_VERSION: '3.13.14'
-  RECOVERY_SOURCE_SHA256: 'e4268157d6abc5495eefa9799b09a5352d43102019c4f0047f7303597f6c2ea7'
-  RECOVERY_APP_VERSION: '1.4.5-recovery-candidate'
-  RECOVERY_BUILD_ID: 'REC-RT8-M6-20260724-02'
+  RECOVERY_SOURCE_SHA256: '476b68ee2ddea5f2985c1c8fd2fc841de490a866bb3a9676aca9411b463e6538'
+  RECOVERY_APP_VERSION: '1.4.6-recovery-candidate'
+  RECOVERY_BUILD_ID: 'REC-RT8-M6-20260724-03'
 
 jobs:
   verify-promote-commit:
@@ -39,11 +35,11 @@ jobs:
         with:
           python-version: ${{ env.EXACT_PYTHON_VERSION }}
 
-      - name: Verify committed source recovery evidence and bundle
+      - name: Verify exact 1.4.6 recovery evidence and bundle
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p recovery/evidence/bootstrap-promotion
+          mkdir -p recovery/evidence/bootstrap-promotion-1.4.6
           python - <<'PY'
           from __future__ import annotations
           import hashlib
@@ -53,34 +49,32 @@ jobs:
           from pathlib import Path
 
           expected_sha = os.environ['RECOVERY_SOURCE_SHA256']
-          expected_version = os.environ['RECOVERY_APP_VERSION']
-          expected_build_id = os.environ['RECOVERY_BUILD_ID']
-          bundle = Path('recovery/dist/ImageLab_by_LarannA_RECOVERY_1.4.5_SOURCE.zip')
-          manifest_path = Path('recovery/dist/source-manifest.json')
-          complete_path = Path('recovery/evidence/recovery-complete.json')
+          expected_identity = {
+              'version': os.environ['RECOVERY_APP_VERSION'],
+              'build_id': os.environ['RECOVERY_BUILD_ID'],
+          }
+          bundle = Path('recovery/dist/ImageLab_by_LarannA_RECOVERY_1.4.6_SOURCE.zip')
+          manifest_path = Path('recovery/dist/source-manifest-1.4.6.json')
+          evidence_path = Path('recovery/evidence/recovery-increment-1.4.6.json')
           bootstrap_workflow = Path('.github/workflows/bootstrap-windows-gate.yml')
           failures: list[str] = []
 
           for path, code in (
               (bundle, 'RECOVERY_SOURCE_BUNDLE_MISSING'),
               (manifest_path, 'RECOVERY_SOURCE_MANIFEST_MISSING'),
-              (complete_path, 'RECOVERY_COMPLETE_EVIDENCE_MISSING'),
+              (evidence_path, 'RECOVERY_INCREMENT_EVIDENCE_MISSING'),
               (bootstrap_workflow, 'BOOTSTRAP_WORKFLOW_MISSING'),
           ):
               if not path.is_file():
                   failures.append(code)
 
           actual_sha = hashlib.sha256(bundle.read_bytes()).hexdigest() if bundle.is_file() else None
+          manifest = json.loads(manifest_path.read_text('utf-8')) if manifest_path.is_file() else {}
+          evidence = json.loads(evidence_path.read_text('utf-8')) if evidence_path.is_file() else {}
           if actual_sha != expected_sha:
               failures.append('RECOVERY_SOURCE_SHA256_MISMATCH')
-
-          manifest = json.loads(manifest_path.read_text('utf-8')) if manifest_path.is_file() else {}
-          complete = json.loads(complete_path.read_text('utf-8')) if complete_path.is_file() else {}
-          expected_identity = {'version': expected_version, 'build_id': expected_build_id}
-          if manifest.get('status') != 'PASS':
-              failures.append('RECOVERY_MANIFEST_NOT_PASS')
-          if manifest.get('identity') != expected_identity:
-              failures.append('RECOVERY_MANIFEST_IDENTITY_MISMATCH')
+          if manifest.get('status') != 'PASS' or manifest.get('identity') != expected_identity:
+              failures.append('RECOVERY_MANIFEST_IDENTITY_OR_STATUS_MISMATCH')
           if manifest.get('sha256') != expected_sha:
               failures.append('RECOVERY_MANIFEST_SHA256_MISMATCH')
           if manifest.get('member_count') != 87:
@@ -90,70 +84,67 @@ jobs:
           if manifest.get('reproducible_builds') != 2 or manifest.get('builds_byte_identical') is not True:
               failures.append('RECOVERY_MANIFEST_REPRODUCIBILITY_MISMATCH')
 
-          if complete.get('status') != 'PASS_SOURCE_RECOVERY_COMPLETE':
-              failures.append('RECOVERY_COMPLETE_STATUS_MISMATCH')
-          if complete.get('identity') != expected_identity:
-              failures.append('RECOVERY_COMPLETE_IDENTITY_MISMATCH')
-          checks = complete.get('checks', {})
-          required_checks = {
-              'full_pytest': '142/142 PASS',
+          if evidence.get('status') != 'PASS_SOURCE_RECOVERY_INCREMENT':
+              failures.append('RECOVERY_INCREMENT_STATUS_MISMATCH')
+          if evidence.get('identity') != expected_identity:
+              failures.append('RECOVERY_INCREMENT_IDENTITY_MISMATCH')
+          if evidence.get('patch_sha256') != '023b83a9d449fdad27aa5e63610cd12ef7fa8d2bee8fb67b481a31815adfa799':
+              failures.append('RECOVERY_INCREMENT_PATCH_SHA256_MISMATCH')
+          if evidence.get('checks') != {
+              'full_pytest': '143/143 PASS',
               'required_test_files': '26/26 PASS',
               'compileall': 'PASS',
               'javascript_syntax': 'PASS',
               'backend_selftest': 'PASS',
               'source_zip_reproducibility': '2/2 BYTE_IDENTICAL',
-          }
-          if checks != required_checks:
-              failures.append('RECOVERY_COMPLETE_CHECK_MATRIX_MISMATCH')
-          boundary = complete.get('claim_boundary', {})
-          if boundary.get('source_recovery') != 'PASS' or boundary.get('release') != 'BLOCKED':
-              failures.append('RECOVERY_CLAIM_BOUNDARY_MISMATCH')
+          }:
+              failures.append('RECOVERY_INCREMENT_CHECK_MATRIX_MISMATCH')
+          boundary = evidence.get('claim_boundary', {})
+          if boundary.get('source_recovery_increment') != 'PASS' or boundary.get('release') != 'BLOCKED':
+              failures.append('RECOVERY_INCREMENT_CLAIM_BOUNDARY_MISMATCH')
 
           workflow_text = bootstrap_workflow.read_text('utf-8') if bootstrap_workflow.is_file() else ''
-          workflow_contract = {
+          for exact_line, code in {
               f"EXPECTED_SOURCE_SHA256: '{expected_sha}'": 'BOOTSTRAP_EXPECTED_SOURCE_SHA256_MISMATCH',
-              f"EXPECTED_APP_VERSION: '{expected_version}'": 'BOOTSTRAP_EXPECTED_APP_VERSION_MISMATCH',
-              f"EXPECTED_BUILD_ID: '{expected_build_id}'": 'BOOTSTRAP_EXPECTED_BUILD_ID_MISMATCH',
-          }
-          for exact_line, code in workflow_contract.items():
+              f"EXPECTED_APP_VERSION: '{expected_identity['version']}'": 'BOOTSTRAP_EXPECTED_APP_VERSION_MISMATCH',
+              f"EXPECTED_BUILD_ID: '{expected_identity['build_id']}'": 'BOOTSTRAP_EXPECTED_BUILD_ID_MISMATCH',
+          }.items():
               if workflow_text.count(exact_line) != 1:
                   failures.append(code)
 
-          archive_members: list[str] = []
+          members: list[str] = []
           crc_failure = None
           if bundle.is_file():
               with zipfile.ZipFile(bundle) as archive:
                   crc_failure = archive.testzip()
-                  archive_members = sorted(info.filename for info in archive.infolist())
+                  members = sorted(info.filename for info in archive.infolist())
+          members_sha = hashlib.sha256('\n'.join(members).encode('utf-8')).hexdigest()
           if crc_failure is not None:
               failures.append(f'RECOVERY_SOURCE_CRC_FAILURE:{crc_failure}')
-          if len(archive_members) != 87:
+          if len(members) != 87:
               failures.append('RECOVERY_ARCHIVE_MEMBER_COUNT_MISMATCH')
-          members_sha = hashlib.sha256('\n'.join(archive_members).encode('utf-8')).hexdigest()
           if members_sha != 'b0c43a785c437bf649750a5541386b81b6436c160aad07a5aa6903265581e2fe':
               failures.append('RECOVERY_ARCHIVE_MEMBERS_SHA256_MISMATCH')
 
-          evidence = {
-              'schema': 2,
+          result = {
+              'schema': 3,
               'status': 'PASS' if not failures else 'FAIL',
-              'mode': 'RECOVERY_TO_BOOTSTRAP_PROMOTION_ADMISSION',
+              'mode': 'RECOVERY_1.4.6_TO_BOOTSTRAP_PROMOTION_ADMISSION',
               'identity': expected_identity,
               'bundle': {
-                  'path': str(bundle),
                   'expected_sha256': expected_sha,
                   'actual_sha256': actual_sha,
-                  'member_count': len(archive_members),
+                  'member_count': len(members),
                   'members_sha256': members_sha,
                   'crc_failure': crc_failure,
               },
-              'bootstrap_workflow_identity_pinned': not any(code.startswith('BOOTSTRAP_EXPECTED_') for code in failures),
-              'checks': checks,
+              'checks': evidence.get('checks', {}),
               'claim_boundary': boundary,
               'failures': failures,
           }
-          evidence_path = Path('recovery/evidence/bootstrap-promotion/admission.json')
-          evidence_path.write_text(json.dumps(evidence, ensure_ascii=False, indent=2) + '\n', 'utf-8')
-          print(json.dumps(evidence, ensure_ascii=False, indent=2))
+          output = Path('recovery/evidence/bootstrap-promotion-1.4.6/admission.json')
+          output.write_text(json.dumps(result, ensure_ascii=False, indent=2) + '\n', 'utf-8')
+          print(json.dumps(result, ensure_ascii=False, indent=2))
           raise SystemExit(0 if not failures else 1)
           PY
 
@@ -161,7 +152,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cp recovery/dist/ImageLab_by_LarannA_RECOVERY_1.4.5_SOURCE.zip bootstrap/imagelab-source.zip
+          cp recovery/dist/ImageLab_by_LarannA_RECOVERY_1.4.6_SOURCE.zip bootstrap/imagelab-source.zip
           printf '%s  imagelab-source.zip\n' "$RECOVERY_SOURCE_SHA256" > bootstrap/imagelab-source.sha256
           echo "$RECOVERY_SOURCE_SHA256  bootstrap/imagelab-source.zip" | sha256sum --check --strict
 
@@ -169,25 +160,25 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          rm -rf recovery/evidence/bootstrap-promotion/source-tree
+          rm -rf recovery/evidence/bootstrap-promotion-1.4.6/source-tree
           python bootstrap/verify_source_bundle.py \
             --archive bootstrap/imagelab-source.zip \
             --checksum bootstrap/imagelab-source.sha256 \
-            --output recovery/evidence/bootstrap-promotion/b0-source-bundle.json \
-            --extract-to recovery/evidence/bootstrap-promotion/source-tree \
+            --output recovery/evidence/bootstrap-promotion-1.4.6/b0-source-bundle.json \
+            --extract-to recovery/evidence/bootstrap-promotion-1.4.6/source-tree \
             --expected-sha256 "$RECOVERY_SOURCE_SHA256" \
             --expected-version "$RECOVERY_APP_VERSION" \
             --expected-build-id "$RECOVERY_BUILD_ID"
           python - <<'PY'
           import json
           from pathlib import Path
-          evidence = json.loads(Path('recovery/evidence/bootstrap-promotion/b0-source-bundle.json').read_text('utf-8'))
-          assert evidence['status'] == 'PASS', evidence
-          assert evidence['observed']['actual_sha256'] == 'e4268157d6abc5495eefa9799b09a5352d43102019c4f0047f7303597f6c2ea7'
-          assert evidence['extract_state'] == 'PUBLISHED_ATOMICALLY'
-          print('RECOVERY_BOOTSTRAP_B0_PASS')
+          result = json.loads(Path('recovery/evidence/bootstrap-promotion-1.4.6/b0-source-bundle.json').read_text('utf-8'))
+          assert result['status'] == 'PASS', result
+          assert result['observed']['actual_sha256'] == '476b68ee2ddea5f2985c1c8fd2fc841de490a866bb3a9676aca9411b463e6538'
+          assert result['extract_state'] == 'PUBLISHED_ATOMICALLY'
+          print('RECOVERY_1.4.6_BOOTSTRAP_B0_PASS')
           PY
-          rm -rf recovery/evidence/bootstrap-promotion/source-tree
+          rm -rf recovery/evidence/bootstrap-promotion-1.4.6/source-tree
 
       - name: Commit exact promoted source with branch-race recovery
         shell: bash
@@ -198,18 +189,17 @@ jobs:
           git add \
             bootstrap/imagelab-source.zip \
             bootstrap/imagelab-source.sha256 \
-            recovery/evidence/bootstrap-promotion
+            recovery/evidence/bootstrap-promotion-1.4.6
           if git diff --cached --quiet; then
-            echo 'Exact recovery source is already promoted.'
+            echo 'Exact recovery 1.4.6 source is already promoted.'
             exit 0
           fi
-          git commit -m 'recovery: promote exact 1.4.5 source to Windows gate [recovery-bootstrap-output]'
+          git commit -m 'recovery: promote exact 1.4.6 source to Windows gate [recovery-bootstrap-146-output]'
           for attempt in 1 2 3; do
             if git push origin HEAD:bootstrap/zero-trust-gate; then
               exit 0
             fi
             if [ "$attempt" -eq 3 ]; then
-              echo 'Promotion push failed after three branch-race recovery attempts.' >&2
               exit 1
             fi
             git fetch origin bootstrap/zero-trust-gate
@@ -220,7 +210,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         with:
-          name: imagelab-recovery-bootstrap-promotion
-          path: recovery/evidence/bootstrap-promotion/
+          name: imagelab-recovery-1.4.6-bootstrap-promotion
+          path: recovery/evidence/bootstrap-promotion-1.4.6/
           if-no-files-found: error
           retention-days: 30
