@@ -1,10 +1,8 @@
 name: Diagnostic Update Rollback 1.4.8 to 1.4.9
 
+# Historical sentinel-era mechanism diagnostic. Superseded by
+# diagnostic-real-project-preservation-148-to-149.yml.
 on:
-  pull_request:
-    branches: [main]
-    paths:
-      - .github/workflows/diagnostic-update-rollback-148-to-149.yml
   workflow_dispatch:
 
 permissions:
