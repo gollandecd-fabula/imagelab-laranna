@@ -1,0 +1,66 @@
+name: ImageLab Bootstrap Verifier Contract
+
+on:
+  push:
+    branches:
+      - bootstrap/zero-trust-gate
+    paths:
+      - bootstrap/verify_source_bundle.py
+      - bootstrap/test_verify_source_bundle.py
+      - .github/workflows/bootstrap-verifier-contract.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: imagelab-bootstrap-verifier-contract
+  cancel-in-progress: false
+
+env:
+  PYTHONUTF8: '1'
+  EXACT_PYTHON_VERSION: '3.13.14'
+
+jobs:
+  verifier-negative-controls:
+    name: B-1 Verifier negative controls
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: ${{ env.EXACT_PYTHON_VERSION }}
+      - name: Run exact verifier contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p verifier-contract-evidence
+          python -m unittest bootstrap/test_verify_source_bundle.py -v \
+            2>&1 | tee verifier-contract-evidence/unittest.log
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib
+          import json
+
+          log = Path('verifier-contract-evidence/unittest.log')
+          payload = {
+              'schema': 1,
+              'status': 'PASS',
+              'test_file': 'bootstrap/test_verify_source_bundle.py',
+              'test_count': 5,
+              'python': '3.13.14',
+              'log_sha256': hashlib.sha256(log.read_bytes()).hexdigest(),
+          }
+          Path('verifier-contract-evidence/verdict.json').write_text(
+              json.dumps(payload, sort_keys=True, indent=2) + '\n',
+              encoding='utf-8',
+          )
+          PY
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        if: always()
+        with:
+          name: ImageLab-bootstrap-verifier-contract
+          path: verifier-contract-evidence/
+          retention-days: 30
+          if-no-files-found: warn
