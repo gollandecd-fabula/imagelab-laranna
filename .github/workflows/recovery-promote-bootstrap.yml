@@ -184,7 +184,7 @@ jobs:
           evidence = json.loads(Path('recovery/evidence/bootstrap-promotion/b0-source-bundle.json').read_text('utf-8'))
           assert evidence['status'] == 'PASS', evidence
           assert evidence['observed']['actual_sha256'] == 'e4268157d6abc5495eefa9799b09a5352d43102019c4f0047f7303597f6c2ea7'
-          assert evidence['extract_state'] == 'PUBLISHED'
+          assert evidence['extract_state'] == 'PUBLISHED_ATOMICALLY'
           print('RECOVERY_BOOTSTRAP_B0_PASS')
           PY
           rm -rf recovery/evidence/bootstrap-promotion/source-tree
