@@ -1,0 +1,52 @@
+{
+  "schema": 1,
+  "as_of": "2026-07-25",
+  "mode": "PROTOCOL_LOCK_FAIL_CLOSED",
+  "identity": {
+    "version": "1.4.9-recovery-candidate",
+    "build_id": "REC-RT8-M6-20260724-06",
+    "source_sha256": "83bcfcc9e9d6dfaa29ef2827f3a967d9719cbff2650672b7d5d9d3eac1af4885",
+    "installer_name": "ImageLab_by_LarannA_RC13_WINDOWS_Setup_x64.exe",
+    "installer_sha256": "12817550c2fac6a6453945c38eefe86368cd4cfa1991c1565e49b092bd818d56"
+  },
+  "hosted_gates": {
+    "G0": "PASS",
+    "G1": "PASS_26_OF_26",
+    "G2": "PASS_BYTE_IDENTICAL",
+    "G3": "PASS_HOSTED_WINDOWS",
+    "G4": "PASS_HOSTED_EDGE",
+    "G5": "PASS_HOSTED_OUTPUT_VALIDATION",
+    "G8": "PASS_INDEPENDENT_HOSTED_WINDOWS"
+  },
+  "blocked_or_unverified": {
+    "G6": "BLOCKED_BASELINE_NOT_AVAILABLE",
+    "G7": "BLOCKED_AUTHORIZING_FORM_DIAGNOSTIC_MECHANISM_PASS",
+    "physical_user_machine_L5": "UNVERIFIED",
+    "RT8_M7": "INCOMPLETE",
+    "RT8_M8": "INCOMPLETE",
+    "release": "BLOCKED"
+  },
+  "evidence": {
+    "hosted_windows_summary": "recovery/evidence/windows-gate/rc13-windows-evidence-summary.json",
+    "update_rollback_diagnostic": "recovery/evidence/update-rollback/diagnostic-update-rollback-148-149-summary.json",
+    "g6_blocker": "recovery/evidence/update-rollback/g6-authorized-baseline-blocker.json",
+    "hosted_windows_run_id": "30111216367",
+    "update_rollback_run_id": "30112031685"
+  },
+  "claim_boundary": {
+    "hosted_windows_clean_install": "PASS",
+    "hosted_browser_user_path": "PASS",
+    "hosted_independent_rerun": "PASS",
+    "update_from_previous_authorized_release": "BLOCKED",
+    "authorizing_forced_rollback": "BLOCKED",
+    "physical_user_machine_L5": "UNVERIFIED",
+    "release": "BLOCKED"
+  },
+  "prohibited_claims": [
+    "Do not label any historical recovery candidate RELEASE_AUTHORIZED retroactively",
+    "Do not use the current candidate as its own G6 baseline",
+    "Do not count the non-authorizing update rollback diagnostic as G6 or authorizing G7 PASS",
+    "Do not substitute hosted Windows execution for physical user-machine L5",
+    "Do not merge or publish while release is blocked"
+  ]
+}
