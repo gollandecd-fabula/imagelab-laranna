@@ -1,0 +1,168 @@
+name: ImageLab Historical Workflow Quarantine CI
+
+on:
+  pull_request:
+    branches:
+      - bootstrap/zero-trust-gate
+    paths:
+      - .github/workflows/bootstrap-windows-gate-rc11-execution.yml
+      - .github/workflows/bootstrap-windows-gate.yml
+      - .github/workflows/diagnostic-update-rollback-148-to-149.yml
+      - .github/workflows/rc12-windows-gate.yml
+      - .github/workflows/rc13-windows-gate.yml
+      - .github/workflows/recovery-pr-apply-rc12.yml
+      - .github/workflows/recovery-pr-apply-rc13.yml
+      - .github/workflows/recovery-promote-bootstrap-rc13.yml
+      - .github/workflows/imagelab-zero-trust-release.yml
+      - .github/workflows/historical-workflow-quarantine-ci.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  quarantine-contract:
+    name: Historical workflows quarantined; active gates preserved
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      - name: Verify workflow boundaries and YAML syntax
+        shell: python
+        run: |
+          import re
+          import subprocess
+          from pathlib import Path
+
+          def top_level_trigger_keys(text: str, name: str) -> set[str]:
+              lines = text.splitlines()
+              try:
+                  start = next(index for index, line in enumerate(lines) if line == "on:")
+              except StopIteration:
+                  raise AssertionError(f"top_level_on_mapping_missing:{name}")
+              keys: set[str] = set()
+              for line in lines[start + 1:]:
+                  stripped = line.strip()
+                  if not stripped or stripped.startswith("#"):
+                      continue
+                  indent = len(line) - len(line.lstrip(" "))
+                  if indent == 0:
+                      break
+                  if indent == 2:
+                      match = re.fullmatch(r"  ([A-Za-z0-9_-]+):(?:\s.*)?", line)
+                      if not match:
+                          raise AssertionError(f"unparseable_trigger_line:{name}:{line}")
+                      keys.add(match.group(1))
+              return keys
+
+          def require_valid_yaml(path: Path) -> list[str]:
+              result = subprocess.run(
+                  [
+                      "ruby",
+                      "-e",
+                      "require 'psych'; Psych.parse_file(ARGV.fetch(0)); puts 'PASS'",
+                      path.as_posix(),
+                  ],
+                  text=True,
+                  capture_output=True,
+                  timeout=30,
+              )
+              if result.returncode == 0:
+                  return []
+              return [f"yaml_syntax:{path.as_posix()}:{result.stderr.strip()}"]
+
+          def require_manual_only(path: Path, *, retired: bool) -> list[str]:
+              failures: list[str] = []
+              name = path.as_posix()
+              if not path.is_file():
+                  return [f"missing:{name}"]
+              failures.extend(require_valid_yaml(path))
+              text = path.read_text("utf-8")
+              try:
+                  triggers = top_level_trigger_keys(text, name)
+              except AssertionError as exc:
+                  failures.append(str(exc))
+                  triggers = set()
+              if triggers != {"workflow_dispatch"}:
+                  failures.append(f"trigger_set:{name}:{sorted(triggers)}")
+              if "contents: write" in text:
+                  failures.append(f"write_permission:{name}")
+              if retired and "RETIRED_WORKFLOW" not in text:
+                  failures.append(f"retirement_marker_missing:{name}")
+              if not retired and "RETIRED_WORKFLOW" in text:
+                  failures.append(f"active_workflow_marked_retired:{name}")
+              return failures
+
+          historical = tuple(
+              Path(name)
+              for name in (
+                  ".github/workflows/bootstrap-windows-gate-rc11-execution.yml",
+                  ".github/workflows/bootstrap-windows-gate.yml",
+                  ".github/workflows/diagnostic-update-rollback-148-to-149.yml",
+                  ".github/workflows/rc12-windows-gate.yml",
+                  ".github/workflows/recovery-pr-apply-rc12.yml",
+                  ".github/workflows/recovery-pr-apply-rc13.yml",
+                  ".github/workflows/recovery-promote-bootstrap-rc13.yml",
+              )
+          )
+          failures: list[str] = []
+          for path in historical:
+              failures.extend(require_manual_only(path, retired=True))
+
+          rc13_path = Path(".github/workflows/rc13-windows-gate.yml")
+          failures.extend(require_manual_only(rc13_path, retired=False))
+          if rc13_path.is_file():
+              rc13 = rc13_path.read_text("utf-8")
+              for token in (
+                  "EXPECTED_SOURCE_SHA256: '83bcfcc9e9d6dfaa29ef2827f3a967d9719cbff2650672b7d5d9d3eac1af4885'",
+                  "EXPECTED_APP_VERSION: '1.4.9-recovery-candidate'",
+                  "EXPECTED_BUILD_ID: 'REC-RT8-M6-20260724-06'",
+                  "b0:",
+                  "b1:",
+                  "b2:",
+                  "b3_b5:",
+                  "b8:",
+                  '"status": "RELEASE_BLOCKED"',
+              ):
+                  if token not in rc13:
+                      failures.append(f"current_rc13_contract_missing:{token}")
+
+          release_path = Path(".github/workflows/imagelab-zero-trust-release.yml")
+          failures.extend(require_manual_only(release_path, retired=False))
+          if release_path.is_file():
+              release = release_path.read_text("utf-8")
+              for token in (
+                  "baseline_release_tag:",
+                  "baseline_installer_sha256:",
+                  "baseline_authorization_record_sha256:",
+                  "defaults:",
+                  "working-directory: recovery/source",
+                  "source-gate:",
+                  "unit-matrix:",
+                  "unit-verdict:",
+                  "build-exact-candidate:",
+                  "clean-install-ui:",
+                  "update-rollback:",
+                  "independent-verification:",
+                  "final-verdict:",
+                  "prior_finalizer_record",
+                  "ImageLab-RELEASE-AUTHORIZATION.json",
+                  "recovery/source/aggregate/source",
+                  "recovery/source/aggregate/update",
+                  "recovery/source/authorized-release/",
+              ):
+                  if token not in release:
+                      failures.append(f"active_release_contract_missing:{token}")
+
+          source_copy = Path("recovery/source/.github/workflows/zero-trust-release.yml")
+          if not source_copy.is_file():
+              failures.append("source_zero_trust_gate_missing")
+          else:
+              failures.extend(require_valid_yaml(source_copy))
+
+          if failures:
+              raise SystemExit("\n".join(failures))
+          print(
+              f"PASS: {len(historical)} historical workflows are quarantined; "
+              "the exact RC13 gate and active root zero-trust release gate are manual-only, syntactically valid and preserved."
+          )

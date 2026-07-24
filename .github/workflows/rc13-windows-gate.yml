@@ -1,12 +1,8 @@
 name: ImageLab RC13 Windows Gate Execution
 
+# Current exact 1.4.9 hosted gate. Manual only: routine PR synchronization
+# must not rebuild or republish historical candidate artifacts automatically.
 on:
-  pull_request:
-    branches: [main]
-    paths:
-      - .github/workflows/rc13-windows-gate.yml
-      - bootstrap/imagelab-source.zip
-      - bootstrap/imagelab-source.sha256
   workflow_dispatch:
 
 permissions:
