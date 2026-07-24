@@ -42,8 +42,10 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
-      - name: Install exact application dependencies
-        run: python -m pip install --requirement requirements.txt
+      - name: Install exact application and test dependencies
+        run: |
+          python -m pip install --requirement requirements.txt
+          python -m pip install pytest==8.4.2 httpx==0.28.1
       - name: Run source gate
         run: python release_gate/source_gate.py --output evidence-zero-trust/source-gate.json
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
@@ -93,8 +95,10 @@ jobs:
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: '3.13.14'
-      - name: Install exact application dependencies
-        run: python -m pip install --requirement requirements.txt
+      - name: Install exact application and test dependencies
+        run: |
+          python -m pip install --requirement requirements.txt
+          python -m pip install pytest==8.4.2 httpx==0.28.1
       - name: Run one isolated test file and always write evidence
         run: >-
           python release_gate/run_unit_case.py
@@ -231,7 +235,7 @@ jobs:
           if ($files.Count -ne 1) { throw "Expected exactly one authorized baseline installer, found $($files.Count)" }
           $actual = (Get-FileHash -Algorithm SHA256 $files[0].FullName).Hash.ToLowerInvariant()
           if ($actual -ne $env:BASELINE_SHA256.ToLowerInvariant()) { throw "Baseline installer SHA-256 mismatch" }
-          @{schema=1;status='PASS';release_tag=$env:BASELINE_TAG;installer_sha256=$actual;name=$files[0].Name} | ConvertTo-Json | Set-Content baseline/baseline-verification.json -Encoding utf8
+          [ordered]@{schema=2;status='PASS';release_authorized=$true;authorization_source='github_release_asset';release_tag=$env:BASELINE_TAG;installer_sha256=$actual;name=$files[0].Name} | ConvertTo-Json | Set-Content baseline/baseline-verification.json -Encoding utf8
       - name: Update real previous version and inject post-promotion failure
         shell: pwsh
         run: |
