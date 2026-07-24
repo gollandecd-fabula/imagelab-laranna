@@ -7,6 +7,12 @@ on:
     paths:
       - .github/workflows/recovery-import-base.yml
       - bootstrap/imagelab-source.zip
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/recovery-import-base.yml
+      - bootstrap/imagelab-source.zip
   workflow_dispatch:
 
 permissions:
@@ -168,6 +174,7 @@ jobs:
           PY
 
       - name: Commit imported baseline tree
+        if: github.event_name == 'push'
         shell: bash
         run: |
           set -euo pipefail
