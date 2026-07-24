@@ -1,120 +1,18 @@
-name: Recovery Promote Bootstrap RC13
+name: RETIRED — Recovery Promote Bootstrap RC13
 
-# Historical one-time promotion. RC13 is already the exact bootstrap source;
-# automatic write access on every PR synchronization is no longer permitted.
 on:
   workflow_dispatch:
 
 permissions:
-  contents: write
-
-concurrency:
-  group: imagelab-promote-rc13
-  cancel-in-progress: false
-
-env:
-  EXACT_PYTHON_VERSION: '3.13.14'
-  EXPECTED_SOURCE_SHA256: '83bcfcc9e9d6dfaa29ef2827f3a967d9719cbff2650672b7d5d9d3eac1af4885'
-  EXPECTED_APP_VERSION: '1.4.9-recovery-candidate'
-  EXPECTED_BUILD_ID: 'REC-RT8-M6-20260724-06'
+  contents: read
 
 jobs:
-  verify-promote-commit:
+  retired:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
     steps:
-      - name: Checkout exact recovery branch
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
-        with:
-          ref: bootstrap/zero-trust-gate
-          fetch-depth: 0
-      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
-        with:
-          python-version: ${{ env.EXACT_PYTHON_VERSION }}
-      - name: Verify exact RC13 evidence and bundle
-        shell: bash
+      - name: Enforce retirement boundary
         run: |
-          set -euo pipefail
-          mkdir -p recovery/evidence/bootstrap-promotion-1.4.9
-          python - <<'PY'
-          import hashlib,json,os,zipfile
-          from pathlib import Path
-          identity={'version':os.environ['EXPECTED_APP_VERSION'],'build_id':os.environ['EXPECTED_BUILD_ID']}
-          expected_sha=os.environ['EXPECTED_SOURCE_SHA256']
-          bundle=Path('recovery/dist/ImageLab_by_LarannA_RECOVERY_1.4.9_SOURCE.zip')
-          manifest_path=Path('recovery/dist/source-manifest-1.4.9.json')
-          evidence_path=Path('recovery/evidence/recovery-increment-1.4.9.json')
-          failures=[]
-          for path,code in ((bundle,'BUNDLE_MISSING'),(manifest_path,'MANIFEST_MISSING'),(evidence_path,'EVIDENCE_MISSING')):
-              if not path.is_file(): failures.append(code)
-          actual_sha=hashlib.sha256(bundle.read_bytes()).hexdigest() if bundle.is_file() else None
-          manifest=json.loads(manifest_path.read_text('utf-8')) if manifest_path.is_file() else {}
-          evidence=json.loads(evidence_path.read_text('utf-8')) if evidence_path.is_file() else {}
-          if actual_sha!=expected_sha: failures.append('BUNDLE_SHA_MISMATCH')
-          if manifest.get('status')!='PASS' or manifest.get('identity')!=identity or manifest.get('sha256')!=expected_sha: failures.append('MANIFEST_MISMATCH')
-          if manifest.get('member_count')!=87 or manifest.get('members_sha256')!='b0c43a785c437bf649750a5541386b81b6436c160aad07a5aa6903265581e2fe': failures.append('MANIFEST_MEMBERS_MISMATCH')
-          if manifest.get('reproducible_builds')!=2 or manifest.get('builds_byte_identical') is not True: failures.append('MANIFEST_REPRODUCIBILITY_MISMATCH')
-          if evidence.get('status')!='PASS_SOURCE_RECOVERY_INCREMENT' or evidence.get('identity')!=identity: failures.append('EVIDENCE_IDENTITY_STATUS_MISMATCH')
-          if evidence.get('patch_sha256')!='f37b3757c40ba74f3b569869b0836a9b52f88040bb420de4bf9dd215ff37dccf': failures.append('PATCH_SHA_MISMATCH')
-          if evidence.get('checks')!={'full_pytest':'146/146 PASS','required_test_files':'26/26 PASS','compileall':'PASS','javascript_syntax':'PASS','backend_selftest':'PASS','source_zip_reproducibility':'2/2 BYTE_IDENTICAL'}: failures.append('CHECK_MATRIX_MISMATCH')
-          boundary=evidence.get('claim_boundary',{})
-          if boundary.get('source_recovery_increment')!='PASS' or boundary.get('release')!='BLOCKED': failures.append('CLAIM_BOUNDARY_MISMATCH')
-          members=[]; crc=None
-          if bundle.is_file():
-              with zipfile.ZipFile(bundle) as archive:
-                  crc=archive.testzip(); members=sorted(i.filename for i in archive.infolist())
-          members_sha=hashlib.sha256('\n'.join(members).encode()).hexdigest()
-          if crc is not None or len(members)!=87 or members_sha!='b0c43a785c437bf649750a5541386b81b6436c160aad07a5aa6903265581e2fe': failures.append('ZIP_INTEGRITY_MISMATCH')
-          result={'schema':1,'status':'PASS' if not failures else 'FAIL','mode':'RECOVERY_1.4.9_TO_BOOTSTRAP_PROMOTION','identity':identity,'bundle':{'expected_sha256':expected_sha,'actual_sha256':actual_sha,'member_count':len(members),'members_sha256':members_sha,'crc_failure':crc},'checks':evidence.get('checks',{}),'claim_boundary':boundary,'failures':failures}
-          Path('recovery/evidence/bootstrap-promotion-1.4.9/admission.json').write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n','utf-8')
-          print(json.dumps(result,ensure_ascii=False,indent=2))
-          raise SystemExit(0 if not failures else 1)
-          PY
-      - name: Promote exact source and execute B0
-        shell: bash
-        run: |
-          set -euo pipefail
-          cp recovery/dist/ImageLab_by_LarannA_RECOVERY_1.4.9_SOURCE.zip bootstrap/imagelab-source.zip
-          printf '%s  imagelab-source.zip\n' "$EXPECTED_SOURCE_SHA256" > bootstrap/imagelab-source.sha256
-          echo "$EXPECTED_SOURCE_SHA256  bootstrap/imagelab-source.zip" | sha256sum --check --strict
-          rm -rf recovery/evidence/bootstrap-promotion-1.4.9/source-tree
-          python bootstrap/verify_source_bundle.py \
-            --archive bootstrap/imagelab-source.zip \
-            --checksum bootstrap/imagelab-source.sha256 \
-            --output recovery/evidence/bootstrap-promotion-1.4.9/b0-source-bundle.json \
-            --extract-to recovery/evidence/bootstrap-promotion-1.4.9/source-tree \
-            --expected-sha256 "$EXPECTED_SOURCE_SHA256" \
-            --expected-version "$EXPECTED_APP_VERSION" \
-            --expected-build-id "$EXPECTED_BUILD_ID"
-          python - <<'PY'
-          import json
-          from pathlib import Path
-          result=json.loads(Path('recovery/evidence/bootstrap-promotion-1.4.9/b0-source-bundle.json').read_text('utf-8'))
-          assert result['status']=='PASS',result
-          assert result['observed']['actual_sha256']=='83bcfcc9e9d6dfaa29ef2827f3a967d9719cbff2650672b7d5d9d3eac1af4885'
-          assert result['extract_state']=='PUBLISHED_ATOMICALLY'
-          PY
-          rm -rf recovery/evidence/bootstrap-promotion-1.4.9/source-tree
-      - name: Commit exact promoted RC13 source
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name 'ImageLab Recovery Bot'
-          git config user.email 'actions@users.noreply.github.com'
-          git add bootstrap/imagelab-source.zip bootstrap/imagelab-source.sha256 recovery/evidence/bootstrap-promotion-1.4.9
-          if git diff --cached --quiet; then echo 'Exact RC13 source already promoted.'; exit 0; fi
-          git commit -m 'recovery: promote exact 1.4.9 source to bootstrap [recovery-bootstrap-149-output]'
-          for attempt in 1 2 3; do
-            if git push origin HEAD:bootstrap/zero-trust-gate; then exit 0; fi
-            if [ "$attempt" -eq 3 ]; then exit 1; fi
-            git fetch origin bootstrap/zero-trust-gate
-            git rebase origin/bootstrap/zero-trust-gate
-          done
-      - name: Upload promotion evidence
-        if: always()
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
-        with:
-          name: imagelab-recovery-1.4.9-bootstrap-promotion
-          path: recovery/evidence/bootstrap-promotion-1.4.9/
-          if-no-files-found: error
-          retention-days: 30
+          echo "RETIRED_WORKFLOW"
+          echo "RC13 exact source was already promoted to bootstrap/zero-trust-gate."
+          echo "This one-time workflow no longer has write permission and cannot modify the recovery branch."
+          exit 1
