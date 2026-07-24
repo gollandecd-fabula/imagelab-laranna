@@ -85,9 +85,15 @@ jobs:
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: ${{ env.EXACT_PYTHON_VERSION }}
-      - name: Install locked application dependencies
+      - name: Install locked application and exact test dependencies
         working-directory: source-tree
-        run: python -m pip install --requirement requirements.txt
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install \
+            --requirement requirements.txt \
+            pytest==9.0.2 \
+            httpx==0.28.1
       - name: Run mandatory source gate
         working-directory: source-tree
         run: python release_gate/source_gate.py --output evidence-bootstrap/source-gate.json
