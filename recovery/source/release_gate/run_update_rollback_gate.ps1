@@ -7,6 +7,34 @@ param(
 
 . "$PSScriptRoot\common.ps1"
 
+$script:CurrentStage = 'initialize'
+
+function Invoke-ImageLabRest {
+    param(
+        [Parameter(Mandatory=$true)][string]$Stage,
+        [Parameter(Mandatory=$true)][string]$Method,
+        [Parameter(Mandatory=$true)][string]$Uri,
+        [string]$ContentType,
+        [object]$Body,
+        [hashtable]$Form,
+        [hashtable]$Headers,
+        [int]$TimeoutSec = 30
+    )
+    $script:CurrentStage = $Stage
+    $arguments = @{ Method=$Method; Uri=$Uri; TimeoutSec=$TimeoutSec }
+    if ($ContentType) { $arguments.ContentType = $ContentType }
+    if ($null -ne $Body) { $arguments.Body = $Body }
+    if ($null -ne $Form) { $arguments.Form = $Form }
+    if ($null -ne $Headers) { $arguments.Headers = $Headers }
+    try {
+        return Invoke-RestMethod @arguments
+    } catch {
+        $detail = [string]$_.ErrorDetails.Message
+        if ([string]::IsNullOrWhiteSpace($detail)) { $detail = [string]$_.Exception.Message }
+        throw "$Stage failed: $detail"
+    }
+}
+
 function Get-BytesSha256 {
     param([Parameter(Mandatory=$true)][byte[]]$Bytes)
     $algorithm = [System.Security.Cryptography.SHA256]::Create()
@@ -47,7 +75,7 @@ function Get-ImageLabProjectInventory {
         [Parameter(Mandatory=$true)][string]$ProjectId
     )
 
-    $project = Invoke-RestMethod -Method Get -Uri "$BaseUrl/api/projects/$ProjectId" -TimeoutSec 30 -Headers @{ 'Cache-Control'='no-cache' }
+    $project = Invoke-ImageLabRest -Stage "inventory-project-$ProjectId" -Method Get -Uri "$BaseUrl/api/projects/$ProjectId" -TimeoutSec 30 -Headers @{ 'Cache-Control'='no-cache' }
     if ($project.id -ne $ProjectId) { throw "Project API returned wrong project ID: $ProjectId" }
 
     $projectPath = Join-Path $DataRoot "data\projects\$ProjectId.json"
@@ -130,7 +158,7 @@ function Get-ImageLabDataInventory {
         [Parameter(Mandatory=$true)][string]$DataRoot
     )
 
-    $listed = @(Invoke-RestMethod -Method Get -Uri "$BaseUrl/api/projects" -TimeoutSec 30 -Headers @{ 'Cache-Control'='no-cache' })
+    $listed = @(Invoke-ImageLabRest -Stage 'inventory-project-list' -Method Get -Uri "$BaseUrl/api/projects" -TimeoutSec 30 -Headers @{ 'Cache-Control'='no-cache' })
     $projects = @()
     foreach ($item in @($listed | Sort-Object id)) {
         $projects += Get-ImageLabProjectInventory -BaseUrl $BaseUrl -DataRoot $DataRoot -ProjectId ([string]$item.id)
@@ -172,6 +200,7 @@ if ($installerSha -ne $candidate.installer.sha256) { throw "Candidate installer 
 if ($baselineInstallerSha -eq $installerSha) { throw "Baseline and candidate installers must be different exact binaries" }
 
 try {
+    $script:CurrentStage = 'baseline-install'
     Stop-ImageLabProcesses
     $installDir = Get-ImageLabInstallDir
     $dataRoot = Join-Path $env:LOCALAPPDATA 'ImageLab by LarannA'
@@ -198,47 +227,47 @@ try {
         @{ id=$rasterProjectId; title=$rasterTitle }
     )) {
         $createBody = @{ title = $projectSpec.title } | ConvertTo-Json -Compress
-        Invoke-RestMethod -Method Post -Uri "$($firstHealth.Url)/api/projects/$($projectSpec.id)" -ContentType 'application/json' -Body $createBody -TimeoutSec 30 | Out-Null
+        Invoke-ImageLabRest -Stage "create-project-$($projectSpec.id)" -Method Post -Uri "$($firstHealth.Url)/api/projects/$($projectSpec.id)" -ContentType 'application/json' -Body $createBody -TimeoutSec 30 | Out-Null
     }
 
     $svgPreset = @{ name='SVG-CLEAN'; module='cleanup'; parameters=@{ remove_halo=$true; remove_background=$false } } | ConvertTo-Json -Depth 10 -Compress
-    Invoke-RestMethod -Method Put -Uri "$($firstHealth.Url)/api/projects/$svgProjectId/presets" -ContentType 'application/json' -Body $svgPreset -TimeoutSec 30 | Out-Null
+    Invoke-ImageLabRest -Stage 'set-svg-preset' -Method Put -Uri "$($firstHealth.Url)/api/projects/$svgProjectId/presets" -ContentType 'application/json' -Body $svgPreset -TimeoutSec 30 | Out-Null
     $rasterPreset = @{ name='PRINT-RESIZE'; module='geometry'; parameters=@{ width_mm=50.8; ppi=200; preserve_aspect=$true } } | ConvertTo-Json -Depth 10 -Compress
-    Invoke-RestMethod -Method Put -Uri "$($firstHealth.Url)/api/projects/$rasterProjectId/presets" -ContentType 'application/json' -Body $rasterPreset -TimeoutSec 30 | Out-Null
+    Invoke-ImageLabRest -Stage 'set-raster-preset' -Method Put -Uri "$($firstHealth.Url)/api/projects/$rasterProjectId/presets" -ContentType 'application/json' -Body $rasterPreset -TimeoutSec 30 | Out-Null
 
     $svgFixturePath = Join-Path $EvidenceDir 'update-project-fixture.svg'
     $fixtureSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="48" viewBox="0 0 64 48"><rect width="64" height="48" fill="#f2f2f2"/><circle cx="24" cy="24" r="14" fill="#222222"/><rect x="38" y="10" width="16" height="28" fill="#e14b2a"/></svg>'
     [System.IO.File]::WriteAllText($svgFixturePath, $fixtureSvg, [System.Text.UTF8Encoding]::new($false))
-    $svgUpload = Invoke-RestMethod -Method Post -Uri "$($firstHealth.Url)/api/projects/$svgProjectId/upload" -Form @{ files = Get-Item -LiteralPath $svgFixturePath } -TimeoutSec 60
+    $svgUpload = Invoke-ImageLabRest -Stage 'upload-svg' -Method Post -Uri "$($firstHealth.Url)/api/projects/$svgProjectId/upload" -Form @{ files = Get-Item -LiteralPath $svgFixturePath } -TimeoutSec 60
     $svgAssets = @($svgUpload.uploaded)
     if ($svgAssets.Count -ne 1) { throw "SVG project upload did not create exactly one asset" }
-    Invoke-RestMethod -Method Post -Uri "$($firstHealth.Url)/api/projects/$svgProjectId/active" -ContentType 'application/json' -Body (@{asset_id=$svgAssets[0].id} | ConvertTo-Json -Compress) -TimeoutSec 30 | Out-Null
+    Invoke-ImageLabRest -Stage 'activate-svg' -Method Post -Uri "$($firstHealth.Url)/api/projects/$svgProjectId/active" -ContentType 'application/json' -Body (@{asset_id=$svgAssets[0].id} | ConvertTo-Json -Compress) -TimeoutSec 30 | Out-Null
 
     $pngFixturePath = Join-Path $EvidenceDir 'update-raster-fixture.png'
     New-RasterFixture -Path $pngFixturePath
-    $rasterUpload = Invoke-RestMethod -Method Post -Uri "$($firstHealth.Url)/api/projects/$rasterProjectId/upload" -Form @{ files = Get-Item -LiteralPath $pngFixturePath } -TimeoutSec 60
+    $rasterUpload = Invoke-ImageLabRest -Stage 'upload-raster' -Method Post -Uri "$($firstHealth.Url)/api/projects/$rasterProjectId/upload" -Form @{ files = Get-Item -LiteralPath $pngFixturePath } -TimeoutSec 60
     $rasterAssets = @($rasterUpload.uploaded)
     if ($rasterAssets.Count -ne 1) { throw "Raster project upload did not create exactly one source asset" }
     $processBody = @{
         asset_id = [string]$rasterAssets[0].id
-        operation = 'enhance'
+        operation = 'geometry'
         parameters = @{
             width_mm = 50.8; ppi = 200; preserve_aspect = $true;
-            contrast = 1.0; saturation = 1.0; sharpness = 1.0; denoise = 0;
-            ai_auto = $false; learn_from_result = $false
+            ai_auto_crop = $false; learn_from_result = $false
         }
     } | ConvertTo-Json -Depth 10 -Compress
-    $processed = Invoke-RestMethod -Method Post -Uri "$($firstHealth.Url)/api/projects/$rasterProjectId/process" -ContentType 'application/json' -Body $processBody -TimeoutSec 120
+    $processed = Invoke-ImageLabRest -Stage 'process-raster-geometry' -Method Post -Uri "$($firstHealth.Url)/api/projects/$rasterProjectId/process" -ContentType 'application/json' -Body $processBody -TimeoutSec 120
     if (-not $processed.result.id -or $processed.result.source_asset_id -ne $rasterAssets[0].id) {
         throw "Raster derived history was not created with valid lineage"
     }
-    Invoke-RestMethod -Method Post -Uri "$($firstHealth.Url)/api/projects/$rasterProjectId/active" -ContentType 'application/json' -Body (@{asset_id=$processed.result.id} | ConvertTo-Json -Compress) -TimeoutSec 30 | Out-Null
+    Invoke-ImageLabRest -Stage 'activate-raster-result' -Method Post -Uri "$($firstHealth.Url)/api/projects/$rasterProjectId/active" -ContentType 'application/json' -Body (@{asset_id=$processed.result.id} | ConvertTo-Json -Compress) -TimeoutSec 30 | Out-Null
 
     $inventoryBefore = Get-ImageLabDataInventory -BaseUrl $firstHealth.Url -DataRoot $dataRoot
     if ($inventoryBefore.project_count -lt 3) { throw "Expected default plus two preservation projects" }
     if ($inventoryBefore.asset_count -lt 3) { throw "Expected SVG source, raster source and derived raster asset" }
     Write-Json $inventoryBefore (Join-Path $EvidenceDir 'inventory-before-update.json')
 
+    $script:CurrentStage = 'candidate-update-install'
     $secondExit = Invoke-Installer -InstallerPath $InstallerPath -EvidenceDir $EvidenceDir -Prefix 'update-install'
     if ($secondExit -ne 0) { throw "Update install failed: $secondExit" }
     $second = Get-ImageLabManifest
@@ -270,6 +299,7 @@ try {
         project_inventory_before=$inventoryBefore; project_inventory_after_update=$inventoryAfterUpdate
     }) (Join-Path $EvidenceDir 'update-test.json')
 
+    $script:CurrentStage = 'forced-failure-rollback'
     $faultExit = Invoke-Installer -InstallerPath $InstallerPath -EvidenceDir $EvidenceDir -Prefix 'fault-install' -Fault 'after_promotion'
     if ($faultExit -eq 0) { throw "Fault-injected installer unexpectedly succeeded" }
     $restored = Get-ImageLabManifest
@@ -296,11 +326,15 @@ try {
         project_inventory_before=$inventoryAfterUpdate; project_inventory_after_rollback=$inventoryAfterRollback
     }) (Join-Path $EvidenceDir 'rollback-test.json')
 } catch {
+    $failure = [ordered]@{
+        schema=3; status='FAIL'; installer_sha256=$installerSha;
+        stage=$script:CurrentStage; error=$_.Exception.Message
+    }
     if (-not (Test-Path (Join-Path $EvidenceDir 'update-test.json'))) {
-        Write-Json ([ordered]@{schema=3;status='FAIL';installer_sha256=$installerSha;error=$_.Exception.Message}) (Join-Path $EvidenceDir 'update-test.json')
+        Write-Json $failure (Join-Path $EvidenceDir 'update-test.json')
     }
     if (-not (Test-Path (Join-Path $EvidenceDir 'rollback-test.json'))) {
-        Write-Json ([ordered]@{schema=3;status='FAIL';installer_sha256=$installerSha;error=$_.Exception.Message}) (Join-Path $EvidenceDir 'rollback-test.json')
+        Write-Json $failure (Join-Path $EvidenceDir 'rollback-test.json')
     }
     throw
 }
