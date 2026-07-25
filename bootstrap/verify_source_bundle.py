@@ -86,7 +86,11 @@ def is_unsafe_member(member: zipfile.ZipInfo) -> bool:
     path = PurePosixPath(member.filename)
     parts = normalized_parts(member.filename)
     mode = member_mode(member)
-    special_mode = bool(mode) and not member.is_dir() and not stat.S_ISREG(mode)
+    file_type = stat.S_IFMT(mode)
+    # Python-created ZIP members commonly contain Unix permission bits without
+    # file-type bits. Type 0 is therefore "unspecified", not a special file.
+    # Explicit symlinks/devices/FIFOs/sockets remain fail-closed.
+    special_mode = file_type not in {0, stat.S_IFREG, stat.S_IFDIR}
     return (
         not parts
         or path.is_absolute()
