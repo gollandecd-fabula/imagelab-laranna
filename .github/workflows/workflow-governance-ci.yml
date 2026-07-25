@@ -1,0 +1,31 @@
+name: ImageLab Workflow Governance CI
+
+on:
+  pull_request:
+    branches:
+      - bootstrap/zero-trust-gate
+    paths:
+      - .github/workflows/**
+      - audit_tests/test_workflow_governance.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: imagelab-workflow-governance-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  governance:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.13.14'
+      - name: Install exact audit dependencies
+        run: python -m pip install pytest==8.4.2 PyYAML==6.0.2
+      - name: Run workflow governance contracts
+        run: python -m pytest audit_tests/test_workflow_governance.py -vv --tb=short
