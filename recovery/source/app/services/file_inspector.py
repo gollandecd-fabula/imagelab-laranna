@@ -15,7 +15,7 @@ from pathlib import Path
 from PIL import Image, ImageCms, ImageOps, UnidentifiedImageError
 
 from app.config import settings
-from app.models import AssetRecord, CheckItem
+from app.models import AssetRecord, CheckItem, sanitize_original_filename
 
 
 ALLOWED_RASTER_FORMATS = {"PNG", "JPEG", "WEBP", "TIFF", "BMP"}
@@ -322,7 +322,7 @@ def inspect_upload(data: bytes, original_name: str) -> AssetRecord:
 
     asset_id = uuid.uuid4().hex
     source_sha256 = hashlib.sha256(data).hexdigest()
-    safe_name = Path(original_name or "image").name[:255]
+    safe_name = sanitize_original_filename(original_name or "image")
     now = datetime.now(timezone.utc).isoformat()
 
     sniff = data[:4096].lstrip().lower()

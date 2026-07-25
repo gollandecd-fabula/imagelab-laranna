@@ -20,6 +20,7 @@ from app.models import (
     BatchProcessRequest,
     AIFeedbackRequest,
     CheckItem,
+    CleanupPipelineRequest,
     AIRollbackRequest,
     AITrainRequest,
     ExportRequest,
@@ -145,8 +146,18 @@ async def request_size_and_security_headers(request: Request, call_next):
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("Referrer-Policy", "no-referrer")
     response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault(
+        "Permissions-Policy",
+        "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
+    )
     if request.url.path == "/" or request.url.path.startswith("/static/"):
         response.headers["Cache-Control"] = "no-store"
+        response.headers.setdefault(
+            "Content-Security-Policy",
+            "default-src 'self'; img-src 'self' data: blob:; style-src 'self'; "
+            "script-src 'self'; connect-src 'self'; object-src 'none'; "
+            "frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+        )
     return response
 
 
@@ -364,7 +375,8 @@ def get_project(project_id: str) -> ProjectRecord:
     try:
         return store.get_or_create(project_id)
     except (ValueError, ProjectStoreError) as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        status = 404 if "не найден" in str(exc).lower() else 400
+        raise HTTPException(status_code=status, detail=str(exc)) from exc
 
 
 @app.post("/api/projects/{project_id}/active", response_model=ProjectRecord)
@@ -507,6 +519,84 @@ def process_project_asset(project_id: str, request: ProcessRequest) -> ProcessRe
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except (ValueError, ProjectStoreError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/projects/{project_id}/cleanup-pipeline")
+def cleanup_project_asset_pipeline(
+    project_id: str, request: CleanupPipelineRequest
+) -> dict[str, object]:
+    """Run the visible two-step cleanup as one project transaction.
+
+    Generated files may be staged on disk while processing, but no project record
+    or active-asset state is committed until every requested stage succeeds.
+    """
+
+    created: list = []
+    reports: list[dict[str, object]] = []
+    stage_results: list = []
+    try:
+        project = store.get(project_id)
+        source = next(
+            (item for item in project.assets if item.id == request.asset_id), None
+        )
+        if source is None:
+            raise HTTPException(
+                status_code=404, detail="Исходный файл не найден в проекте"
+            )
+        current = source
+        stages: list[tuple[str, dict[str, Any]]] = []
+        if request.remove_background:
+            stages.append(("background", request.background_parameters))
+        if request.run_cleanup:
+            stages.append(("cleanup", request.cleanup_parameters))
+        if not stages:
+            raise HTTPException(
+                status_code=422, detail="Не выбрано ни одного действия очистки"
+            )
+
+        for operation, parameters in stages:
+            result, attempts, repair = run_processing_with_repair(
+                current, operation, parameters
+            )
+            ordered = [item for item in attempts if item.id != result.id] + [result]
+            created.extend(ordered)
+            stage_results.append(result)
+            reports.append({"operation": operation, **repair})
+            current = result
+
+        project = store.commit_assets_existing(
+            project_id, created, active_asset_id=current.id
+        )
+        learning = (
+            record_continual_learning(created, "cleanup")
+            if any(
+                bool(parameters.get("learn_from_result", True))
+                for _, parameters in stages
+            )
+            else {"module": "cleanup", "status": "disabled_for_request"}
+        )
+        return {
+            "project": project.model_dump(),
+            "source_asset_id": source.id,
+            "result": current.model_dump(),
+            "stage_results": [item.model_dump() for item in stage_results],
+            "repairs": reports,
+            "learning": learning,
+            "atomic": True,
+        }
+    except HTTPException:
+        for item in created:
+            _remove_asset_files(item)
+        raise
+    except (ProcessingError, AIModelError) as exc:
+        for item in created:
+            _remove_asset_files(item)
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (ValueError, ProjectStoreError) as exc:
+        for item in created:
+            _remove_asset_files(item)
+        status = 404 if "не найден" in str(exc).lower() else 400
+        raise HTTPException(status_code=status, detail=str(exc)) from exc
 
 
 @app.post("/api/projects/{project_id}/batch-process")

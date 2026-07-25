@@ -15,6 +15,7 @@ const state = {
   selectionTool: 'brush',
   selectionEdits: [],
   selectionDraft: null,
+  selectionAssetId: null,
   halftonePreview: 'transparent',
   activeSelectionEpoch: 0,
   pendingSelectionId: null,
@@ -112,12 +113,16 @@ async function storeAIFeedback(accepted) {
   catch(error){toast(error.message,true);} finally { setBusy(false); }
 }
 async function trainAIModule() {
-  const module=feedbackModuleMap[state.module] || 'upload'; setBusy(true);
+  const module=feedbackModuleMap[state.module] || 'upload';
+  if (!confirm(`Обучить кандидат модели для модуля «${module}» и активировать его только при прохождении benchmark?`)) return;
+  setBusy(true);
   try { const result=await api('/api/ai/train',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({module})}); $('#aiExplanation').textContent=JSON.stringify(result,null,2); toast(result.status==='promoted'?'Модель прошла benchmark и активирована':'Кандидат не активирован',result.status!=='promoted'); }
   catch(error){toast(error.message,true);} finally{setBusy(false);}
 }
 async function rollbackAIModule() {
-  const module=feedbackModuleMap[state.module] || 'upload'; setBusy(true);
+  const module=feedbackModuleMap[state.module] || 'upload';
+  if (!confirm(`Откатить активную AI-модель модуля «${module}» к предыдущей версии?`)) return;
+  setBusy(true);
   try { const result=await api('/api/ai/rollback',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({module})}); $('#aiExplanation').textContent=JSON.stringify(result,null,2); toast('Предыдущая модель восстановлена'); }
   catch(error){toast(error.message,true);} finally{setBusy(false);}
 }
@@ -125,13 +130,22 @@ async function rollbackAIModule() {
 async function api(url, options = {}) {
   const response = await fetch(url, {cache:'no-store', ...options});
   const contentType = response.headers.get('content-type') || '';
-  const payload = contentType.includes('application/json') ? await response.json() : await response.text();
-  if (!response.ok) throw new Error(payload?.detail || payload || 'Ошибка запроса');
+  let payload;
+  try {
+    payload = contentType.includes('application/json') ? await response.json() : await response.text();
+  } catch (error) {
+    throw new Error(`Сервер вернул повреждённый ответ (${response.status})`);
+  }
+  if (!response.ok) throw new Error(payload?.detail || payload || `Ошибка запроса (${response.status})`);
   return payload;
 }
 function number(selector, fallback = 0) {
   const node = $(selector); const value = Number.parseFloat(node?.value);
   return Number.isFinite(value) ? value : fallback;
+}
+function effectiveAutoRepair() {
+  if (state.operationMode === 'fast' || state.operationMode === 'check-only') return false;
+  return $('#globalAutoRepair')?.checked ?? true;
 }
 function fmtBytes(bytes) {
   if (!Number.isFinite(bytes)) return '—';
@@ -146,12 +160,14 @@ function toast(message, error = false) {
 function selectedAsset() { return state.project?.assets?.find((asset) => asset.id === state.selectedId) || null; }
 function sourceAsset(asset) { return asset?.source_asset_id ? state.project?.assets?.find((item) => item.id === asset.source_asset_id) : null; }
 function requireAsset() { const asset = selectedAsset(); if (!asset) toast('Сначала загрузите или выберите файл', true); return asset; }
+function resetSelectionState(assetId = null) { state.selectionEdits = []; state.selectionDraft = null; state.selectionAssetId = assetId; }
 function setBusy(flag) {
   state.busy = flag;
-  $('#busyOverlay').classList.toggle('show', flag);
+  $('#busyOverlay').classList.toggle('show', flag); $('#busyOverlay').setAttribute('aria-hidden', flag ? 'false' : 'true');
   document.body.setAttribute('aria-busy', flag ? 'true' : 'false');
   const ids = ['refreshButton','chooseButton','clearButton','applyEnhance','applyReconstruct','applyExtractPrint','applySelection','applyCleanup','applyHalftone','applyVectorize','applyGeometry','applyExport','runQaButton','runReportButton','aiAnalyzeSelected','aiExplainSelected','aiAccept','aiReject','aiTrainButton','aiRollbackButton'];
   ids.forEach((id) => { const node = document.getElementById(id); if (node) node.disabled = flag; });
+  ['bundleButton','cardlabButton'].forEach((id) => { const node=document.getElementById(id); if(node){ node.setAttribute('aria-disabled', flag ? 'true' : 'false'); node.classList.toggle('disabled-link', flag); } });
   if (!flag) {
     syncLocks();
     if (state.pendingSelectionId) {
@@ -168,6 +184,8 @@ function syncLocks() {
     const node = document.getElementById(id); if (node) node.disabled = !hasAsset;
   });
   $('#bundleButton').href = `/api/projects/${PROJECT_ID}/bundle`;
+  const bundle=$('#bundleButton'); bundle.setAttribute('aria-disabled', hasAssets && !state.busy ? 'false' : 'true'); bundle.classList.toggle('disabled-link', !hasAssets || state.busy);
+  const cardlab=$('#cardlabButton'); cardlab.setAttribute('aria-disabled', hasAsset && !state.busy ? 'false' : 'true'); cardlab.classList.toggle('disabled-link', !hasAsset || state.busy);
 }
 function activateModule(module) {
   state.module = module;
@@ -236,10 +254,10 @@ function setupSelectionCanvas(canvas) {
   const image = canvas.previousElementSibling; if (!image) return;
   canvas.width = image.naturalWidth || selectedAsset()?.width_px || 1; canvas.height = image.naturalHeight || selectedAsset()?.height_px || 1;
   canvas.style.pointerEvents = state.module === 'selection' ? 'auto' : 'none'; drawSelectionOverlay();
-  const normalized = (event) => { const rect=canvas.getBoundingClientRect(); return [Math.min(1,Math.max(0,(event.clientX-rect.left)/rect.width)),Math.min(1,Math.max(0,(event.clientY-rect.top)/rect.height))]; };
+  const normalized = (event) => { const rect=canvas.getBoundingClientRect(); if(!rect.width || !rect.height) return [0,0]; return [Math.min(1,Math.max(0,(event.clientX-rect.left)/rect.width)),Math.min(1,Math.max(0,(event.clientY-rect.top)/rect.height))]; };
   canvas.onpointerdown = (event) => { if(state.module!=='selection')return; canvas.setPointerCapture(event.pointerId); const p=normalized(event); state.selectionDraft={tool:state.selectionTool,points:[p]}; drawSelectionOverlay(); };
   canvas.onpointermove = (event) => { if(!state.selectionDraft)return; const p=normalized(event); if(state.selectionTool==='rectangle') state.selectionDraft.points=[state.selectionDraft.points[0],p]; else state.selectionDraft.points.push(p); drawSelectionOverlay(); };
-  const finish = (event) => { if(!state.selectionDraft)return; if(state.selectionDraft.tool==='lasso' && state.selectionDraft.points.length<3){state.selectionDraft=null;drawSelectionOverlay();return;} if(state.selectionDraft.tool==='rectangle' && state.selectionDraft.points.length<2){state.selectionDraft=null;drawSelectionOverlay();return;} state.selectionEdits.push(state.selectionDraft); state.selectionDraft=null; drawSelectionOverlay(); };
+  const finish = (event) => { if(canvas.hasPointerCapture?.(event.pointerId)) canvas.releasePointerCapture(event.pointerId); if(!state.selectionDraft)return; if(state.selectionDraft.tool==='lasso' && state.selectionDraft.points.length<3){state.selectionDraft=null;drawSelectionOverlay();return;} if(state.selectionDraft.tool==='rectangle' && state.selectionDraft.points.length<2){state.selectionDraft=null;drawSelectionOverlay();return;} state.selectionEdits.push(state.selectionDraft); state.selectionDraft=null; drawSelectionOverlay(); };
   canvas.onpointerup=finish; canvas.onpointercancel=finish;
 }
 function bindRanges() {
@@ -312,10 +330,12 @@ function renderResultEvidence(asset) {
 function renderPreview() {
   const asset = selectedAsset(); const stage = $('#previewStage'); stage.replaceChildren();
   if (!asset) {
+    resetSelectionState(null);
     stage.innerHTML = '<div class="empty-preview"><span>IL</span><p>Загрузите изображение</p></div>';
     $('#previewTitle').textContent = 'Предпросмотр'; $('#previewOperation').textContent = 'Исходный файл'; $('#previewDimensions').textContent = 'Размер не указан'; $('#previewFormat').textContent = '—';
     renderMetadata(null); renderChecks([]); renderResultEvidence(null); state.aiAnalysis=null; renderAI(null); $('#activeInputName').textContent='Файл не выбран'; $('#activeInputLineage').textContent='—'; return;
   }
+  if (state.selectionAssetId !== asset.id) resetSelectionState(asset.id);
   const previewUrl = `${asset.preview_url}?sha=${encodeURIComponent(asset.sha256 || asset.id)}`;
   if (asset.format === 'SVG') {
     const wrap=document.createElement('div'); wrap.className='preview-image-wrap';
@@ -381,7 +401,7 @@ async function processSelected(operation, parameters, message) {
   if (await divertCheckOnly(operationNames[operation] || operation)) return null;
   const asset = requireAsset(); if (!asset || state.busy) return null; setBusy(true);
   try {
-    const result = await api(`/api/projects/${PROJECT_ID}/process`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({asset_id:asset.id,operation,parameters:{...parameters,auto_repair:$('#globalAutoRepair')?.checked ?? true}})});
+    const result = await api(`/api/projects/${PROJECT_ID}/process`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({asset_id:asset.id,operation,parameters:{...parameters,auto_repair:effectiveAutoRepair()}})});
     if (result.source_asset_id !== asset.id) throw new Error('Сервер обработал не выбранный файл; операция заблокирована');
     state.project = result.project;
     state.selectedId = result.result.id;
@@ -400,25 +420,31 @@ async function processSelected(operation, parameters, message) {
 }
 async function applyCleanupFlow() {
   if (await divertCheckOnly('Очистка')) return;
-  const asset = requireAsset(); if (!asset || state.busy) return; setBusy(true);
+  const asset = requireAsset(); if (!asset || state.busy) return;
+  const removeBackground = $('#removeBackground').checked;
+  const runCleanup = $('#removeHalo').checked || $('#removeColor').checked || $('#cleanupDefects').checked;
+  if (!removeBackground && !runCleanup) { toast('Выберите хотя бы одно действие очистки', true); return; }
+  setBusy(true);
   try {
-    let currentId = asset.id; let project = state.project; const reports=[];
-    const autoRepair=$('#globalAutoRepair')?.checked ?? true;
-    if ($('#removeBackground').checked) {
-      const response = await api(`/api/projects/${PROJECT_ID}/process`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({asset_id:currentId,operation:'background',parameters:{action:'remove',mode:'object',feather:number('#backgroundFeather',2),ai_auto:$('#cleanupAiAuto').checked,auto_repair:autoRepair}})});
-      project = response.project; currentId = response.result.id; if(response.repair) reports.push(response.repair);
-    }
-    if ($('#removeHalo').checked || $('#removeColor').checked || $('#cleanupDefects').checked) {
-      const response = await api(`/api/projects/${PROJECT_ID}/process`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({asset_id:currentId,operation:'cleanup',parameters:{remove_halo:$('#removeHalo').checked,remove_color:$('#removeColor').checked,target_color:$('#cleanupColor').value,tolerance:number('#cleanupTolerance',18),defect_cleanup:$('#cleanupDefects').checked?35:0,binary_alpha:$('#cleanupBinaryAlpha').checked,alpha_threshold:128,ai_auto:$('#cleanupAiAuto').checked,auto_repair:autoRepair}})});
-      project = response.project; currentId = response.result.id; if(response.repair) reports.push(response.repair);
-    }
-    state.project = project; state.selectedId = currentId; renderProject();
-    const failed=reports.some((item)=>item.passed===false); const retries=reports.reduce((sum,item)=>sum+Math.max(0,(item.attempt_count||1)-1),0);
-    $('#aiExplanation').textContent=JSON.stringify({cleanup_pipeline:reports},null,2);
-    toast(`Очистка применена${retries?` · автоисправлений: ${retries}`:''}${failed?' · качество не прошло gate':''}`,failed);
+    const autoRepair=effectiveAutoRepair();
+    const response = await api(`/api/projects/${PROJECT_ID}/cleanup-pipeline`, {
+      method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({
+        asset_id:asset.id,
+        remove_background:removeBackground,
+        background_parameters:{action:'remove',mode:'object',feather:number('#backgroundFeather',2),ai_auto:$('#cleanupAiAuto').checked,auto_repair:autoRepair},
+        run_cleanup:runCleanup,
+        cleanup_parameters:{remove_halo:$('#removeHalo').checked,remove_color:$('#removeColor').checked,target_color:$('#cleanupColor').value,tolerance:number('#cleanupTolerance',18),defect_cleanup:$('#cleanupDefects').checked?35:0,binary_alpha:$('#cleanupBinaryAlpha').checked,alpha_threshold:128,ai_auto:$('#cleanupAiAuto').checked,auto_repair:autoRepair}
+      })
+    });
+    if (response.source_asset_id !== asset.id || response.atomic !== true) throw new Error('Сервер не подтвердил атомарную очистку выбранного файла');
+    state.project = response.project; state.selectedId = response.result.id; renderProject();
+    const reports=response.repairs||[]; const failed=reports.some((item)=>item.passed===false); const retries=reports.reduce((sum,item)=>sum+Math.max(0,(item.attempt_count||1)-1),0);
+    $('#aiExplanation').textContent=JSON.stringify({cleanup_pipeline:reports,atomic:true},null,2);
+    toast(`Очистка применена атомарно${retries?` · автоисправлений: ${retries}`:''}${failed?' · качество не прошло gate':''}`,failed);
   } catch (error) { toast(error.message, true); }
   finally { setBusy(false); }
 }
+
 async function exportSelected() {
   if (await divertCheckOnly('Экспорт')) return;
   const asset = requireAsset(); if (!asset || state.busy) return; setBusy(true);
@@ -465,7 +491,7 @@ $('#applyExtractPrint').addEventListener('click',()=>{
 
 $$('[data-selection-mode]').forEach((button)=>button.addEventListener('click',()=>{ state.selectionMode=button.dataset.selectionMode; $$('[data-selection-mode]').forEach((item)=>item.classList.toggle('active',item===button)); }));
 $$('[data-selection-tool]').forEach((button)=>button.addEventListener('click',()=>{ state.selectionTool=button.dataset.selectionTool; $$('[data-selection-tool]').forEach((item)=>item.classList.toggle('active',item===button)); }));
-$('#clearSelectionEdits').addEventListener('click',()=>{state.selectionEdits=[];state.selectionDraft=null;drawSelectionOverlay();});
+$('#clearSelectionEdits').addEventListener('click',()=>{resetSelectionState(selectedAsset()?.id || null);drawSelectionOverlay();});
 $('#applySelection').addEventListener('click',()=>processSelected('select',{mode:state.selectionMode,grow_mm:number('#selectionGrowMm'),brush_mm:number('#selectionBrushMm',5),feather:number('#selectionFeather'),ai_auto:$('#selectionAiAuto').checked,manual_edits:state.selectionEdits},'Выделение сохранено'));
 $('#applyCleanup').addEventListener('click',applyCleanupFlow);
 
@@ -484,8 +510,16 @@ $('#masterCleanButton').addEventListener('click',()=>processSelected('master_cle
 $('#masterCardButton').addEventListener('click',()=>processSelected('master_card',{width_mm:300,height_mm:400,ppi:300},'Card Master создан'));
 $('#masterDtfButton').addEventListener('click',()=>processSelected('master_dtf',{},'DTF Master создан'));
 $('#logoPrepareButton').addEventListener('click',()=>processSelected('logo',{remove_background:true,color_mode:'black',binary_alpha:false},'Логотип подготовлен'));
-$('#cardlabButton').addEventListener('click',(event)=>{ const asset=selectedAsset(); if(!asset){event.preventDefault();toast('Выберите файл',true);return;} event.currentTarget.href=`/api/projects/${PROJECT_ID}/cardlab-package?asset_id=${encodeURIComponent(asset.id)}`; });
-$('#globalOperationMode').addEventListener('change',(event)=>{ state.operationMode=event.target.value; const checkOnly=state.operationMode==='check-only'; $('#globalAutoRepair').disabled=checkOnly; toast(checkOnly?'Включён режим «Только проверка»':'Режим: '+event.target.options[event.target.selectedIndex].text); });
+$('#cardlabButton').addEventListener('click',(event)=>{ if(state.busy){event.preventDefault();return;} const asset=selectedAsset(); if(!asset){event.preventDefault();toast('Выберите файл',true);return;} event.currentTarget.href=`/api/projects/${PROJECT_ID}/cardlab-package?asset_id=${encodeURIComponent(asset.id)}`; });
+$('#bundleButton').addEventListener('click',(event)=>{if(state.busy || !state.project?.assets?.length)event.preventDefault();});
+$('#globalOperationMode').addEventListener('change',(event)=>{
+  state.operationMode=event.target.value;
+  const checkOnly=state.operationMode==='check-only'; const fast=state.operationMode==='fast'; const auto=state.operationMode==='autoparams';
+  $('#globalAutoRepair').disabled=checkOnly || fast;
+  if(auto) $$('input[id$="AiAuto"],#geometryAiCrop,#exportAiAuto').forEach((input)=>{input.checked=true;});
+  const message=checkOnly?'Включён режим «Только проверка»':fast?'Быстрый режим: повторные автоисправления отключены':auto?'AI-автопараметры включены; числовые ограничения сохраняются':'Профессиональный режим';
+  toast(message); syncLocks();
+});
 
 
 $$('[data-ai-analyze]').forEach((button)=>button.addEventListener('click',()=>analyzeSelectedAI(button.dataset.aiAnalyze)));

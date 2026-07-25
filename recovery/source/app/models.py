@@ -1,13 +1,32 @@
 from __future__ import annotations
 
 import math
+import re
 from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
 
+_CONTROL_CHARACTERS = re.compile(r"[\x00-\x1f\x7f]")
 _WINDOWS_RESERVED_PROJECT_IDS = {"CON", "PRN", "AUX", "NUL", *{f"COM{i}" for i in range(1, 10)}, *{f"LPT{i}" for i in range(1, 10)}}
+
+
+def sanitize_original_filename(value: str) -> str:
+    """Return one display/download filename without path or header control data."""
+    raw = str(value or "").replace("\\", "/")
+    name = raw.rsplit("/", 1)[-1].strip()
+    if not name or name in {".", ".."} or len(name) > 255:
+        raise ValueError("Некорректное имя исходного файла")
+    if _CONTROL_CHARACTERS.search(name):
+        raise ValueError("Имя исходного файла содержит управляющие символы")
+    return name
+
+
+def validate_asset_identifier(value: str, *, label: str = "файла") -> str:
+    if not value.isalnum() or not (8 <= len(value) <= 64):
+        raise ValueError(f"Некорректный идентификатор {label}")
+    return value
 
 
 def validate_project_identifier(value: str) -> str:
@@ -59,9 +78,7 @@ class AssetRecord(BaseModel):
     def validate_asset_id(cls, value: str | None) -> str | None:
         if value is None:
             return value
-        if not value.isalnum() or not (8 <= len(value) <= 64):
-            raise ValueError("Некорректный идентификатор файла")
-        return value
+        return validate_asset_identifier(value)
 
     @field_validator("stored_name", "preview_name")
     @classmethod
@@ -73,10 +90,7 @@ class AssetRecord(BaseModel):
     @field_validator("original_name")
     @classmethod
     def validate_original_name(cls, value: str) -> str:
-        name = Path(value or "image").name
-        if not name or len(name) > 255:
-            raise ValueError("Некорректное имя исходного файла")
-        return name
+        return sanitize_original_filename(value)
 
     @field_validator("sha256")
     @classmethod
@@ -176,8 +190,7 @@ class BatchProcessRequest(BaseModel):
         if len(set(values)) != len(values):
             raise ValueError("Пакет содержит повторяющиеся файлы")
         for value in values:
-            if not value.isalnum() or not (8 <= len(value) <= 64):
-                raise ValueError("Некорректный идентификатор файла")
+            validate_asset_identifier(value)
         return values
 
     @field_validator("operation")
@@ -196,9 +209,7 @@ class ActiveAssetRequest(BaseModel):
     @field_validator("asset_id")
     @classmethod
     def validate_active_asset_id(cls, value: str) -> str:
-        if not value.isalnum() or not (8 <= len(value) <= 64):
-            raise ValueError("Некорректный идентификатор активного файла")
-        return value
+        return validate_asset_identifier(value, label="активного файла")
 
 
 class UploadResponse(BaseModel):
@@ -211,6 +222,11 @@ class ProcessRequest(BaseModel):
     operation: str
     parameters: dict[str, Any] = Field(default_factory=dict)
 
+    @field_validator("asset_id")
+    @classmethod
+    def validate_asset_id(cls, value: str) -> str:
+        return validate_asset_identifier(value)
+
     @field_validator("operation")
     @classmethod
     def validate_operation(cls, value: str) -> str:
@@ -218,6 +234,19 @@ class ProcessRequest(BaseModel):
         if not value or len(value) > 64:
             raise ValueError("Некорректная операция")
         return value
+
+
+class CleanupPipelineRequest(BaseModel):
+    asset_id: str
+    remove_background: bool = True
+    background_parameters: dict[str, Any] = Field(default_factory=dict)
+    run_cleanup: bool = True
+    cleanup_parameters: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("asset_id")
+    @classmethod
+    def validate_asset_id(cls, value: str) -> str:
+        return validate_asset_identifier(value)
 
 
 class ProcessResponse(BaseModel):
@@ -233,6 +262,19 @@ class ExportRequest(BaseModel):
     asset_id: str
     format: str
     parameters: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("asset_id")
+    @classmethod
+    def validate_asset_id(cls, value: str) -> str:
+        return validate_asset_identifier(value)
+
+    @field_validator("format")
+    @classmethod
+    def validate_format(cls, value: str) -> str:
+        normalized = value.strip().upper()
+        if normalized not in {"PNG", "PNG_DTF", "JPG", "WEBP", "SVG"}:
+            raise ValueError("Неподдерживаемый формат экспорта")
+        return normalized
 
 
 class ExportResponse(BaseModel):

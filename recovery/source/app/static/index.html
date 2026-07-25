@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ImageLab by LarannA</title>
-  <link rel="stylesheet" href="/static/styles.css?v=1.4.5-recovery">
+  <link rel="stylesheet" href="/static/styles.css?v=1.4.9-recovery-candidate">
 </head>
 <body>
   <header class="topbar">
@@ -12,7 +12,7 @@
     <div class="project-chip">Проект: <strong id="projectName">TS-001</strong></div><div class="ai-health-chip" id="aiHealthChip"><span></span><strong>AI</strong><em id="aiHealthText">проверка…</em></div>
       <div class="build-version-chip" id="buildVersionChip" title="Версия фактически запущенного сервера">версия: проверка…</div>
     <div class="top-spacer"></div>
-    <label class="top-mode">Режим<select id="globalOperationMode"><option value="fast">Быстро</option><option value="professional" selected>Профессионально</option><option value="autoparams">Автопараметры</option><option value="check-only">Только проверка</option></select></label>
+    <label class="top-mode">Режим<select id="globalOperationMode"><option value="fast">Быстро (без повторных автоисправлений)</option><option value="professional" selected>Профессионально</option><option value="autoparams">Автопараметры AI</option><option value="check-only">Только проверка</option></select></label>
     <label class="top-auto-repair"><input id="globalAutoRepair" type="checkbox" checked> AI автоисправление</label>
     <button class="icon-button" id="refreshButton" type="button" title="Обновить проект">↻</button>
     <button class="primary-button compact" id="downloadButton" type="button" disabled>Экспорт</button>
@@ -182,8 +182,8 @@
           <button class="secondary-button wide" id="masterCardButton" type="button">Card Master</button>
           <button class="secondary-button wide" id="masterDtfButton" type="button">DTF Master</button>
           <button class="secondary-button wide" id="logoPrepareButton" type="button">Подготовить логотип</button>
-          <a class="secondary-button wide link-button" id="bundleButton" href="#">ZIP проекта</a>
-          <a class="secondary-button wide link-button" id="cardlabButton" href="#">Пакет CardLab выбранного файла</a>
+          <a class="secondary-button wide link-button" id="bundleButton" href="#" aria-disabled="true">ZIP проекта</a>
+          <a class="secondary-button wide link-button" id="cardlabButton" href="#" aria-disabled="true">Пакет CardLab выбранного файла</a>
         </div>
       </section>
 
@@ -216,8 +216,8 @@
     </aside>
   </div>
 
-  <div class="toast" id="toast"></div>
-  <div class="busy-overlay" id="busyOverlay"><div class="spinner"></div><strong>Обработка…</strong></div>
-  <script src="/static/app.js?v=1.4.5-recovery"></script>
+  <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+  <div class="busy-overlay" id="busyOverlay" role="status" aria-live="polite" aria-hidden="true"><div class="spinner"></div><strong>Обработка…</strong></div>
+  <script src="/static/app.js?v=1.4.9-recovery-candidate"></script>
 </body>
 </html>

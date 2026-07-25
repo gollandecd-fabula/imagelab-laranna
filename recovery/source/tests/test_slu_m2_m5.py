@@ -88,8 +88,9 @@ def test_processing_records_objective_learning_without_overwriting_source() -> N
 
 def test_cleanup_pipeline_contract_has_auto_repair_controls_in_ui() -> None:
     js = (settings.static_dir / "app.js").read_text("utf-8")
-    assert "operation:'background'" in js and "auto_repair:autoRepair" in js
-    assert "operation:'cleanup'" in js and js.count("auto_repair:autoRepair") >= 2
+    assert "/cleanup-pipeline" in js
+    assert "background_parameters" in js and "auto_repair:autoRepair" in js
+    assert "cleanup_parameters" in js and "response.atomic !== true" in js
     assert "quality not" not in js.lower()
 
 
