@@ -1,6 +1,13 @@
 name: ImageLab Bootstrap Verifier Contract
 
 on:
+  pull_request:
+    branches:
+      - bootstrap/zero-trust-gate
+    paths:
+      - bootstrap/verify_source_bundle.py
+      - bootstrap/test_verify_source_bundle.py
+      - .github/workflows/bootstrap-verifier-contract.yml
   push:
     branches:
       - bootstrap/zero-trust-gate
@@ -14,7 +21,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: imagelab-bootstrap-verifier-contract
+  group: imagelab-bootstrap-verifier-contract-${{ github.ref }}
   cancel-in-progress: false
 
 env:
@@ -41,14 +48,26 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           import hashlib
+          import importlib.util
           import json
+          import unittest
+
+          module_path = Path('bootstrap/test_verify_source_bundle.py')
+          spec = importlib.util.spec_from_file_location('bootstrap_verifier_tests', module_path)
+          if spec is None or spec.loader is None:
+              raise SystemExit('unable to load verifier tests')
+          module = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+          test_count = unittest.defaultTestLoader.loadTestsFromModule(module).countTestCases()
+          if test_count < 8:
+              raise SystemExit(f'verifier coverage unexpectedly low: {test_count}')
 
           log = Path('verifier-contract-evidence/unittest.log')
           payload = {
-              'schema': 1,
+              'schema': 2,
               'status': 'PASS',
-              'test_file': 'bootstrap/test_verify_source_bundle.py',
-              'test_count': 5,
+              'test_file': module_path.as_posix(),
+              'test_count': test_count,
               'python': '3.13.14',
               'log_sha256': hashlib.sha256(log.read_bytes()).hexdigest(),
           }
@@ -63,4 +82,4 @@ jobs:
           name: ImageLab-bootstrap-verifier-contract
           path: verifier-contract-evidence/
           retention-days: 30
-          if-no-files-found: warn
+          if-no-files-found: error
