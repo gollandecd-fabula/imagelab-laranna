@@ -11,6 +11,8 @@ on:
       - recovery/source/release_gate/finalize_gate.py
       - recovery/source/release_gate/finalize_unit_matrix.py
       - recovery/source/release_gate/run_update_rollback_gate.ps1
+      - recovery/source/windows_installer/installer/main.go
+      - recovery/source/windows_installer/installer/main_test.go
       - recovery/source/.github/workflows/zero-trust-release.yml
       - recovery/source/tests/test_project_lookup_resilience.py
       - recovery/source/tests/test_project_store_concurrency.py
@@ -103,3 +105,35 @@ jobs:
             exit 1
           }
           Write-Host "PowerShell parser contract PASS"
+
+  installer-archive-contract:
+    name: Windows installer archive policy
+    runs-on: windows-2025
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with:
+          go-version: '1.24.5'
+          cache: false
+      - name: Run installer ZIP admission tests on Windows
+        shell: pwsh
+        run: |
+          $installer = Join-Path $PWD 'recovery/source/windows_installer/installer'
+          Push-Location $installer
+          try {
+            Add-Type -AssemblyName System.IO.Compression
+            $stream = [System.IO.File]::Create((Join-Path $installer 'payload.zip'))
+            try {
+              $archive = [System.IO.Compression.ZipArchive]::new($stream, [System.IO.Compression.ZipArchiveMode]::Create, $false)
+              $archive.Dispose()
+            } finally {
+              $stream.Dispose()
+            }
+            $env:GO111MODULE = 'off'
+            go test -v .
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          } finally {
+            Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $installer 'payload.zip')
+            Pop-Location
+          }
