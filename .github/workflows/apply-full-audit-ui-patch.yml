@@ -39,9 +39,9 @@ jobs:
           set -euo pipefail
           mapfile -t changed < <(git diff --name-only HEAD^ HEAD)
           [[ ${#changed[@]} -eq 1 && "${changed[0]}" == ".audit/ui.trigger" ]]
-          [[ "$(cat .audit/ui.trigger)" == "APPLY-6280a78938d67bbee6acf32f6e6f9e9eab7dd8f38dfd30dcc525b9c3d880e12d" ]]
+          [[ "$(cat .audit/ui.trigger)" == "APPLY-393caeec706049fb6070b296d149da2d2dadb6952f418282461d701b63579018" ]]
           base64 --decode .audit/ui.patch.gz.b64 | gzip --decompress > /tmp/ui.patch
-          echo '6280a78938d67bbee6acf32f6e6f9e9eab7dd8f38dfd30dcc525b9c3d880e12d  /tmp/ui.patch' | sha256sum --check --strict
+          echo '393caeec706049fb6070b296d149da2d2dadb6952f418282461d701b63579018  /tmp/ui.patch' | sha256sum --check --strict
           git apply --check /tmp/ui.patch
           git apply /tmp/ui.patch
           { git diff --name-only; git ls-files --others --exclude-standard; } | sort -u > /tmp/changed.txt
