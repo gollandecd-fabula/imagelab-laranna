@@ -1,9 +1,9 @@
 name: TEMP Apply Full Audit M1 M3 Patch
 
 on:
-  push:
+  pull_request:
     branches:
-      - redteam/imagelab-complete-audit-20260725-v2
+      - bootstrap/zero-trust-gate
     paths:
       - .audit/m1-m3.trigger
 
@@ -11,29 +11,29 @@ permissions:
   contents: write
 
 concurrency:
-  group: imagelab-temp-m1-m3-patch
+  group: imagelab-temp-m1-m3-patch-${{ github.event.pull_request.number }}
   cancel-in-progress: false
 
 jobs:
   apply-reviewed-patch:
+    if: ${{ github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'redteam/imagelab-complete-audit-20260725-v2' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
         with:
+          ref: ${{ github.event.pull_request.head.ref }}
           fetch-depth: 2
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: '3.13.14'
-      - name: Verify trigger and decode exact patch
-        env:
-          BEFORE_SHA: ${{ github.event.before }}
+      - name: Verify exact trigger commit and patch digest
         run: |
           set -euo pipefail
-          [[ "$GITHUB_REF_NAME" == "redteam/imagelab-complete-audit-20260725-v2" ]]
-          mapfile -t changed < <(git diff --name-only "$BEFORE_SHA" "$GITHUB_SHA")
+          [[ "$GITHUB_HEAD_REF" == "redteam/imagelab-complete-audit-20260725-v2" ]]
+          mapfile -t changed < <(git diff --name-only HEAD^ HEAD)
           [[ ${#changed[@]} -eq 1 && "${changed[0]}" == ".audit/m1-m3.trigger" ]]
-          [[ "$(cat .audit/m1-m3.trigger)" == "APPLY-760d4a348f64c6a8ba9e1d45b48e7e0bd5aa44cc75001bae87e50dd5babbdfdd" ]]
+          [[ "$(cat .audit/m1-m3.trigger)" == "APPLY-760d4a348f64c6a8ba9e1d45b48e7e0bd5aa44cc75001bae87e50dd5babbdfdd-V2" ]]
           base64 --decode .audit/m1-m3.patch.gz.b64 | gzip --decompress > /tmp/m1-m3.patch
           echo '760d4a348f64c6a8ba9e1d45b48e7e0bd5aa44cc75001bae87e50dd5babbdfdd  /tmp/m1-m3.patch' | sha256sum --check --strict
           git apply --check /tmp/m1-m3.patch
@@ -66,7 +66,9 @@ jobs:
           python -m compileall -q app tests/test_full_audit_v2.py
           python -m pytest -q tests/test_full_audit_v2.py tests/test_core_failure_regression.py tests/test_slu_m2_m5.py
           python -m pytest -q
-      - name: Commit exact tested patch and remove temporary machinery
+      - name: Commit tested patch and remove all temporary machinery
+        env:
+          HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
         run: |
           set -euo pipefail
           rm -f .audit/m1-m3.patch.gz.b64 .audit/m1-m3.trigger .github/workflows/apply-full-audit-m1-m3-patch.yml
@@ -77,4 +79,4 @@ jobs:
           mapfile -t staged < <(git diff --cached --name-only)
           [[ ${#staged[@]} -eq 12 ]]
           git commit -m 'Harden atomic cleanup and UI asset isolation'
-          git push origin "HEAD:$GITHUB_REF_NAME"
+          git push origin "HEAD:$HEAD_BRANCH"
