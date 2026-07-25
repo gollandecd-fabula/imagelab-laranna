@@ -8,7 +8,8 @@
 - Release RTM: `recovery/source/docs/ZERO_TRUST_RELEASE_GATE_RTM_V1.md`.
 - Release runbook: `recovery/source/docs/ZERO_TRUST_RELEASE_GATE_RUNBOOK_V1.md`.
 - Normal release finalizer: `recovery/source/release_gate/finalize_gate.py`.
-- One-time genesis workflow: `recovery/source/.github/workflows/zero-trust-genesis-release.yml`.
+- Active one-time genesis workflow: `.github/workflows/zero-trust-genesis-release.yml`.
+- Source-bundle genesis workflow: `recovery/source/.github/workflows/zero-trust-genesis-release.yml`.
 - One-time genesis finalizer: `recovery/source/release_gate/genesis/finalize_gate.py`.
 - Current hosted Windows evidence: `recovery/evidence/windows-gate/rc13-windows-evidence-summary.json`.
 - Update/rollback diagnostic: `recovery/evidence/update-rollback/diagnostic-update-rollback-148-149-summary.json`.

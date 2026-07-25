@@ -11,6 +11,7 @@ on:
       - recovery/source/tests/test_zero_trust_release_gate.py
       - recovery/source/tests/test_genesis_release_gate.py
       - recovery/source/.github/workflows/zero-trust-genesis-release.yml
+      - .github/workflows/zero-trust-genesis-release.yml
       - recovery/source/docs/ZERO_TRUST_RELEASE_GATE_RTM_V1.md
       - recovery/source/docs/ZERO_TRUST_RELEASE_GATE_RUNBOOK_V1.md
       - .github/workflows/codex-evidence-hardening-ci.yml

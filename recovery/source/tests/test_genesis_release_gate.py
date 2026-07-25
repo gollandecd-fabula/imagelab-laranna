@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import subprocess
 import sys
 import zipfile
@@ -236,6 +237,32 @@ def test_genesis_finalizer_blocks_unpinned_physical_evidence(tmp_path: Path) -> 
     assert "physical_manifest_pinned_sha_mismatch" in verdict["failed_conditions"]
 
 
+def test_genesis_finalizer_rejects_physical_file_list_mismatch(tmp_path: Path) -> None:
+    evidence = tmp_path / "evidence"
+    _, manifest_sha, bundle_sha = _build_evidence(evidence)
+    manifest = evidence / "physical" / "ImageLab-PHYSICAL-L5.json"
+    value = json.loads(manifest.read_text("utf-8"))
+    value["evidence_files"] = ["invented.txt"]
+    _write(manifest, value)
+    result, verdict = _run(evidence, tmp_path / "output", _sha(manifest), bundle_sha)
+    assert result.returncode != 0
+    assert "physical_manifest_evidence_files_mismatch" in verdict["failed_conditions"]
+
+
+def test_genesis_finalizer_removes_stale_authorized_outputs_on_failure(tmp_path: Path) -> None:
+    evidence = tmp_path / "evidence"
+    _, _, bundle_sha = _build_evidence(evidence)
+    output = tmp_path / "output"
+    output.mkdir()
+    stale = output / "ImageLab_by_LarannA_RELEASE_AUTHORIZED_Setup_x64.exe"
+    stale.write_bytes(b"stale")
+    (output / "ImageLab-RELEASE-AUTHORIZATION.json").write_text("{}", "utf-8")
+    result, _ = _run(evidence, output, "f" * 64, bundle_sha)
+    assert result.returncode != 0
+    assert not stale.exists()
+    assert not (output / "ImageLab-RELEASE-AUTHORIZATION.json").exists()
+
+
 def test_genesis_workflow_is_one_time_and_fail_closed() -> None:
     workflow = (ROOT / ".github" / "workflows" / "zero-trust-genesis-release.yml").read_text("utf-8")
     assert "ImageLab Genesis First Release Gate" in workflow
@@ -246,3 +273,13 @@ def test_genesis_workflow_is_one_time_and_fail_closed() -> None:
     assert "release_gate/genesis/finalize_gate.py" in workflow
     assert "ImageLab-GENESIS-RELEASE-AUTHORIZED" in workflow
     assert "Enforce fail-closed genesis verdict" in workflow
+
+
+def test_repository_root_has_executable_genesis_workflow() -> None:
+    workspace = os.environ.get("GITHUB_WORKSPACE")
+    if not workspace:
+        return
+    workflow = (Path(workspace) / ".github" / "workflows" / "zero-trust-genesis-release.yml").read_text("utf-8")
+    assert "working-directory: recovery/source" in workflow
+    assert "recovery/source/authorized-release" in workflow
+    assert "release_gate/genesis/finalize_gate.py" in workflow

@@ -165,6 +165,10 @@ def check_physical(manifest: dict[str, Any], manifest_path: Path, bundle: Path, 
         with zipfile.ZipFile(bundle) as archive:
             members = [n for n in archive.namelist() if not n.endswith("/")]
             by_name = {PurePosixPath(n).name: n for n in members}
+            if len(by_name) != len(members):
+                failed.append("physical_bundle_duplicate_basename")
+            if set(manifest.get("evidence_files") or []) != set(members):
+                failed.append("physical_manifest_evidence_files_mismatch")
             for name in REQUIRED_ZIP - set(by_name):
                 failed.append(f"physical_bundle_missing:{name}")
             if not any(n.lower().endswith(".png") for n in members): failed.append("physical_bundle_missing:png_evidence")
@@ -184,6 +188,18 @@ def check_physical(manifest: dict[str, Any], manifest_path: Path, bundle: Path, 
         failed.append(f"physical_bundle_invalid:{type(exc).__name__}")
 
 
+def cleanup_authorized(output: Path) -> None:
+    for path in list(output.glob("*RELEASE_AUTHORIZED*.exe")) + [
+        output / "ImageLab-RELEASE-AUTHORIZATION.json",
+        output / "installer-sha256.txt",
+        output / ".authorized-installer.tmp",
+        output / ".authorization-record.tmp",
+        output / ".installer-sha.tmp",
+    ]:
+        if path.exists():
+            path.unlink()
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--aggregate-dir", type=Path, required=True)
@@ -196,6 +212,7 @@ def main() -> int:
     args = parser.parse_args()
     root, output = args.aggregate_dir.resolve(), args.output_dir.resolve()
     output.mkdir(parents=True, exist_ok=True)
+    cleanup_authorized(output)
     verdict_path = output / "final-verdict.json"
     missing: list[str] = []
     try:
@@ -225,6 +242,9 @@ def main() -> int:
             if seen is not None and seen != installer_sha: failed.append(f"sha_mismatch:{name}")
         identity = candidate.get("identity") if isinstance(candidate.get("identity"), dict) else {}
         if not identity: failed.append("candidate_identity_missing")
+        for label, install in (("G3_clean_install", data["G3_clean_install"]), ("G8_independent", data["G8_independent"])):
+            if install.get("version") != identity.get("version") or install.get("build_id") != identity.get("build_id") or not str(install.get("install_id") or "").strip():
+                failed.append(f"installed_identity_mismatch:{label}")
         check_selftest("G3_preinstall_selftest", data["G3_preinstall_selftest"], identity, data["G3_clean_install"], failed)
         check_selftest("G3_postinstall_selftest", data["G3_postinstall_selftest"], identity, data["G3_clean_install"], failed)
         check_selftest("G8_preinstall_selftest", data["G8_preinstall_selftest"], identity, data["G8_independent"], failed)
@@ -254,13 +274,20 @@ def main() -> int:
         if status == "RELEASE_AUTHORIZED" and installer is not None:
             authorized = output/installer.name.replace("ZERO_TRUST", "RELEASE_AUTHORIZED")
             if authorized.name == installer.name or not authorized.name.endswith("_Setup_x64.exe"): raise ValueError("invalid authorized installer name")
-            shutil.copy2(installer, authorized)
-            (output/"installer-sha256.txt").write_text(f"{installer_sha}  {authorized.name}\n", "utf-8")
+            installer_tmp = output/".authorized-installer.tmp"
+            record_tmp = output/".authorization-record.tmp"
+            sha_tmp = output/".installer-sha.tmp"
+            shutil.copy2(installer, installer_tmp)
+            sha_tmp.write_text(f"{installer_sha}  {authorized.name}\n", "utf-8")
             record = {"schema": 1, "status": status, "authorization_source": "finalize_gate.py", "authorization_source_path": "release_gate/genesis/finalize_gate.py", "release_mode": "genesis_first_release", "protocol_rule": RULE, "installer_name": authorized.name, "installer_sha256": installer_sha, "identity": identity, "qualification_run_id": args.qualification_run_id, "qualification_head_sha": args.qualification_head_sha, "physical_l5_manifest_sha256": args.physical_manifest_sha256.lower(), "physical_l5_bundle_sha256": args.physical_bundle_sha256.lower(), "final_verdict_sha256": digest(verdict_path), "release_evidence_sha256": digest(archive_path)}
-            (output/"ImageLab-RELEASE-AUTHORIZATION.json").write_text(json.dumps(record, ensure_ascii=False, indent=2), "utf-8")
+            record_tmp.write_text(json.dumps(record, ensure_ascii=False, indent=2), "utf-8")
+            installer_tmp.replace(authorized)
+            sha_tmp.replace(output/"installer-sha256.txt")
+            record_tmp.replace(output/"ImageLab-RELEASE-AUTHORIZATION.json")
         print(json.dumps(verdict, ensure_ascii=False, indent=2))
         return 0 if status == "RELEASE_AUTHORIZED" else 1
     except Exception as exc:
+        cleanup_authorized(output)
         verdict = {"schema": 4, "status": "RELEASE_BLOCKED", "release_mode": "genesis_first_release", "protocol_rule": RULE, "failed_conditions": [f"{type(exc).__name__}: {exc}"], "missing_or_malformed_evidence": sorted(set(missing))}
         verdict_path.write_text(json.dumps(verdict, ensure_ascii=False, indent=2), "utf-8")
         print(json.dumps(verdict, ensure_ascii=False, indent=2), file=sys.stderr)
