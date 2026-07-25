@@ -54,7 +54,9 @@ class _ProcessFileLock(AbstractContextManager["_ProcessFileLock"]):
                 if time.monotonic() >= deadline:
                     os.close(fd)
                     self._fd = None
-                    raise ProjectStoreError(f"Не удалось получить блокировку проекта: {self.path.name}") from exc
+                    raise ProjectStoreError(
+                        f"Не удалось получить блокировку проекта: {self.path.name}"
+                    ) from exc
                 time.sleep(_LOCK_POLL_SECONDS)
                 os.lseek(fd, 0, os.SEEK_SET)
 
@@ -75,6 +77,19 @@ class _ProcessFileLock(AbstractContextManager["_ProcessFileLock"]):
                 fcntl.flock(fd, fcntl.LOCK_UN)
         finally:
             os.close(fd)
+
+
+def _merge_ai(existing: dict, incoming: dict) -> dict:
+    """Merge AI evidence without dropping keys written by another request."""
+
+    merged = dict(existing)
+    for key, value in incoming.items():
+        current = merged.get(key)
+        if isinstance(current, dict) and isinstance(value, dict):
+            merged[key] = _merge_ai(current, value)
+        else:
+            merged[key] = value
+    return merged
 
 
 class ProjectStore:
@@ -141,14 +156,15 @@ class ProjectStore:
         encoded = json.dumps(
             project.model_dump(), ensure_ascii=False, indent=2, allow_nan=False
         ).encode("utf-8")
-        fd, temp_name = tempfile.mkstemp(prefix=path.name + ".", suffix=".tmp", dir=self.directory)
+        fd, temp_name = tempfile.mkstemp(
+            prefix=path.name + ".", suffix=".tmp", dir=self.directory
+        )
         try:
             with os.fdopen(fd, "wb") as stream:
                 stream.write(encoded)
                 stream.flush()
                 os.fsync(stream.fileno())
             os.replace(temp_name, path)
-            # Persist the directory entry where the platform supports it.
             if os.name != "nt":
                 directory_fd = os.open(self.directory, os.O_RDONLY)
                 try:
@@ -173,13 +189,23 @@ class ProjectStore:
             if asset.source_asset_id is not None:
                 if not asset.operation:
                     raise ProjectStoreError("Производный файл должен содержать операцию")
-                if asset.source_asset_id not in known_ids and asset.source_asset_id not in incoming_ids:
-                    raise ProjectStoreError("Исходный файл производного результата отсутствует в проекте")
+                if (
+                    asset.source_asset_id not in known_ids
+                    and asset.source_asset_id not in incoming_ids
+                ):
+                    raise ProjectStoreError(
+                        "Исходный файл производного результата отсутствует в проекте"
+                    )
                 if asset.source_asset_id == asset.id:
                     raise ProjectStoreError("Файл не может ссылаться сам на себя")
                 input_asset_id = asset.parameters.get("input_asset_id")
-                if input_asset_id is not None and input_asset_id != asset.source_asset_id:
-                    raise ProjectStoreError("Lineage результата не совпадает с зафиксированным входным файлом")
+                if (
+                    input_asset_id is not None
+                    and input_asset_id != asset.source_asset_id
+                ):
+                    raise ProjectStoreError(
+                        "Lineage результата не совпадает с зафиксированным входным файлом"
+                    )
             incoming_ids.add(asset.id)
 
     def get_or_create(self, project_id: str) -> ProjectRecord:
@@ -210,21 +236,26 @@ class ProjectStore:
                     with self._project_lock(project_id):
                         projects.append(self._read(project_file))
                 except ProjectStoreError:
-                    # Corrupt unrelated files are excluded, not allowed to disable inventory.
                     continue
-        return sorted(projects, key=lambda item: (item.updated_at, item.id), reverse=True)
+        return sorted(
+            projects, key=lambda item: (item.updated_at, item.id), reverse=True
+        )
 
     def rename(self, project_id: str, title: str) -> ProjectRecord:
         title = title.strip()
         if not title or len(title) > 160:
-            raise ProjectStoreError("Название проекта должно содержать от 1 до 160 символов")
+            raise ProjectStoreError(
+                "Название проекта должно содержать от 1 до 160 символов"
+            )
         with self._lock, self._project_lock(project_id):
             project = self._get_unlocked(project_id)
             project.title = title
             self._save_unlocked(project)
             return project
 
-    def set_preset(self, project_id: str, name: str, module: str, parameters: dict) -> ProjectRecord:
+    def set_preset(
+        self, project_id: str, name: str, module: str, parameters: dict
+    ) -> ProjectRecord:
         with self._lock, self._project_lock(project_id):
             project = self._get_unlocked(project_id)
             presets = dict(project.workspace.get("presets") or {})
@@ -245,18 +276,49 @@ class ProjectStore:
             return project
 
     def save(self, project: ProjectRecord) -> None:
+        """Merge AI metadata from a snapshot without overwriting live project state.
+
+        This legacy entry point is used by on-demand AI analysis. The caller may
+        hold a snapshot that predates concurrent uploads, title/preset changes or
+        active-asset changes. Only AI dictionaries for still-existing assets are
+        merged; project structure and workspace always come from the live file.
+        """
+
         with self._lock, self._project_lock(project.id):
-            self._save_unlocked(project)
+            current = self._get_unlocked(project.id)
+            incoming_by_id = {asset.id: asset for asset in project.assets}
+            for current_asset in current.assets:
+                incoming = incoming_by_id.get(current_asset.id)
+                if incoming is None:
+                    continue
+                immutable_fields = (
+                    "stored_name",
+                    "preview_name",
+                    "sha256",
+                    "source_asset_id",
+                )
+                if any(
+                    getattr(current_asset, field) != getattr(incoming, field)
+                    for field in immutable_fields
+                ):
+                    raise ProjectStoreError(
+                        "Снимок AI-анализа не совпадает с текущей версией файла"
+                    )
+                current_asset.ai = _merge_ai(current_asset.ai, incoming.ai)
+            self._save_unlocked(current)
 
     def add_assets(self, project_id: str, assets: list[AssetRecord]) -> ProjectRecord:
         """Explicit upload/import transaction; creates the project when absent."""
+
         with self._lock, self._project_lock(project_id):
             project = self._get_or_create_unlocked(project_id)
             self._validate_new_assets(project, assets)
             project.assets.extend(assets)
             if assets:
                 project.workspace["active_asset_id"] = assets[-1].id
-                project.workspace["active_revision"] = int(project.workspace.get("active_revision", 0)) + 1
+                project.workspace["active_revision"] = int(
+                    project.workspace.get("active_revision", 0)
+                ) + 1
             self._save_unlocked(project)
             return project
 
@@ -268,6 +330,7 @@ class ProjectStore:
         active_asset_id: str | None = None,
     ) -> ProjectRecord:
         """Atomically append a validated multi-source batch to an existing project."""
+
         if not assets:
             raise ProjectStoreError("Нет файлов для сохранения")
         with self._lock, self._project_lock(project_id):
@@ -275,10 +338,14 @@ class ProjectStore:
             self._validate_new_assets(project, assets)
             selected = active_asset_id or assets[-1].id
             if selected not in {asset.id for asset in assets}:
-                raise ProjectStoreError("Активный результат отсутствует в атомарном наборе")
+                raise ProjectStoreError(
+                    "Активный результат отсутствует в атомарном наборе"
+                )
             project.assets.extend(assets)
             project.workspace["active_asset_id"] = selected
-            project.workspace["active_revision"] = int(project.workspace.get("active_revision", 0)) + 1
+            project.workspace["active_revision"] = int(
+                project.workspace.get("active_revision", 0)
+            ) + 1
             self._save_unlocked(project)
             return project
 
@@ -297,20 +364,30 @@ class ProjectStore:
         with self._lock, self._project_lock(project_id):
             project = self._get_unlocked(project_id)
             if not any(asset.id == source_asset_id for asset in project.assets):
-                raise ProjectStoreError("Исходный файл производного результата отсутствует в проекте")
+                raise ProjectStoreError(
+                    "Исходный файл производного результата отсутствует в проекте"
+                )
             for asset in assets:
                 if asset.source_asset_id != source_asset_id:
-                    raise ProjectStoreError("Производный файл ссылается на другой исходный файл")
+                    raise ProjectStoreError(
+                        "Производный файл ссылается на другой исходный файл"
+                    )
                 input_asset_id = asset.parameters.get("input_asset_id")
                 if input_asset_id is not None and input_asset_id != source_asset_id:
-                    raise ProjectStoreError("Lineage результата не совпадает с зафиксированным входным файлом")
+                    raise ProjectStoreError(
+                        "Lineage результата не совпадает с зафиксированным входным файлом"
+                    )
             self._validate_new_assets(project, assets)
             selected = active_asset_id or assets[-1].id
             if selected not in {asset.id for asset in assets}:
-                raise ProjectStoreError("Активный результат отсутствует в атомарном наборе")
+                raise ProjectStoreError(
+                    "Активный результат отсутствует в атомарном наборе"
+                )
             project.assets.extend(assets)
             project.workspace["active_asset_id"] = selected
-            project.workspace["active_revision"] = int(project.workspace.get("active_revision", 0)) + 1
+            project.workspace["active_revision"] = int(
+                project.workspace.get("active_revision", 0)
+            ) + 1
             self._save_unlocked(project)
             return project
 
@@ -320,7 +397,9 @@ class ProjectStore:
             if not any(asset.id == asset_id for asset in project.assets):
                 raise ProjectStoreError("Активный файл не найден в проекте")
             project.workspace["active_asset_id"] = asset_id
-            project.workspace["active_revision"] = int(project.workspace.get("active_revision", 0)) + 1
+            project.workspace["active_revision"] = int(
+                project.workspace.get("active_revision", 0)
+            ) + 1
             self._save_unlocked(project)
             return project
 
@@ -330,7 +409,9 @@ class ProjectStore:
             removed = list(project.assets)
             project.assets = []
             project.workspace.pop("active_asset_id", None)
-            project.workspace["active_revision"] = int(project.workspace.get("active_revision", 0)) + 1
+            project.workspace["active_revision"] = int(
+                project.workspace.get("active_revision", 0)
+            ) + 1
             self._save_unlocked(project)
             return project, removed
 
@@ -344,14 +425,15 @@ class ProjectStore:
                     with self._project_lock(project_id):
                         project = self._read(project_file)
                 except ProjectStoreError:
-                    # One corrupt unrelated project must not disable all others.
                     continue
                 for asset in project.assets:
                     if asset.id == asset_id:
                         return project, asset
         return None
 
-    def referenced_storage_names(self, exclude_project_id: str | None = None) -> set[str]:
+    def referenced_storage_names(
+        self, exclude_project_id: str | None = None
+    ) -> set[str]:
         names: set[str] = set()
         with self._lock:
             for project_file in sorted(self.directory.glob("*.json")):
