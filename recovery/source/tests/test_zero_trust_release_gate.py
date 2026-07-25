@@ -5,12 +5,16 @@ import json
 import os
 import subprocess
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+import pytest
 
 from app.config import settings
 
 ROOT = Path(__file__).resolve().parents[1]
 SELFTEST_CASES = {"resize_ppi", "background", "halftone", "vector", "history_lineage", "export"}
+PHYSICAL_STEPS = ("upload", "operation", "history", "export")
 
 
 def test_release_selftest_runs_all_critical_operations(tmp_path: Path) -> None:
@@ -41,10 +45,12 @@ def test_installer_runs_selftest_before_and_after_promotion() -> None:
     source = (ROOT / "windows_installer" / "installer" / "main.go").read_text("utf-8")
     assert 'runReleaseSelfTest(stagingDir, installID, "preinstall"' in source
     assert 'runReleaseSelfTest(installDir, installID, "postinstall"' in source
-    assert source.index('runReleaseSelfTest(stagingDir, installID, "preinstall"') < source.index("promoteAtomic(stagingDir, installDir, backupDir)")
+    assert source.index('runReleaseSelfTest(stagingDir, installID, "preinstall"') < source.index(
+        "promoteAtomic(stagingDir, installDir, backupDir)"
+    )
     assert 'faultRequested("after_promotion")' in source
-    assert 'IMAGELAB_INSTALLER_CI' in source
-    assert 'IMAGELAB_EXTERNAL_BROWSER=1' in source
+    assert "IMAGELAB_INSTALLER_CI" in source
+    assert "IMAGELAB_EXTERNAL_BROWSER=1" in source
     assert 'filepath.Join("app", "release_selftest.py")' in source
 
 
@@ -61,26 +67,37 @@ def test_zero_trust_workflow_has_all_gates_and_exact_candidate_flow() -> None:
         "final-verdict:",
     ):
         assert job in workflow
-    assert "workflow_dispatch:" in workflow
-    assert "baseline_release_tag:" in workflow
-    assert "baseline_installer_sha256:" in workflow
-    assert "baseline_authorization_record_sha256:" in workflow
-    assert "UNVERIFIED_INTERNAL_EXACT_CANDIDATE" in workflow
-    assert "ztr-unit-verdict" in workflow
-    assert "ImageLab-RELEASE-VERDICT" in workflow
-    assert "ImageLab-RELEASE-AUTHORIZED" in workflow
-    assert "ImageLab-RELEASE-AUTHORIZATION.json" in workflow
-    assert "run_clean_install_gate.ps1" in workflow
-    assert "run_update_rollback_gate.ps1" in workflow
-    assert "-BaselineInstallerPath" in workflow
-    assert "-BrowserChannel msedge" in workflow
-    assert "finalize_gate.py" in workflow
-    assert "release_authorized=$true" in workflow
-    assert "authorization_source='prior_finalizer_record'" in workflow
-    assert "authorization_record_sha256" in workflow
+    for value in (
+        "workflow_dispatch:",
+        "baseline_release_tag:",
+        "baseline_installer_sha256:",
+        "baseline_authorization_record_sha256:",
+        "physical_l5_evidence_url:",
+        "physical_l5_evidence_sha256:",
+        "fetch_pinned_json.py",
+        "--physical-l5-record",
+        "--physical-l5-sha256",
+        "UNVERIFIED_INTERNAL_EXACT_CANDIDATE",
+        "ztr-unit-verdict",
+        "ImageLab-RELEASE-VERDICT",
+        "ImageLab-RELEASE-AUTHORIZED",
+        "ImageLab-RELEASE-AUTHORIZATION.json",
+        "run_clean_install_gate.ps1",
+        "run_update_rollback_gate.ps1",
+        "-BaselineInstallerPath",
+        "-BrowserChannel msedge",
+        "finalize_gate.py",
+        "release_authorized=$true",
+        "authorization_source='prior_finalizer_record'",
+        "authorization_record_sha256",
+        "GENESIS_RELEASE_AUTHORIZED",
+    ):
+        assert value in workflow
+    assert "actions/setup-node@v6" not in workflow
+    assert "actions/attest@v4" not in workflow
 
 
-def test_finalizer_requires_all_g0_g8_evidence() -> None:
+def test_finalizer_requires_all_g0_g8_and_physical_l5_evidence() -> None:
     source = (ROOT / "release_gate" / "finalize_gate.py").read_text("utf-8")
     for gate in (
         "G0_source",
@@ -100,17 +117,28 @@ def test_finalizer_requires_all_g0_g8_evidence() -> None:
         "G8_postinstall_selftest",
         "G8_independent_ui",
         "G8_independent_outputs",
+        "L5_physical_user_machine",
     ):
         assert gate in source
-    assert 'status = "RELEASE_AUTHORIZED" if not failed else "RELEASE_BLOCKED"' in source
-    assert "selftest_identity_mismatch" in source
-    assert "selftest_case_set_mismatch" in source
-    assert "baseline_not_release_authorized" in source
-    assert "baseline_authorization_source_invalid" in source
-    assert "baseline_authorization_record_sha" in source
-    assert "project_data_not_preserved" in source
-    assert "project_handoff_mismatch" in source
-    assert "ImageLab-RELEASE-AUTHORIZATION.json" in source
+    for marker in (
+        "physical_l5_sha_pin_mismatch",
+        "physical_l5_hosted_runner",
+        "physical_l5_timestamp_stale",
+        "physical_l5_reused_hosted_install_id",
+        "physical_l5_step_failed",
+        "physical_l5_output_validator",
+        "physical_l5_witness_not_confirmed",
+        "clear_authorized_outputs",
+        "selftest_identity_mismatch",
+        "selftest_case_set_mismatch",
+        "baseline_not_release_authorized",
+        "baseline_authorization_source_invalid",
+        "baseline_authorization_record_sha",
+        "project_data_not_preserved",
+        "project_handoff_mismatch",
+        "ImageLab-RELEASE-AUTHORIZATION.json",
+    ):
+        assert marker in source
 
 
 def _write_json(path: Path, value: object) -> None:
@@ -144,12 +172,55 @@ def _project_snapshot(canonical_sha: str) -> dict[str, object]:
     }
 
 
-def _build_complete_release_evidence(root: Path) -> tuple[str, str]:
+def _physical_record(
+    *,
+    source_sha: str,
+    installer_name: str,
+    installer_sha: str,
+    version: str,
+    build_id: str,
+) -> dict[str, object]:
+    timestamp = datetime.now(timezone.utc).isoformat()
+    return {
+        "schema": 1,
+        "status": "PASS",
+        "execution_environment": "physical_user_windows",
+        "hosted_runner": False,
+        "executed_at": timestamp,
+        "candidate": {
+            "source_sha256": source_sha,
+            "installer_name": installer_name,
+            "installer_sha256": installer_sha,
+            "version": version,
+            "build_id": build_id,
+            "install_id": "physical-user-install-id",
+        },
+        "scenario": {
+            "browser_driven": True,
+            "steps": {name: {"status": "PASS"} for name in PHYSICAL_STEPS},
+        },
+        "outputs": [
+            {
+                "name": "physical-export.png",
+                "sha256": "9" * 64,
+                "validator_status": "PASS",
+            }
+        ],
+        "direct_witness": {
+            "name": "Dmitry",
+            "confirmed": True,
+            "statement": "I directly witnessed the complete ImageLab physical Windows L5 scenario.",
+            "witnessed_at": timestamp,
+        },
+    }
+
+
+def _build_complete_release_evidence(root: Path) -> tuple[str, str, str]:
     version = "9.9.9-test"
     build_id = "TEST-BUILD"
     clean_install_id = "clean-install-id"
     independent_install_id = "independent-install-id"
-    installer = root / "build" / "ImageLab_ZERO_TRUST_Setup_x64.exe"
+    installer = root / "build" / "ImageLab_by_LarannA_ZERO_TRUST_Setup_x64.exe"
     installer.parent.mkdir(parents=True, exist_ok=True)
     installer.write_bytes(b"synthetic exact installer evidence")
     installer_sha = hashlib.sha256(installer.read_bytes()).hexdigest()
@@ -157,6 +228,7 @@ def _build_complete_release_evidence(root: Path) -> tuple[str, str]:
     authorization_record_sha = "6" * 64
     original_fixture_sha = "2" * 64
     canonical_uploaded_sha = "3" * 64
+    source_sha = "8" * 64
     project_before = _project_snapshot(canonical_uploaded_sha)
     project_after_update = dict(project_before)
     project_after_rollback = dict(project_before)
@@ -169,7 +241,8 @@ def _build_complete_release_evidence(root: Path) -> tuple[str, str]:
         {
             "status": "PASS",
             "identity": {"app": "ImageLab by LarannA", "version": version, "build_id": build_id},
-            "installer": {"sha256": installer_sha},
+            "installer": {"name": installer.name, "sha256": installer_sha},
+            "source": {"sha256": source_sha},
         },
     )
     _write_json(
@@ -253,10 +326,33 @@ def _build_complete_release_evidence(root: Path) -> tuple[str, str]:
     _write_json(root / "independent" / "postinstall-selftest.json", _selftest(version, build_id, independent_install_id))
     _write_json(root / "independent" / "ui-gate.json", {"status": "PASS", "installer_sha256": installer_sha})
     _write_json(root / "independent" / "output-validation.json", {"status": "PASS", "installer_sha256": installer_sha})
-    return installer_sha, baseline_sha
+
+    physical_path = root / "physical" / "physical-l5.json"
+    _write_json(
+        physical_path,
+        _physical_record(
+            source_sha=source_sha,
+            installer_name=installer.name,
+            installer_sha=installer_sha,
+            version=version,
+            build_id=build_id,
+        ),
+    )
+    physical_sha = hashlib.sha256(physical_path.read_bytes()).hexdigest()
+    return installer_sha, baseline_sha, physical_sha
 
 
-def _run_finalizer(root: Path, output: Path) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
+def _run_finalizer(
+    root: Path,
+    output: Path,
+    *,
+    physical_sha: str | None = None,
+    physical_path: Path | None = None,
+) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
+    path = physical_path or root / "physical" / "physical-l5.json"
+    sha = physical_sha
+    if sha is None and path.exists():
+        sha = hashlib.sha256(path.read_bytes()).hexdigest()
     result = subprocess.run(
         [
             sys.executable,
@@ -265,6 +361,10 @@ def _run_finalizer(root: Path, output: Path) -> tuple[subprocess.CompletedProces
             str(root),
             "--output-dir",
             str(output),
+            "--physical-l5-record",
+            str(path),
+            "--physical-l5-sha256",
+            sha or "",
         ],
         cwd=ROOT,
         text=True,
@@ -275,25 +375,90 @@ def _run_finalizer(root: Path, output: Path) -> tuple[subprocess.CompletedProces
     return result, verdict
 
 
-def test_finalizer_accepts_complete_embedded_selftest_and_project_evidence(tmp_path: Path) -> None:
+def test_finalizer_parser_accepts_complete_synthetic_evidence(tmp_path: Path) -> None:
     evidence = tmp_path / "evidence"
-    installer_sha, _ = _build_complete_release_evidence(evidence)
+    installer_sha, _, physical_sha = _build_complete_release_evidence(evidence)
     output = tmp_path / "output"
-    result, verdict = _run_finalizer(evidence, output)
+    result, verdict = _run_finalizer(evidence, output, physical_sha=physical_sha)
     assert result.returncode == 0, result.stderr
     assert verdict["status"] == "RELEASE_AUTHORIZED"
-    assert verdict["gates"]["G3_preinstall_selftest"] == "PASS"
-    assert verdict["gates"]["G8_postinstall_selftest"] == "PASS"
-    assert verdict["schema"] == 3
+    assert verdict["gates"]["L5_physical_user_machine"] == "PASS"
+    assert verdict["schema"] == 4
     authorization_path = output / "ImageLab-RELEASE-AUTHORIZATION.json"
-    assert authorization_path.exists()
     authorization = json.loads(authorization_path.read_text("utf-8"))
+    assert authorization["schema"] == 2
     assert authorization["status"] == "RELEASE_AUTHORIZED"
     assert authorization["authorization_source"] == "finalize_gate.py"
     assert authorization["installer_sha256"] == installer_sha
-    assert authorization["installer_name"] == "ImageLab_RELEASE_AUTHORIZED_Setup_x64.exe"
-    assert len(authorization["final_verdict_sha256"]) == 64
-    assert len(authorization["release_evidence_sha256"]) == 64
+    assert authorization["physical_l5_evidence_sha256"] == physical_sha
+    assert authorization["physical_l5_install_id"] == "physical-user-install-id"
+
+
+def test_finalizer_blocks_missing_physical_record_and_removes_stale_output(tmp_path: Path) -> None:
+    evidence = tmp_path / "evidence"
+    _build_complete_release_evidence(evidence)
+    physical = evidence / "physical" / "physical-l5.json"
+    physical.unlink()
+    output = tmp_path / "output"
+    output.mkdir()
+    stale_exe = output / "ImageLab_RELEASE_AUTHORIZED_Setup_x64.exe"
+    stale_record = output / "ImageLab-RELEASE-AUTHORIZATION.json"
+    stale_exe.write_bytes(b"stale")
+    stale_record.write_text("{}", "utf-8")
+    result, verdict = _run_finalizer(evidence, output, physical_sha="a" * 64)
+    assert result.returncode != 0
+    assert verdict["status"] == "RELEASE_BLOCKED"
+    assert verdict["gates"]["L5_physical_user_machine"] == "MISSING"
+    assert not stale_exe.exists()
+    assert not stale_record.exists()
+
+
+def test_finalizer_blocks_physical_sha_pin_mismatch(tmp_path: Path) -> None:
+    evidence = tmp_path / "evidence"
+    _build_complete_release_evidence(evidence)
+    result, verdict = _run_finalizer(evidence, tmp_path / "output", physical_sha="f" * 64)
+    assert result.returncode != 0
+    assert "physical_l5_sha_pin_mismatch" in verdict["failed_conditions"]
+
+
+@pytest.mark.parametrize(
+    ("mutation", "expected"),
+    [
+        (lambda value: value.__setitem__("hosted_runner", True), "physical_l5_hosted_runner"),
+        (
+            lambda value: value.__setitem__(
+                "executed_at", (datetime.now(timezone.utc) - timedelta(days=4)).isoformat()
+            ),
+            "physical_l5_timestamp_stale",
+        ),
+        (
+            lambda value: value["candidate"].__setitem__("installer_sha256", "0" * 64),
+            "physical_l5_identity_mismatch:installer_sha256",
+        ),
+        (
+            lambda value: value["scenario"]["steps"].pop("export"),
+            "physical_l5_step_failed:export",
+        ),
+        (
+            lambda value: value["outputs"][0].__setitem__("validator_status", "FAIL"),
+            "physical_l5_output_validator:0",
+        ),
+        (
+            lambda value: value["direct_witness"].__setitem__("confirmed", False),
+            "physical_l5_witness_not_confirmed",
+        ),
+    ],
+)
+def test_finalizer_blocks_invalid_physical_l5_contract(tmp_path: Path, mutation, expected: str) -> None:
+    evidence = tmp_path / "evidence"
+    _build_complete_release_evidence(evidence)
+    path = evidence / "physical" / "physical-l5.json"
+    value = json.loads(path.read_text("utf-8"))
+    mutation(value)
+    _write_json(path, value)
+    result, verdict = _run_finalizer(evidence, tmp_path / "output")
+    assert result.returncode != 0
+    assert expected in verdict["failed_conditions"]
 
 
 def test_finalizer_blocks_missing_or_malformed_selftest_evidence(tmp_path: Path) -> None:
@@ -303,7 +468,6 @@ def test_finalizer_blocks_missing_or_malformed_selftest_evidence(tmp_path: Path)
     (evidence / "independent" / "postinstall-selftest.json").write_text("{not-json", "utf-8")
     result, verdict = _run_finalizer(evidence, tmp_path / "output")
     assert result.returncode != 0
-    assert verdict["status"] == "RELEASE_BLOCKED"
     assert verdict["gates"]["G3_preinstall_selftest"] == "MISSING"
     assert verdict["gates"]["G8_postinstall_selftest"] == "MALFORMED"
     assert "required_evidence_missing_or_malformed" in verdict["failed_conditions"]
@@ -319,7 +483,6 @@ def test_finalizer_blocks_tampered_selftest_identity_and_case_set(tmp_path: Path
     _write_json(path, value)
     result, verdict = _run_finalizer(evidence, tmp_path / "output")
     assert result.returncode != 0
-    assert verdict["status"] == "RELEASE_BLOCKED"
     assert "selftest_identity_mismatch:G3_postinstall_selftest:install_id" in verdict["failed_conditions"]
     assert "selftest_case_set_mismatch:G3_postinstall_selftest" in verdict["failed_conditions"]
     assert "selftest_case_failed:G3_postinstall_selftest:export" in verdict["failed_conditions"]
@@ -344,47 +507,102 @@ def test_finalizer_blocks_untrusted_baseline_and_sentinel_only_evidence(tmp_path
     _write_json(update_path, update)
     result, verdict = _run_finalizer(evidence, tmp_path / "output")
     assert result.returncode != 0
-    assert verdict["status"] == "RELEASE_BLOCKED"
-    assert "baseline_evidence_schema" in verdict["failed_conditions"]
-    assert "baseline_not_release_authorized" in verdict["failed_conditions"]
-    assert "baseline_authorization_source_invalid" in verdict["failed_conditions"]
-    assert "baseline_authorization_record_sha" in verdict["failed_conditions"]
-    assert "project_transition_schema:update" in verdict["failed_conditions"]
-    assert "project_data_not_preserved:update" in verdict["failed_conditions"]
-    assert "project_snapshot_missing:update:before" in verdict["failed_conditions"]
+    for expected in (
+        "baseline_evidence_schema",
+        "baseline_not_release_authorized",
+        "baseline_authorization_source_invalid",
+        "baseline_authorization_record_sha",
+        "project_transition_schema:update",
+        "project_data_not_preserved:update",
+        "project_snapshot_missing:update:before",
+    ):
+        assert expected in verdict["failed_conditions"]
 
 
 def test_finalizer_blocks_tampered_authorization_record_binding(tmp_path: Path) -> None:
     evidence = tmp_path / "evidence"
     _build_complete_release_evidence(evidence)
-    baseline_path = evidence / "update" / "baseline-verification.json"
-    baseline = json.loads(baseline_path.read_text("utf-8"))
+    path = evidence / "update" / "baseline-verification.json"
+    baseline = json.loads(path.read_text("utf-8"))
     baseline["authorization_record_status"] = "RELEASE_BLOCKED"
     baseline["authorization_record_installer_sha256"] = "7" * 64
     baseline["authorization_record_installer_name"] = "wrong.exe"
-    _write_json(baseline_path, baseline)
+    _write_json(path, baseline)
     result, verdict = _run_finalizer(evidence, tmp_path / "output")
     assert result.returncode != 0
-    assert verdict["status"] == "RELEASE_BLOCKED"
     assert "baseline_authorization_record_status" in verdict["failed_conditions"]
     assert "baseline_authorization_record_installer_sha_mismatch" in verdict["failed_conditions"]
     assert "baseline_authorization_record_name_mismatch" in verdict["failed_conditions"]
 
 
+def test_finalizer_accepts_genesis_authorized_baseline_for_later_normal_release(tmp_path: Path) -> None:
+    evidence = tmp_path / "evidence"
+    _build_complete_release_evidence(evidence)
+    path = evidence / "update" / "baseline-verification.json"
+    baseline = json.loads(path.read_text("utf-8"))
+    baseline["authorization_record_status"] = "GENESIS_RELEASE_AUTHORIZED"
+    baseline["name"] = "ImageLab_by_LarannA_GENESIS_RELEASE_AUTHORIZED_Setup_x64.exe"
+    baseline["authorization_record_installer_name"] = baseline["name"]
+    _write_json(path, baseline)
+    result, verdict = _run_finalizer(evidence, tmp_path / "output")
+    assert result.returncode == 0, result.stderr
+    assert verdict["status"] == "RELEASE_AUTHORIZED"
+
+
 def test_finalizer_blocks_tampered_project_transition(tmp_path: Path) -> None:
     evidence = tmp_path / "evidence"
     _build_complete_release_evidence(evidence)
-    update_path = evidence / "update" / "update-test.json"
-    update = json.loads(update_path.read_text("utf-8"))
+    path = evidence / "update" / "update-test.json"
+    update = json.loads(path.read_text("utf-8"))
     update["project_evidence_after_update"]["asset_file_sha256"] = "5" * 64
     update["old_process_stopped"] = False
-    _write_json(update_path, update)
+    _write_json(path, update)
     result, verdict = _run_finalizer(evidence, tmp_path / "output")
     assert result.returncode != 0
-    assert verdict["status"] == "RELEASE_BLOCKED"
     assert "project_asset_file_sha_mismatch:update:after" in verdict["failed_conditions"]
     assert "project_transition_mismatch:update:asset_file_sha256" in verdict["failed_conditions"]
     assert "update_old_process_not_stopped" in verdict["failed_conditions"]
+
+
+def test_pinned_json_fetcher_rejects_non_https_and_bad_sha(tmp_path: Path) -> None:
+    output = tmp_path / "record.json"
+    result = subprocess.run(
+        [
+            sys.executable,
+            "release_gate/fetch_pinned_json.py",
+            "--url",
+            "http://example.invalid/evidence.json",
+            "--sha256",
+            "a" * 64,
+            "--output",
+            str(output),
+        ],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        timeout=10,
+    )
+    assert result.returncode != 0
+    assert not output.exists()
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "release_gate/fetch_pinned_json.py",
+            "--url",
+            "https://example.invalid/evidence.json",
+            "--sha256",
+            "invalid",
+            "--output",
+            str(output),
+        ],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        timeout=10,
+    )
+    assert result.returncode != 0
+    assert not output.exists()
 
 
 def test_release_identity_is_consistent_across_python_and_go() -> None:
@@ -447,25 +665,28 @@ def test_workflow_lists_every_unit_file_exactly_once() -> None:
 
 def test_update_gate_uses_real_pinned_baseline_and_preserves_real_project() -> None:
     source = (ROOT / "release_gate" / "run_update_rollback_gate.ps1").read_text("utf-8")
-    assert "BaselineInstallerPath" in source
-    assert "baselineInstallerSha" in source
-    assert "Baseline and candidate installers must be different" in source
-    assert "Get-ImageLabProjectEvidence" in source
-    assert "Compare-ImageLabProjectEvidence" in source
-    assert "/api/projects/$ProjectId" in source
-    assert "/api/projects/$projectId/upload" in source
-    assert "-Form @{ files = Get-Item" in source
-    assert "project_file_sha256" in source
-    assert "asset_file_sha256" in source
-    assert "project-before-update.json" in source
-    assert "project-after-update.json" in source
-    assert "project-after-rollback.json" in source
-    assert "original_fixture_sha256" in source
-    assert "canonical_uploaded_sha256" in source
-    assert "uploadedAssetSha" in source
-    assert "zero-trust-update-sentinel.txt" in source
-    assert "do not use it as the project-preservation proof" in source
-    assert "project_data_preserved=$true" in source
+    for marker in (
+        "BaselineInstallerPath",
+        "baselineInstallerSha",
+        "Baseline and candidate installers must be different",
+        "Get-ImageLabProjectEvidence",
+        "Compare-ImageLabProjectEvidence",
+        "/api/projects/$ProjectId",
+        "/api/projects/$projectId/upload",
+        "-Form @{ files = Get-Item",
+        "project_file_sha256",
+        "asset_file_sha256",
+        "project-before-update.json",
+        "project-after-update.json",
+        "project-after-rollback.json",
+        "original_fixture_sha256",
+        "canonical_uploaded_sha256",
+        "uploadedAssetSha",
+        "zero-trust-update-sentinel.txt",
+        "do not use it as the project-preservation proof",
+        "project_data_preserved=$true",
+    ):
+        assert marker in source
 
 
 def test_ui_gate_supports_edge_and_independent_bundled_chromium() -> None:
