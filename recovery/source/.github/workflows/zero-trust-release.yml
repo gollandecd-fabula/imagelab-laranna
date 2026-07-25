@@ -100,6 +100,7 @@ jobs:
           - { id: slu-m3, file: tests/test_slu_m3_segmentation.py }
           - { id: slu-m5-e2e, file: tests/test_slu_m5_e2e.py }
           - { id: storage-package-integrity, file: tests/test_storage_and_package_integrity.py }
+          - { id: upload-surface-hardening, file: tests/test_upload_surface_hardening.py }
           - { id: windows-packaging, file: tests/test_windows_packaging_config.py }
           - { id: zero-trust, file: tests/test_zero_trust_release_gate.py }
     steps:
@@ -255,7 +256,7 @@ jobs:
           if ($actual -ne $env:BASELINE_SHA256.ToLowerInvariant()) { throw "Baseline installer SHA-256 mismatch" }
           if ($recordActual -ne $env:BASELINE_AUTHORIZATION_SHA256.ToLowerInvariant()) { throw "Baseline authorization record SHA-256 mismatch" }
           $record = Get-Content -Raw -LiteralPath $records[0].FullName | ConvertFrom-Json
-          if ($record.schema -notin @(1,2)) { throw "Prior authorization record schema mismatch" }
+          if ($record.schema -notin @(1,2,3)) { throw "Prior authorization record schema mismatch" }
           if ($record.status -notin @('RELEASE_AUTHORIZED','GENESIS_RELEASE_AUTHORIZED')) { throw "Prior authorization record does not authorize release" }
           if ($record.authorization_source -notin @('finalize_gate.py','genesis_finalize_gate.py')) { throw "Prior authorization record source mismatch" }
           if ($record.installer_sha256 -ne $actual) { throw "Prior authorization record installer SHA mismatch" }
