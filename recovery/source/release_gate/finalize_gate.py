@@ -19,20 +19,11 @@ SELFTEST_CASES = {
     "history_lineage",
     "export",
 }
-PROJECT_EVIDENCE_FIELDS = (
-    "project_id",
-    "title",
-    "asset_id",
-    "stored_name",
-    "asset_record_sha256",
-    "asset_file_sha256",
-    "asset_size_bytes",
-    "project_file_sha256",
-    "active_asset_id",
-)
 PHYSICAL_L5_STEPS = {"upload", "operation", "history", "export"}
 PHYSICAL_L5_MAX_AGE = timedelta(hours=72)
 PHYSICAL_L5_MAX_BYTES = 1024 * 1024
+INVENTORY_MIN_PROJECTS = 3
+INVENTORY_MIN_ASSETS = 3
 
 
 def sha256(path: Path) -> str:
@@ -53,11 +44,29 @@ def read_optional(path: Path, missing: list[str]) -> dict[str, Any]:
         missing.append(path.as_posix())
         return {"status": "MISSING", "evidence_path": path.as_posix()}
     try:
-        if path.stat().st_size > PHYSICAL_L5_MAX_BYTES and path.name == "physical-l5.json":
-            raise ValueError("physical L5 record exceeds 1 MiB")
         value = json.loads(path.read_text("utf-8-sig"))
         if not isinstance(value, dict):
             raise TypeError("top-level JSON evidence must be an object")
+        return value
+    except Exception as exc:
+        missing.append(f"{path.as_posix()}:malformed:{type(exc).__name__}")
+        return {
+            "status": "MALFORMED",
+            "evidence_path": path.as_posix(),
+            "error": str(exc),
+        }
+
+
+def read_physical(path: Path, missing: list[str]) -> dict[str, Any]:
+    if not path.exists():
+        missing.append(path.as_posix())
+        return {"status": "MISSING", "evidence_path": path.as_posix()}
+    try:
+        if path.stat().st_size > PHYSICAL_L5_MAX_BYTES:
+            raise ValueError("physical L5 record exceeds 1 MiB")
+        value = json.loads(path.read_text("utf-8-sig"))
+        if not isinstance(value, dict):
+            raise TypeError("top-level physical L5 JSON must be an object")
         return value
     except Exception as exc:
         missing.append(f"{path.as_posix()}:malformed:{type(exc).__name__}")
@@ -128,33 +137,153 @@ def validate_selftest(
             failed.append(f"selftest_case_failed:{name}:{case_name}")
 
 
-def validate_project_snapshot(
+def _validate_inventory_asset(
     name: str,
-    snapshot: object,
+    asset: object,
     *,
-    expected_asset_sha256: str,
     failed: list[str],
 ) -> dict[str, Any]:
-    if not isinstance(snapshot, dict):
-        failed.append(f"project_snapshot_missing:{name}")
+    if not isinstance(asset, dict):
+        failed.append(f"inventory_asset_invalid:{name}")
         return {}
-
-    for field in ("project_id", "title", "asset_id", "stored_name", "active_asset_id"):
-        if not isinstance(snapshot.get(field), str) or not str(snapshot.get(field)).strip():
-            failed.append(f"project_snapshot_field:{name}:{field}")
-    for field in ("asset_record_sha256", "asset_file_sha256", "project_file_sha256"):
-        if not valid_sha256(snapshot.get(field)):
-            failed.append(f"project_snapshot_sha:{name}:{field}")
-    size = snapshot.get("asset_size_bytes")
+    for field in ("id", "stored_name", "preview_name", "format", "original_name"):
+        if not isinstance(asset.get(field), str) or not str(asset.get(field)).strip():
+            failed.append(f"inventory_asset_field:{name}:{field}")
+    for field in (
+        "record_sha256",
+        "upload_file_sha256",
+        "parameters_sha256",
+        "ai_sha256",
+    ):
+        if not valid_sha256(asset.get(field)):
+            failed.append(f"inventory_asset_sha:{name}:{field}")
+    if asset.get("record_sha256") != asset.get("upload_file_sha256"):
+        failed.append(f"inventory_asset_record_file_mismatch:{name}")
+    size = asset.get("upload_size_bytes")
     if isinstance(size, bool) or not isinstance(size, int) or size <= 0:
-        failed.append(f"project_snapshot_size:{name}")
-    if snapshot.get("asset_record_sha256") != expected_asset_sha256:
-        failed.append(f"project_asset_record_sha_mismatch:{name}")
-    if snapshot.get("asset_file_sha256") != expected_asset_sha256:
-        failed.append(f"project_asset_file_sha_mismatch:{name}")
-    if snapshot.get("active_asset_id") != snapshot.get("asset_id"):
-        failed.append(f"project_active_asset_mismatch:{name}")
-    return snapshot
+        failed.append(f"inventory_asset_size:{name}")
+    if asset.get("format") != "SVG":
+        if not valid_sha256(asset.get("preview_file_sha256")):
+            failed.append(f"inventory_preview_sha:{name}")
+        preview_size = asset.get("preview_size_bytes")
+        if isinstance(preview_size, bool) or not isinstance(preview_size, int) or preview_size <= 0:
+            failed.append(f"inventory_preview_size:{name}")
+    return asset
+
+
+def _validate_inventory_project(
+    name: str,
+    project: object,
+    *,
+    failed: list[str],
+) -> dict[str, Any]:
+    if not isinstance(project, dict):
+        failed.append(f"inventory_project_invalid:{name}")
+        return {}
+    for field in ("project_id", "title"):
+        if not isinstance(project.get(field), str) or not str(project.get(field)).strip():
+            failed.append(f"inventory_project_field:{name}:{field}")
+    for field in ("project_file_sha256", "workspace_sha256", "presets_sha256"):
+        if not valid_sha256(project.get(field)):
+            failed.append(f"inventory_project_sha:{name}:{field}")
+    assets = project.get("assets")
+    if not isinstance(assets, list):
+        failed.append(f"inventory_project_assets_missing:{name}")
+        assets = []
+    if project.get("asset_count") != len(assets):
+        failed.append(f"inventory_project_asset_count:{name}")
+    validated = [
+        _validate_inventory_asset(f"{name}:{index}", asset, failed=failed)
+        for index, asset in enumerate(assets)
+    ]
+    asset_ids = [str(asset.get("id", "")) for asset in validated if asset]
+    if len(asset_ids) != len(set(asset_ids)):
+        failed.append(f"inventory_project_duplicate_assets:{name}")
+    active = project.get("active_asset_id")
+    if active is not None and active not in asset_ids:
+        failed.append(f"inventory_project_active_asset:{name}")
+    by_id = {str(asset.get("id")): asset for asset in validated if asset.get("id")}
+    for asset in validated:
+        source_id = asset.get("source_asset_id")
+        if source_id is not None and source_id not in by_id:
+            failed.append(f"inventory_project_lineage:{name}:{asset.get('id')}")
+    revision = project.get("active_revision")
+    if isinstance(revision, bool) or not isinstance(revision, int) or revision < 0:
+        failed.append(f"inventory_project_revision:{name}")
+    return project
+
+
+def validate_data_inventory(
+    name: str,
+    inventory: object,
+    *,
+    failed: list[str],
+) -> dict[str, Any]:
+    if not isinstance(inventory, dict):
+        failed.append(f"data_inventory_missing:{name}")
+        return {}
+    if inventory.get("schema") != 1:
+        failed.append(f"data_inventory_schema:{name}")
+    if not valid_sha256(inventory.get("projects_sha256")):
+        failed.append(f"data_inventory_sha:{name}")
+    projects = inventory.get("projects")
+    if not isinstance(projects, list):
+        failed.append(f"data_inventory_projects_missing:{name}")
+        projects = []
+    if inventory.get("project_count") != len(projects):
+        failed.append(f"data_inventory_project_count:{name}")
+    if len(projects) < INVENTORY_MIN_PROJECTS:
+        failed.append(f"data_inventory_project_coverage:{name}")
+    validated_projects = [
+        _validate_inventory_project(f"{name}:{index}", project, failed=failed)
+        for index, project in enumerate(projects)
+    ]
+    project_ids = [str(project.get("project_id", "")) for project in validated_projects if project]
+    if project_ids != sorted(project_ids):
+        failed.append(f"data_inventory_project_order:{name}")
+    if len(project_ids) != len(set(project_ids)):
+        failed.append(f"data_inventory_duplicate_projects:{name}")
+    asset_count = sum(
+        int(project.get("asset_count", 0))
+        for project in validated_projects
+        if isinstance(project.get("asset_count"), int)
+        and not isinstance(project.get("asset_count"), bool)
+    )
+    if inventory.get("asset_count") != asset_count:
+        failed.append(f"data_inventory_asset_count:{name}")
+    if asset_count < INVENTORY_MIN_ASSETS:
+        failed.append(f"data_inventory_asset_coverage:{name}")
+    formats = {
+        str(asset.get("format"))
+        for project in validated_projects
+        for asset in project.get("assets", [])
+        if isinstance(asset, dict)
+    }
+    if not {"PNG", "SVG"}.issubset(formats):
+        failed.append(f"data_inventory_format_coverage:{name}")
+    derived = [
+        asset
+        for project in validated_projects
+        for asset in project.get("assets", [])
+        if isinstance(asset, dict) and asset.get("source_asset_id")
+    ]
+    if not derived:
+        failed.append(f"data_inventory_history_coverage:{name}")
+    non_empty_presets = [
+        project
+        for project in validated_projects
+        if project.get("asset_count", 0) > 0 and project.get("presets_sha256")
+    ]
+    if len(non_empty_presets) < 2:
+        failed.append(f"data_inventory_preset_coverage:{name}")
+    active_values = {
+        project.get("active_asset_id")
+        for project in validated_projects
+        if project.get("active_asset_id") is not None
+    }
+    if len(active_values) < 2:
+        failed.append(f"data_inventory_active_selection_coverage:{name}")
+    return inventory
 
 
 def validate_project_transition(
@@ -162,36 +291,29 @@ def validate_project_transition(
     data: dict[str, Any],
     *,
     failed: list[str],
-) -> tuple[dict[str, Any], dict[str, Any], str, str]:
-    if data.get("schema") != 2:
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    if data.get("schema") != 3:
         failed.append(f"project_transition_schema:{name}")
     if data.get("project_data_preserved") is not True:
         failed.append(f"project_data_not_preserved:{name}")
-
-    original_sha = str(data.get("original_fixture_sha256", ""))
-    canonical_sha = str(data.get("canonical_uploaded_sha256", ""))
-    if not valid_sha256(original_sha):
-        failed.append(f"original_fixture_sha:{name}")
-    if not valid_sha256(canonical_sha):
-        failed.append(f"canonical_uploaded_sha:{name}")
-
-    before = validate_project_snapshot(
-        f"{name}:before",
-        data.get("project_evidence_before"),
-        expected_asset_sha256=canonical_sha,
-        failed=failed,
-    )
-    after = validate_project_snapshot(
-        f"{name}:after",
-        data.get("project_evidence_after_update")
+    before_key = "project_inventory_before"
+    after_key = (
+        "project_inventory_after_update"
         if name == "update"
-        else data.get("project_evidence_after_rollback"),
-        expected_asset_sha256=canonical_sha,
-        failed=failed,
+        else "project_inventory_after_rollback"
     )
-    for field in PROJECT_EVIDENCE_FIELDS:
-        if before.get(field) != after.get(field):
-            failed.append(f"project_transition_mismatch:{name}:{field}")
+    before = validate_data_inventory(
+        f"{name}:before", data.get(before_key), failed=failed
+    )
+    after = validate_data_inventory(
+        f"{name}:after", data.get(after_key), failed=failed
+    )
+    if before and after and before != after:
+        failed.append(f"project_inventory_mismatch:{name}")
+    if data.get("project_count") != before.get("project_count"):
+        failed.append(f"project_transition_project_count:{name}")
+    if data.get("asset_count") != before.get("asset_count"):
+        failed.append(f"project_transition_asset_count:{name}")
 
     if name == "update":
         if data.get("old_process_stopped") is not True:
@@ -210,8 +332,7 @@ def validate_project_transition(
         fault_exit = data.get("fault_exit_code")
         if isinstance(fault_exit, bool) or not isinstance(fault_exit, int) or fault_exit == 0:
             failed.append("rollback_fault_not_observed")
-
-    return before, after, original_sha, canonical_sha
+    return before, after
 
 
 def validate_physical_l5(
@@ -373,7 +494,7 @@ def main() -> int:
             if args.physical_l5_record is not None
             else root / "physical" / "physical-l5.json"
         )
-        physical = read_optional(physical_path, missing_evidence)
+        physical = read_physical(physical_path, missing_evidence)
 
         required = {
             "G0_source": source,
@@ -483,21 +604,16 @@ def main() -> int:
             failed=failed,
         )
 
-        update_before, update_after, update_original_sha, update_canonical_sha = validate_project_transition(
+        update_before, update_after = validate_project_transition(
             "update", update, failed=failed
         )
-        rollback_before, rollback_after, rollback_original_sha, rollback_canonical_sha = validate_project_transition(
+        rollback_before, rollback_after = validate_project_transition(
             "rollback", rollback, failed=failed
         )
-        if update_original_sha != rollback_original_sha:
-            failed.append("project_fixture_sha_mismatch:update_rollback")
-        if update_canonical_sha != rollback_canonical_sha:
-            failed.append("project_canonical_sha_mismatch:update_rollback")
-        for field in PROJECT_EVIDENCE_FIELDS:
-            if update_after.get(field) != rollback_before.get(field):
-                failed.append(f"project_handoff_mismatch:update_rollback:{field}")
-            if update_before.get(field) != rollback_after.get(field):
-                failed.append(f"project_end_to_end_mismatch:{field}")
+        if update_after and rollback_before and update_after != rollback_before:
+            failed.append("project_inventory_handoff_mismatch:update_rollback")
+        if update_before and rollback_after and update_before != rollback_after:
+            failed.append("project_inventory_end_to_end_mismatch")
 
         physical_summary = validate_physical_l5(
             physical,
@@ -525,12 +641,12 @@ def main() -> int:
         evidence_files = [path for path in root.rglob("*") if path.is_file()] if root.exists() else []
         if physical_path.exists() and physical_path not in evidence_files:
             evidence_files.append(physical_path)
-        if len(evidence_files) < 16:
+        if len(evidence_files) < 18:
             failed.append("evidence_bundle_incomplete")
 
         status = "RELEASE_AUTHORIZED" if not failed else "RELEASE_BLOCKED"
         verdict = {
-            "schema": 4,
+            "schema": 5,
             "status": status,
             "installer_sha256": installer_sha,
             "identity": candidate.get("identity"),
@@ -539,6 +655,11 @@ def main() -> int:
             else None,
             "gates": {name: data.get("status") for name, data in required.items()},
             "physical_l5": physical_summary,
+            "project_inventory": {
+                "project_count": update_before.get("project_count"),
+                "asset_count": update_before.get("asset_count"),
+                "projects_sha256": update_before.get("projects_sha256"),
+            },
             "failed_conditions": sorted(set(failed)),
             "missing_or_malformed_evidence": sorted(set(missing_evidence)),
             "evidence_file_count": len(evidence_files),
@@ -562,7 +683,7 @@ def main() -> int:
                 f"{installer_sha}  {authorized.name}\n", "utf-8"
             )
             authorization_record = {
-                "schema": 2,
+                "schema": 3,
                 "status": "RELEASE_AUTHORIZED",
                 "authorization_source": "finalize_gate.py",
                 "installer_name": authorized.name,
@@ -571,6 +692,7 @@ def main() -> int:
                 "identity": candidate.get("identity"),
                 "physical_l5_evidence_sha256": physical_summary.get("record_sha256"),
                 "physical_l5_install_id": physical_summary.get("install_id"),
+                "project_inventory_sha256": update_before.get("projects_sha256"),
                 "final_verdict_sha256": sha256(verdict_path),
                 "release_evidence_sha256": sha256(archive_path),
             }
@@ -584,7 +706,7 @@ def main() -> int:
     except Exception as exc:
         clear_authorized_outputs(output)
         verdict = {
-            "schema": 4,
+            "schema": 5,
             "status": "RELEASE_BLOCKED",
             "failed_conditions": [f"{type(exc).__name__}: {exc}"],
             "missing_or_malformed_evidence": sorted(set(missing_evidence)),
