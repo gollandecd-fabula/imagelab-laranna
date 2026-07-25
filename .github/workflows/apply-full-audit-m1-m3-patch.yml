@@ -33,7 +33,7 @@ jobs:
           [[ "$GITHUB_HEAD_REF" == "redteam/imagelab-complete-audit-20260725-v2" ]]
           mapfile -t changed < <(git diff --name-only HEAD^ HEAD)
           [[ ${#changed[@]} -eq 1 && "${changed[0]}" == ".audit/m1-m3.trigger" ]]
-          [[ "$(cat .audit/m1-m3.trigger)" == "APPLY-760d4a348f64c6a8ba9e1d45b48e7e0bd5aa44cc75001bae87e50dd5babbdfdd-V2" ]]
+          [[ "$(cat .audit/m1-m3.trigger)" == "APPLY-760d4a348f64c6a8ba9e1d45b48e7e0bd5aa44cc75001bae87e50dd5babbdfdd-V3" ]]
           base64 --decode .audit/m1-m3.patch.gz.b64 | gzip --decompress > /tmp/m1-m3.patch
           echo '760d4a348f64c6a8ba9e1d45b48e7e0bd5aa44cc75001bae87e50dd5babbdfdd  /tmp/m1-m3.patch' | sha256sum --check --strict
           git apply --check /tmp/m1-m3.patch
@@ -41,8 +41,7 @@ jobs:
         run: |
           set -euo pipefail
           git apply /tmp/m1-m3.patch
-          mapfile -t changed < <(git diff --name-only)
-          printf '%s\n' "${changed[@]}" > /tmp/changed.txt
+          { git diff --name-only; git ls-files --others --exclude-standard; } | sort -u > /tmp/changed.txt
           cat > /tmp/expected.txt <<'EOF'
           recovery/source/app/main.py
           recovery/source/app/models.py
@@ -54,7 +53,6 @@ jobs:
           recovery/source/tests/test_full_audit_v2.py
           recovery/source/tests/test_slu_m2_m5.py
           EOF
-          sort -o /tmp/changed.txt /tmp/changed.txt
           sort -o /tmp/expected.txt /tmp/expected.txt
           diff -u /tmp/expected.txt /tmp/changed.txt
       - name: Run focused and complete tests
