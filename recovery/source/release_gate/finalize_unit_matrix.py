@@ -31,6 +31,7 @@ EXPECTED: dict[str, str] = {
     "slu-m3": "tests/test_slu_m3_segmentation.py",
     "slu-m5-e2e": "tests/test_slu_m5_e2e.py",
     "storage-package-integrity": "tests/test_storage_and_package_integrity.py",
+    "upload-surface-hardening": "tests/test_upload_surface_hardening.py",
     "windows-packaging": "tests/test_windows_packaging_config.py",
     "zero-trust": "tests/test_zero_trust_release_gate.py",
 }
@@ -72,7 +73,8 @@ def main() -> int:
     mismatched_files = sorted(
         case_id
         for case_id, expected_file in EXPECTED.items()
-        if case_id in discovered and discovered[case_id].get("test_file") != expected_file
+        if case_id in discovered
+        and discovered[case_id].get("test_file") != expected_file
     )
     failed_cases = sorted(
         case_id
@@ -99,7 +101,11 @@ def main() -> int:
         "status": status,
         "expected_case_count": len(EXPECTED),
         "observed_case_count": len(discovered),
-        "passed_case_count": sum(1 for case_id in EXPECTED if discovered.get(case_id, {}).get("status") == "PASS"),
+        "passed_case_count": sum(
+            1
+            for case_id in EXPECTED
+            if discovered.get(case_id, {}).get("status") == "PASS"
+        ),
         "missing_cases": missing,
         "unexpected_cases": unexpected,
         "mismatched_files": mismatched_files,
@@ -107,9 +113,16 @@ def main() -> int:
         "malformed_results": malformed,
         "duplicate_cases": duplicates,
         "failed_conditions": failed_conditions,
-        "cases": {case_id: discovered.get(case_id, {"status": "MISSING", "test_file": test_file}) for case_id, test_file in EXPECTED.items()},
+        "cases": {
+            case_id: discovered.get(
+                case_id, {"status": "MISSING", "test_file": test_file}
+            )
+            for case_id, test_file in EXPECTED.items()
+        },
     }
-    output.write_text(json.dumps(result, ensure_ascii=False, indent=2), "utf-8")
+    output.write_text(
+        json.dumps(result, ensure_ascii=False, indent=2), "utf-8"
+    )
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0 if status == "PASS" else 1
 
