@@ -87,6 +87,7 @@ class SourceBundleVerifierTests(unittest.TestCase):
                 Path(temporary), entries=dict(REQUIRED_CONTENT)
             )
             self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+            self.assertEqual(payload["schema"], 4)
             self.assertEqual(payload["status"], "PASS")
             self.assertEqual(payload["failures"], [])
             self.assertEqual(payload["extract_state"], "PUBLISHED_ATOMICALLY")
@@ -103,6 +104,7 @@ class SourceBundleVerifierTests(unittest.TestCase):
             self.assertEqual(completed.returncode, 1)
             self.assertEqual(payload["failures"], ["SOURCE_EXACT_SHA256_MISMATCH"])
             self.assertEqual(payload["extract_state"], "BLOCKED_BY_ARCHIVE_ADMISSION")
+            self.assertIsNone(payload["archive"]["crc_failure"])
             self.assertNotIn("missing_required_files", payload)
             self.assertFalse(extract_to.exists())
 
@@ -173,7 +175,40 @@ class SourceBundleVerifierTests(unittest.TestCase):
             payload = json.loads(evidence.read_text(encoding="utf-8"))
             self.assertEqual(completed.returncode, 1)
             self.assertIn("SOURCE_ZIP_DUPLICATE_MEMBER", payload["failures"])
+            self.assertIn("SOURCE_ZIP_WINDOWS_COLLISION", payload["failures"])
             self.assertFalse(extract_to.exists())
+
+    def test_case_insensitive_windows_collision_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            entries = dict(REQUIRED_CONTENT)
+            entries["App/Main.py"] = "case collision"
+            completed, payload, extract_to = run_verifier(
+                Path(temporary), entries=entries
+            )
+            self.assertEqual(completed.returncode, 1)
+            self.assertIn("SOURCE_ZIP_WINDOWS_COLLISION", payload["failures"])
+            self.assertFalse(extract_to.exists())
+
+    def test_windows_reserved_ads_and_trailing_dot_names_are_rejected(self) -> None:
+        for unsafe_name in ("CON.txt", "app/file.txt:stream", "app/name. "):
+            with self.subTest(unsafe_name=unsafe_name):
+                with tempfile.TemporaryDirectory() as temporary:
+                    entries = dict(REQUIRED_CONTENT)
+                    entries[unsafe_name] = "blocked"
+                    completed, payload, extract_to = run_verifier(
+                        Path(temporary), entries=entries
+                    )
+                    self.assertEqual(completed.returncode, 1)
+                    self.assertIn("SOURCE_ZIP_UNSAFE_MEMBER", payload["failures"])
+                    self.assertFalse(extract_to.exists())
+
+    def test_metadata_limits_run_before_crc_decompression(self) -> None:
+        source = VERIFIER.read_text("utf-8")
+        metadata_gate = source.index("if failures:\n                evidence")
+        crc_check = source.index("bad_crc = bundle.testzip()")
+        self.assertLess(metadata_gate, crc_check)
+        self.assertIn("MAX_ARCHIVE_BYTES", source)
+        self.assertIn("MAX_MEMBER_BYTES", source)
 
 
 if __name__ == "__main__":
