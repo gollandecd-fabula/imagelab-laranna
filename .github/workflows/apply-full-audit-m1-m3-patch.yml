@@ -44,7 +44,7 @@ jobs:
           [[ "$GITHUB_HEAD_REF" == "redteam/imagelab-complete-audit-20260725-v2" ]]
           mapfile -t changed < <(git diff --name-only HEAD^ HEAD)
           [[ ${#changed[@]} -eq 1 && "${changed[0]}" == ".audit/m1-m3.trigger" ]]
-          [[ "$(cat .audit/m1-m3.trigger)" == "APPLY-760d4a348f64c6a8ba9e1d45b48e7e0bd5aa44cc75001bae87e50dd5babbdfdd-V4" ]]
+          [[ "$(cat .audit/m1-m3.trigger)" == "APPLY-760d4a348f64c6a8ba9e1d45b48e7e0bd5aa44cc75001bae87e50dd5babbdfdd-V5" ]]
           base64 --decode .audit/m1-m3.patch.gz.b64 | gzip --decompress > /tmp/m1-m3.patch
           echo '760d4a348f64c6a8ba9e1d45b48e7e0bd5aa44cc75001bae87e50dd5babbdfdd  /tmp/m1-m3.patch' | sha256sum --check --strict
           git apply --check /tmp/m1-m3.patch
@@ -54,7 +54,7 @@ jobs:
           set -euo pipefail
           git apply /tmp/m1-m3.patch
           { git diff --name-only; git ls-files --others --exclude-standard; } | sort -u > /tmp/changed.txt
-          cat > /tmp/expected.txt <<'EOF'
+          cat > /tmp/expected-patch.txt <<'EOF'
           recovery/source/app/main.py
           recovery/source/app/models.py
           recovery/source/app/services/file_inspector.py
@@ -65,8 +65,8 @@ jobs:
           recovery/source/tests/test_full_audit_v2.py
           recovery/source/tests/test_slu_m2_m5.py
           EOF
-          sort -o /tmp/expected.txt /tmp/expected.txt
-          diff -u /tmp/expected.txt /tmp/changed.txt
+          sort -o /tmp/expected-patch.txt /tmp/expected-patch.txt
+          diff -u /tmp/expected-patch.txt /tmp/changed.txt
       - name: Run focused and complete tests
         if: ${{ steps.gate.outputs.apply == 'true' }}
         working-directory: recovery/source
@@ -83,12 +83,28 @@ jobs:
           HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
         run: |
           set -euo pipefail
-          rm -f .audit/m1-m3.patch.gz.b64 .audit/m1-m3.trigger
+          rm -f .audit/m1-m3.patch.gz.b64 .audit/m1-m3.trigger recovery/source/.coverage recovery/source/full-suite.log
+          rm -rf recovery/source/.pytest_cache
+          find recovery/source -type d -name __pycache__ -prune -exec rm -rf {} +
           rmdir .audit 2>/dev/null || true
+          git add -A
+          git diff --cached --name-only | sort -u > /tmp/staged.txt
+          cat > /tmp/expected-staged.txt <<'EOF'
+          .audit/m1-m3.patch.gz.b64
+          .audit/m1-m3.trigger
+          recovery/source/app/main.py
+          recovery/source/app/models.py
+          recovery/source/app/services/file_inspector.py
+          recovery/source/app/static/app.js
+          recovery/source/app/static/index.html
+          recovery/source/app/static/styles.css
+          recovery/source/tests/test_core_failure_regression.py
+          recovery/source/tests/test_full_audit_v2.py
+          recovery/source/tests/test_slu_m2_m5.py
+          EOF
+          sort -o /tmp/expected-staged.txt /tmp/expected-staged.txt
+          diff -u /tmp/expected-staged.txt /tmp/staged.txt
           git config user.name 'ImageLab Audit Bot'
           git config user.email 'audit-bot@users.noreply.github.com'
-          git add -A
-          mapfile -t staged < <(git diff --cached --name-only)
-          [[ ${#staged[@]} -eq 11 ]]
           git commit -m 'Harden atomic cleanup and UI asset isolation [audit-patch-output]'
           git push origin "HEAD:$HEAD_BRANCH"
