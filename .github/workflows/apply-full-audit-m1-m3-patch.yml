@@ -1,0 +1,79 @@
+name: TEMP Apply Full Audit M1 M3 Patch
+
+on:
+  push:
+    branches:
+      - redteam/imagelab-complete-audit-20260725-v2
+    paths:
+      - .audit/m1-m3.patch.gz.b64
+
+permissions:
+  contents: write
+
+concurrency:
+  group: imagelab-temp-m1-m3-patch
+  cancel-in-progress: false
+
+jobs:
+  apply-reviewed-patch:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.13.14'
+      - name: Verify trigger and decode exact patch
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF_NAME" == "redteam/imagelab-complete-audit-20260725-v2" ]]
+          mapfile -t changed < <(git diff --name-only "$BEFORE_SHA" "$GITHUB_SHA")
+          [[ ${#changed[@]} -eq 1 && "${changed[0]}" == ".audit/m1-m3.patch.gz.b64" ]]
+          base64 --decode .audit/m1-m3.patch.gz.b64 | gzip --decompress > /tmp/m1-m3.patch
+          echo '760d4a348f64c6a8ba9e1d45b48e7e0bd5aa44cc75001bae87e50dd5babbdfdd  /tmp/m1-m3.patch' | sha256sum --check --strict
+          git apply --check /tmp/m1-m3.patch
+      - name: Apply patch and verify exact scope
+        run: |
+          set -euo pipefail
+          git apply /tmp/m1-m3.patch
+          mapfile -t changed < <(git diff --name-only)
+          printf '%s\n' "${changed[@]}" > /tmp/changed.txt
+          cat > /tmp/expected.txt <<'EOF'
+          recovery/source/app/main.py
+          recovery/source/app/models.py
+          recovery/source/app/services/file_inspector.py
+          recovery/source/app/static/app.js
+          recovery/source/app/static/index.html
+          recovery/source/app/static/styles.css
+          recovery/source/tests/test_core_failure_regression.py
+          recovery/source/tests/test_full_audit_v2.py
+          recovery/source/tests/test_slu_m2_m5.py
+          EOF
+          sort -o /tmp/changed.txt /tmp/changed.txt
+          sort -o /tmp/expected.txt /tmp/expected.txt
+          diff -u /tmp/expected.txt /tmp/changed.txt
+      - name: Run focused and complete tests
+        working-directory: recovery/source
+        run: |
+          set -euo pipefail
+          python -m pip install --requirement requirements.txt
+          python -m pip install pytest==8.4.2 httpx==0.28.1
+          python -m compileall -q app tests/test_full_audit_v2.py
+          python -m pytest -q tests/test_full_audit_v2.py tests/test_core_failure_regression.py tests/test_slu_m2_m5.py
+          python -m pytest -q
+      - name: Commit exact tested patch and remove temporary machinery
+        run: |
+          set -euo pipefail
+          rm -f .audit/m1-m3.patch.gz.b64 .github/workflows/apply-full-audit-m1-m3-patch.yml
+          rmdir .audit 2>/dev/null || true
+          git config user.name 'ImageLab Audit Bot'
+          git config user.email 'audit-bot@users.noreply.github.com'
+          git add -A
+          mapfile -t staged < <(git diff --cached --name-only)
+          [[ ${#staged[@]} -eq 11 ]]
+          git commit -m 'Harden atomic cleanup and UI asset isolation'
+          git push origin "HEAD:$GITHUB_REF_NAME"
