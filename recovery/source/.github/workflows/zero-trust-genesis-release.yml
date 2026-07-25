@@ -194,9 +194,10 @@ jobs:
 
       - name: Attest exact genesis-authorized release outputs
         if: ${{ steps.finalize.outcome == 'success' && inputs.enable_attestation }}
-        uses: actions/attest@v4
+        uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6
         with:
           subject-path: authorized-release/*
+          create-storage-record: false
 
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         if: always()
