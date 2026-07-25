@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from app.config import settings
 from app.services.project_store import ProjectStore, ProjectStoreError
 
 
@@ -33,3 +34,14 @@ def test_missing_project_mutations_do_not_create_files(tmp_path: Path) -> None:
     with pytest.raises(ProjectStoreError, match="не найден"):
         store.clear_assets("MISSING-001")
     assert not (tmp_path / "MISSING-001.json").exists()
+
+
+def test_get_or_create_is_bootstrap_only_and_read_paths_do_not_write(tmp_path: Path) -> None:
+    store = ProjectStore(tmp_path)
+    with pytest.raises(ProjectStoreError, match="не найден"):
+        store.get_or_create("READ-ONLY-MISSING")
+    assert not (tmp_path / "READ-ONLY-MISSING.json").exists()
+
+    default = store.get_or_create(settings.default_project_id)
+    assert default.id == settings.default_project_id
+    assert (tmp_path / f"{settings.default_project_id}.json").exists()
