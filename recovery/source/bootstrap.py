@@ -135,7 +135,7 @@ def main() -> None:
         return
     if not external_browser:
         threading.Thread(target=_open_when_ready, args=(port,), daemon=True).start()
-    uvicorn.run("app.main:app", host=HOST, port=port, log_level="warning", access_log=False)
+    uvicorn.run("app.entry:app", host=HOST, port=port, log_level="warning", access_log=False)
 
 
 if __name__ == "__main__":
