@@ -2,66 +2,124 @@
 
 ## Purpose
 
-Do not install or distribute a candidate until the exact Windows installer passes G0–G8. The artifact named `UNVERIFIED_INTERNAL_EXACT_CANDIDATE` is internal only and must never be given to a user.
+Do not install or distribute a candidate until the applicable release path passes every required gate. Internal or unverified candidate artifacts must never be given to an end user as a release.
 
-## One-time setup
+## Normal release path
 
-1. Put this project in a private GitHub repository.
-2. Enable GitHub Actions for the repository.
-3. Use a genuine previous release that was authorized by this fail-closed finalizer. A merely used, renamed, diagnostic, recovery or internal candidate is not an authorized baseline.
-4. The same GitHub Release must contain exactly one installer matching:
-   `ImageLab_by_LarannA_RELEASE_AUTHORIZED*_Setup_x64.exe`
-5. The same release must contain the prior finalizer output:
-   `ImageLab-RELEASE-AUTHORIZATION.json`
-6. Independently record both SHA-256 values:
-   - SHA-256 of the authorized installer;
-   - SHA-256 of `ImageLab-RELEASE-AUTHORIZATION.json`.
-7. Do not derive either pinned value from the workflow run that is currently being tested.
-8. The authorization record must bind the exact installer name and SHA-256 to `status=RELEASE_AUTHORIZED` and include the previous final verdict and release-evidence digests.
+Use the normal **ImageLab Zero-Trust Release Gate** after at least one genuine authorized release exists.
 
-## Run
+The previous GitHub Release must contain exactly one installer matching:
 
-1. Open **Actions → ImageLab Zero-Trust Release Gate → Run workflow**.
-2. Enter:
-   - `baseline_release_tag` — tag of the previous authorized release;
-   - `baseline_installer_sha256` — independently pinned SHA-256 of that installer;
-   - `baseline_authorization_record_sha256` — independently pinned SHA-256 of its prior finalizer authorization record;
-   - `enable_attestation` — optional.
-3. Start the workflow manually.
+`ImageLab_by_LarannA_RELEASE_AUTHORIZED*_Setup_x64.exe`
 
-## Result interpretation
+It must also contain:
 
-### Authorized
+`ImageLab-RELEASE-AUTHORIZATION.json`
 
-Only this artifact may be distributed:
+Independently record the SHA-256 values of both files. The authorization record must bind the exact installer name and SHA-256 to `status=RELEASE_AUTHORIZED` and include the prior final verdict and release-evidence digests.
 
-`ImageLab-RELEASE-AUTHORIZED`
+Run the normal workflow with:
 
-It appears only when all gates pass. It contains:
+- `baseline_release_tag`;
+- `baseline_installer_sha256`;
+- `baseline_authorization_record_sha256`;
+- optional `enable_attestation`.
 
-- the exact tested installer;
-- `ImageLab-RELEASE-AUTHORIZATION.json`, which must accompany the installer when it becomes the baseline for a later release.
+A merely used, renamed, diagnostic, recovery or internal candidate is not an authorized baseline.
 
-### Blocked
+## One-time genesis first-release path
 
-Download:
+Use **ImageLab Genesis First Release Gate** only when no genuine authorized ImageLab release has ever existed.
+
+### Step 1 — Exact hosted qualification
+
+Run **ImageLab Zero-Trust Release Gate** for the exact candidate. Because no prior authorized baseline exists, that run must remain `RELEASE_BLOCKED`, but it must produce complete PASS evidence for G0–G5 and G8.
+
+Record:
+
+- the qualification workflow run ID;
+- the exact 40-character qualification head SHA.
+
+The genesis finalizer independently revalidates the downloaded candidate, self-tests, installed UI evidence, output evidence and the blocked qualification verdict.
+
+### Step 2 — Physical user-machine L5
+
+Test the exact installer binary on the physical Windows user machine. Produce exactly two release assets:
+
+- `ImageLab-PHYSICAL-L5.json`;
+- `ImageLab-PHYSICAL-L5-EVIDENCE.zip`.
+
+The manifest must contain:
+
+- `schema=1` and `status=PASS`;
+- `evidence_level=L5`;
+- `execution_environment=physical_user_machine`;
+- exact installer SHA-256, application, version, build ID and install ID;
+- UTC observation time;
+- product-owner witness;
+- Windows version;
+- PASS results for installed launch, browser UI path, resize/PPI, background removal, halftone, vector, history lineage, export and output-file validation;
+- SHA-256 of the evidence ZIP;
+- the list of evidence files.
+
+The ZIP must contain at minimum:
+
+- `clean-install.json`;
+- `preinstall-selftest.json`;
+- `postinstall-selftest.json`;
+- `ui-gate.json`;
+- `output-validation.json`;
+- PNG evidence;
+- SVG output evidence;
+- browser trace evidence.
+
+Upload both files to a GitHub Release used only as the physical-evidence carrier. Do not add any authorized installer or `ImageLab-RELEASE-AUTHORIZATION.json` to that release.
+
+Independently record the SHA-256 values of the manifest and ZIP.
+
+### Step 3 — Run genesis workflow
+
+Enter:
+
+- `qualification_run_id`;
+- `qualification_head_sha`;
+- `physical_l5_release_tag`;
+- `physical_l5_manifest_sha256`;
+- `physical_l5_bundle_sha256`;
+- optional `enable_attestation`.
+
+The workflow performs a complete paginated GitHub Releases query. It fails if it finds any prior asset matching an authorized ImageLab installer or `ImageLab-RELEASE-AUTHORIZATION.json`.
+
+For this one run only, G6 and G7 are recorded as `NOT_APPLICABLE_FIRST_RELEASE`, not `PASS`.
+
+### Genesis result
+
+Only `ImageLab-GENESIS-RELEASE-AUTHORIZED` may be used when the genesis finalizer succeeds. It contains:
+
+- the exact qualified installer renamed as authorized;
+- the first genuine `ImageLab-RELEASE-AUTHORIZATION.json`.
+
+That authorization record becomes the mandatory baseline record for the next normal release.
+
+After the first authorization assets exist, the genesis workflow must fail closed permanently.
+
+## Blocked results
+
+Normal path:
 
 `ImageLab-RELEASE-VERDICT`
 
-Inspect `final-verdict.json` and `release-evidence.zip`. The workflow intentionally ends in failure. Do not install the internal candidate.
+Genesis path:
 
-## Gates
+`ImageLab-GENESIS-RELEASE-VERDICT`
 
-- G0: source, identity, JavaScript and backend self-test.
-- G1: all 26 required test files in isolated processes.
-- G2: two byte-identical Windows installer builds.
-- G3: clean Windows installation of the exact candidate plus mandatory preinstall and postinstall embedded self-tests.
-- G4: installed UI driven in Microsoft Edge.
-- G5: binary inspection of PNG, PPI, alpha, halftone, SVG and lineage.
-- G6: update from the real previous authorized installer while it is running, with a SHA-pinned prior finalizer authorization record and real-project preservation evidence.
-- G7: forced post-promotion failure, exact rollback and real-project restoration.
-- G8: independent reinstall, embedded self-tests and UI/output rerun in bundled Chromium.
+Inspect `final-verdict.json` and `release-evidence.zip`. A blocked workflow intentionally ends in failure. Do not distribute the candidate.
 
-## Non-negotiable rule
+## Non-negotiable rules
 
-A locally built EXE, a source test PASS, an API test PASS, an internal candidate artifact, a matching filename, or an operator-entered boolean is not a release. Only an exact installer that passed all applicable gates and has a valid finalizer-generated authorization record may become `ImageLab-RELEASE-AUTHORIZED`.
+- Never retroactively label an old installer as authorized.
+- Never use the current candidate as its own previous baseline.
+- Never replace physical user-machine L5 with a hosted runner or a manually typed PASS flag.
+- Never treat `NOT_APPLICABLE_FIRST_RELEASE` as `PASS`.
+- Never run genesis after the first genuine authorization record exists.
+- A matching filename, source test, API test, internal candidate or operator-entered boolean is not a release.
