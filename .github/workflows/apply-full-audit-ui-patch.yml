@@ -1,0 +1,71 @@
+name: TEMP Apply Full Audit UI Patch
+
+on:
+  pull_request:
+    branches:
+      - bootstrap/zero-trust-gate
+    paths:
+      - .audit/ui.trigger
+
+permissions:
+  contents: write
+
+concurrency:
+  group: imagelab-temp-ui-patch-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  apply-reviewed-patch:
+    if: ${{ github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'redteam/imagelab-complete-audit-20260725-v2' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 2
+      - name: Detect trigger
+        id: gate
+        run: |
+          if [[ ! -f .audit/ui.trigger ]]; then echo 'apply=false' >> "$GITHUB_OUTPUT"; exit 0; fi
+          echo 'apply=true' >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        if: ${{ steps.gate.outputs.apply == 'true' }}
+        with:
+          python-version: '3.13.14'
+      - name: Verify and apply exact UI patch
+        if: ${{ steps.gate.outputs.apply == 'true' }}
+        run: |
+          set -euo pipefail
+          mapfile -t changed < <(git diff --name-only HEAD^ HEAD)
+          [[ ${#changed[@]} -eq 1 && "${changed[0]}" == ".audit/ui.trigger" ]]
+          [[ "$(cat .audit/ui.trigger)" == "APPLY-6280a78938d67bbee6acf32f6e6f9e9eab7dd8f38dfd30dcc525b9c3d880e12d" ]]
+          base64 --decode .audit/ui.patch.gz.b64 | gzip --decompress > /tmp/ui.patch
+          echo '6280a78938d67bbee6acf32f6e6f9e9eab7dd8f38dfd30dcc525b9c3d880e12d  /tmp/ui.patch' | sha256sum --check --strict
+          git apply --check /tmp/ui.patch
+          git apply /tmp/ui.patch
+          { git diff --name-only; git ls-files --others --exclude-standard; } | sort -u > /tmp/changed.txt
+          printf '%s\n' recovery/source/app/static/app.js recovery/source/app/static/styles.css recovery/source/release_gate/source_ui_redteam.py | sort -u > /tmp/expected.txt
+          diff -u /tmp/expected.txt /tmp/changed.txt
+      - name: Validate source and complete suite
+        if: ${{ steps.gate.outputs.apply == 'true' }}
+        working-directory: recovery/source
+        run: |
+          set -euo pipefail
+          python -m pip install --requirement requirements.txt
+          python -m pip install pytest==8.4.2 httpx==0.28.1 playwright==1.60.0
+          python -m py_compile release_gate/source_ui_redteam.py
+          node --check app/static/app.js
+          python -m pytest -q
+      - name: Commit explicit tested paths
+        if: ${{ steps.gate.outputs.apply == 'true' }}
+        env:
+          HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          git add recovery/source/app/static/app.js recovery/source/app/static/styles.css recovery/source/release_gate/source_ui_redteam.py
+          git rm -f .audit/ui.patch.gz.b64 .audit/ui.trigger
+          git config user.name 'ImageLab Audit Bot'
+          git config user.email 'audit-bot@users.noreply.github.com'
+          git commit -m 'Harden responsive UI and source browser contracts [audit-patch-output]'
+          git push origin "HEAD:$HEAD_BRANCH"
