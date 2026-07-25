@@ -280,15 +280,19 @@ class ProjectStore:
             return project
 
     def save(self, project: ProjectRecord) -> None:
-        """Merge AI metadata from a snapshot without overwriting live project state.
+        """Create a new record or merge AI metadata into the current live project.
 
-        This legacy entry point is used by on-demand AI analysis. The caller may
-        hold a snapshot that predates concurrent uploads, title/preset changes or
-        active-asset changes. Only AI dictionaries for still-existing assets are
-        merged; project structure and workspace always come from the live file.
+        A missing project is persisted as a new internal record. For an existing
+        project, the caller may hold a snapshot that predates concurrent uploads,
+        title/preset changes or active-asset changes, so only AI dictionaries for
+        still-existing assets are merged under the project lock.
         """
 
         with self._lock, self._project_lock(project.id):
+            if not self._path(project.id).exists():
+                self._validate_new_assets(self._new_project(project.id), project.assets)
+                self._save_unlocked(project)
+                return
             current = self._get_unlocked(project.id)
             incoming_by_id = {asset.id: asset for asset in project.assets}
             for current_asset in current.assets:
