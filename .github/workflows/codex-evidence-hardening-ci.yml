@@ -12,6 +12,7 @@ on:
       - recovery/source/tests/test_genesis_release_gate.py
       - recovery/source/.github/workflows/zero-trust-genesis-release.yml
       - .github/workflows/zero-trust-genesis-release.yml
+      - .github/workflows/zero-trust-genesis-request.yml
       - recovery/source/docs/ZERO_TRUST_RELEASE_GATE_RTM_V1.md
       - recovery/source/docs/ZERO_TRUST_RELEASE_GATE_RUNBOOK_V1.md
       - .github/workflows/codex-evidence-hardening-ci.yml
@@ -49,7 +50,9 @@ jobs:
         run: >-
           python -m compileall -q
           release_gate/finalize_gate.py
+          release_gate/genesis/resolve_request.py
           release_gate/genesis/verify_no_prior_release.py
+          release_gate/genesis/orchestrate_request_gate.py
           release_gate/genesis/finalize_gate.py
           tests/test_zero_trust_release_gate.py
           tests/test_genesis_release_gate.py
@@ -58,6 +61,7 @@ jobs:
           python -m pytest
           tests/test_zero_trust_release_gate.py
           tests/test_genesis_release_gate.py
+          tests/test_genesis_request_gate.py
           -vv --tb=short
       - name: Run complete source test suite
         run: |

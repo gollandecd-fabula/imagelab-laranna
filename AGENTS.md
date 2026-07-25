@@ -8,9 +8,12 @@
 - Release RTM: `recovery/source/docs/ZERO_TRUST_RELEASE_GATE_RTM_V1.md`.
 - Release runbook: `recovery/source/docs/ZERO_TRUST_RELEASE_GATE_RUNBOOK_V1.md`.
 - Normal release finalizer: `recovery/source/release_gate/finalize_gate.py`.
-- Active one-time genesis workflow: `.github/workflows/zero-trust-genesis-release.yml`.
+- Active request-only genesis workflow: `.github/workflows/zero-trust-genesis-request.yml`.
+- Root manual genesis template: `.github/workflows/zero-trust-genesis-release.yml` (not dispatchable until present on default branch).
 - Source-bundle genesis workflow: `recovery/source/.github/workflows/zero-trust-genesis-release.yml`.
-- One-time genesis finalizer: `recovery/source/release_gate/genesis/finalize_gate.py`.
+- Existing one-time genesis finalizer: `recovery/source/release_gate/genesis/finalize_gate.py`.
+- Request/history orchestrator: `recovery/source/release_gate/genesis/orchestrate_request_gate.py`.
+- Reviewed genesis request path: `recovery/genesis-request/GENESIS-REQUEST.json` (must be the only changed file in its push).
 - Current hosted Windows evidence: `recovery/evidence/windows-gate/rc13-windows-evidence-summary.json`.
 - Update/rollback diagnostic: `recovery/evidence/update-rollback/diagnostic-update-rollback-148-149-summary.json`.
 - G6 blocker: `recovery/evidence/update-rollback/g6-authorized-baseline-blocker.json`.
@@ -26,11 +29,12 @@
 6. Physical user-machine L5 evidence cannot be replaced by GitHub-hosted runners or simulated evidence.
 7. Claims must not exceed evidence. Report exact PASS, FAIL, BLOCKED, NOT VERIFIED and `NOT_APPLICABLE_FIRST_RELEASE` states.
 8. The genesis exception is limited to `GENESIS-FIRST-RELEASE-V1` and the dedicated genesis workflow. It records G6/G7 as `NOT_APPLICABLE_FIRST_RELEASE`, never PASS.
-9. Genesis must fail permanently after any authorized installer asset or `ImageLab-RELEASE-AUTHORIZATION.json` exists in GitHub Releases.
-10. A genesis authorization requires exact qualification evidence plus independently SHA-pinned physical L5 manifest and evidence ZIP.
-11. Do not add text-to-image generation. ImageLab processes uploaded images only.
-12. Keep physical dimensions in millimetres and edge softness in pixels. Do not add an mm/cm toggle.
-13. Preserve separate operations for background removal and print extraction.
+9. Genesis must fail permanently after any authorized installer asset, authorization record, prior successful genesis run or authorized genesis artifact exists.
+10. The active recovery bootstrap may execute only from a request-only push to `bootstrap/zero-trust-gate`; it must not require modifying `main`.
+11. A genesis authorization requires exact qualification evidence plus independently SHA-pinned physical L5 manifest and evidence ZIP.
+12. Do not add text-to-image generation. ImageLab processes uploaded images only.
+13. Keep physical dimensions in millimetres and edge softness in pixels. Do not add an mm/cm toggle.
+14. Preserve separate operations for background removal and print extraction.
 
 ## Current exact candidate
 
@@ -71,6 +75,7 @@ Stop and report `BLOCKED` rather than improvising when:
 - a task requires changing the selected specification without Dmitry's approval;
 - the required source, secret, device, physical L5 bundle or external evidence is absent;
 - a proposed patch weakens a gate or changes its PASS criterion outside the approved genesis rule;
-- genesis absence verification finds any prior authorized release asset;
+- genesis history verification finds any prior authorized release asset, successful genesis run or authorized artifact;
+- a genesis request push changes any file other than the fixed request JSON;
 - test or evidence results are inconsistent;
 - the task would publish, merge or release a blocked candidate.

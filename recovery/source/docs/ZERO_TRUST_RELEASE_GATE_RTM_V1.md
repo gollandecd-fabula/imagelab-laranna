@@ -32,10 +32,11 @@ It does not mark G6 or G7 as `PASS`. Instead, the dedicated Genesis Release Gate
 This is permitted only when all of the following are independently verified:
 
 1. A completed exact-SHA qualification run proves G0–G5 and G8 `PASS` for the candidate.
-2. A complete paginated GitHub Releases query finds zero authorized installer assets and zero `ImageLab-RELEASE-AUTHORIZATION.json` assets.
-3. An externally produced and independently SHA-pinned physical user-machine L5 manifest and evidence bundle match the exact installer SHA, version and build.
-4. Every other genesis finalizer requirement passes.
-5. The dedicated genesis finalizer creates the first genuine `ImageLab-RELEASE-AUTHORIZATION.json`.
+2. Complete paginated GitHub Releases and Actions-history queries find zero authorized installer assets, zero `ImageLab-RELEASE-AUTHORIZATION.json` assets, zero prior successful genesis runs and zero prior authorized genesis artifacts.
+3. A strictly validated request changes exactly `recovery/genesis-request/GENESIS-REQUEST.json` in a reviewed push to `bootstrap/zero-trust-gate`; no other file is changed.
+4. An externally produced and independently SHA-pinned physical user-machine L5 manifest and evidence bundle match the exact installer SHA, version and build.
+5. Every other genesis finalizer requirement passes.
+6. The dedicated genesis finalizer creates the first genuine `ImageLab-RELEASE-AUTHORIZATION.json`.
 
 After that first authorization record exists, the genesis path must fail closed permanently. Every later release must use the normal G6/G7 update and rollback path against a genuine prior authorized release.
 
@@ -66,7 +67,9 @@ After that first authorization record exists, the genesis path must fail closed 
 | ZTR-011 | Preserve complete evidence | ZTR-M6 | Always aggregate pass or fail evidence | Final archive and artifact checks | `release-evidence.zip`, release verdict artifact | Logs, traces, outputs, hashes, physical L5 bundle and verdict are preserved | HOSTED EVIDENCE PRESERVED; AUTHORIZED RELEASE ARCHIVE BLOCKED |
 | ZTR-012 | Attest released outputs when supported | ZTR-M6 | Optional GitHub artifact attestation only after authorization | Attestation workflow step | GitHub attestation | Attestation subject digest matches authorized outputs | CONFIGURED / NOT EXECUTED |
 | ZTR-013 | Never publish on partial evidence | ZTR-M6 | Authorized upload is conditional on finalizer success | Workflow graph, positive and negative tests | workflow, final verdict, authorization record | Any skip, missing evidence, mismatch or failure blocks authorized artifact | IMPLEMENTED / L1 VERIFIED |
-| ZTR-014 | Bootstrap the first release without inventing a historical baseline | ZTR-M5/M6 | Dedicated genesis workflow consumes an exact qualification run, proves absence of prior authorized assets and uses a separate genesis finalizer | `tests/test_genesis_release_gate.py` | Genesis works only once; normal gate is unchanged; prior assets or malformed evidence block | IMPLEMENTED / CI VERIFICATION PENDING |
+| ZTR-014 | Bootstrap the first release without inventing a historical baseline | ZTR-M5/M6 | Dedicated genesis workflow consumes a strictly validated request, exact qualification run, Release/Actions history and a separate genesis finalizer | `tests/test_genesis_release_gate.py` | Genesis works only once; normal gate is unchanged; prior assets/runs/artifacts, mixed-file pushes or malformed evidence block | IMPLEMENTED / FINAL-HEAD CI VERIFICATION PENDING |
+| ZTR-014A | Execute genesis without modifying default `main` | ZTR-M5/M6 | Dedicated root request workflow `.github/workflows/zero-trust-genesis-request.yml` listens only for a reviewed request-only push to `bootstrap/zero-trust-gate`; source template retains manual dispatch | Workflow static contract and request resolver tests | Push changes exactly the fixed JSON request path and every field matches the finalizer arguments | IMPLEMENTED / FINAL-HEAD CI VERIFICATION PENDING |
+| ZTR-014B | Prevent repeated genesis before Release publication | ZTR-M5/M6 | Scan prior workflow runs and authorized genesis artifacts in addition to Releases | History verifier adversarial tests | Any prior successful genesis run or authorized artifact blocks | IMPLEMENTED / FINAL-HEAD CI VERIFICATION PENDING |
 | ZTR-015 | Require physical user-machine L5 for genesis authorization | ZTR-M6 | Download independently pinned manifest and evidence ZIP; inspect exact SHA, identity, self-tests, browser trace and output files | Positive and tamper tests | Exact physical L5 manifest and bundle pass; missing or mismatched evidence blocks | VALIDATOR IMPLEMENTED / REAL PHYSICAL L5 NOT YET SUPPLIED |
 
 ## Release gates
@@ -85,7 +88,7 @@ After that first authorization record exists, the genesis path must fail closed 
 
 A normal release is authorized only when G0–G8 are all `PASS`, the prior authorization record is valid, physical user-machine L5 is verified and the final verdict is `RELEASE_AUTHORIZED`.
 
-The one-time genesis release is authorized only when G0–G5 and G8 are `PASS`, G6/G7 are exactly `NOT_APPLICABLE_FIRST_RELEASE`, the absence verifier is `PASS`, physical user-machine L5 is verified for the exact candidate, and the genesis final verdict is `RELEASE_AUTHORIZED`.
+The one-time genesis release is authorized only when G0–G5 and G8 are `PASS`, G6/G7 are exactly `NOT_APPLICABLE_FIRST_RELEASE`, the request verifier and Release/Actions-history absence verifier are `PASS`, physical user-machine L5 is verified for the exact candidate, and the genesis final verdict is `RELEASE_AUTHORIZED`.
 
 Current final state:
 

@@ -77,18 +77,44 @@ Upload both files to a GitHub Release used only as the physical-evidence carrier
 
 Independently record the SHA-256 values of the manifest and ZIP.
 
-### Step 3 — Run genesis workflow
+### Step 3 — Submit the reviewed genesis request
 
-Enter:
+In the current recovery repository, `workflow_dispatch` cannot be used until the workflow file is present on the default branch. `main` remains unchanged by protocol. Therefore the active bootstrap path uses a reviewed request-only push to `bootstrap/zero-trust-gate`.
 
-- `qualification_run_id`;
-- `qualification_head_sha`;
-- `physical_l5_release_tag`;
-- `physical_l5_manifest_sha256`;
-- `physical_l5_bundle_sha256`;
-- optional `enable_attestation`.
+After the genesis implementation PR is independently reviewed and integrated into the recovery branch, create a separate PR that changes exactly one file:
 
-The workflow performs a complete paginated GitHub Releases query. It fails if it finds any prior asset matching an authorized ImageLab installer or `ImageLab-RELEASE-AUTHORIZATION.json`.
+`recovery/genesis-request/GENESIS-REQUEST.json`
+
+Required exact schema:
+
+```json
+{
+  "schema": 1,
+  "status": "GENESIS_AUTHORIZATION_REQUESTED",
+  "release_mode": "genesis_first_release",
+  "protocol_rule": "GENESIS-FIRST-RELEASE-V1",
+  "repository": "gollandecd-fabula/imagelab-laranna",
+  "request_id": "GENESIS-UNIQUE-REQUEST-ID",
+  "qualification_run_id": 123456789,
+  "qualification_head_sha": "40 lowercase hexadecimal characters",
+  "physical_l5_release_tag": "physical-evidence-release-tag",
+  "physical_l5_manifest_sha256": "64 lowercase hexadecimal characters",
+  "physical_l5_bundle_sha256": "64 lowercase hexadecimal characters",
+  "enable_attestation": false
+}
+```
+
+The request PR must contain no code, workflow, documentation or other file changes. After review, its merge/push to `bootstrap/zero-trust-gate` triggers the active root workflow `.github/workflows/zero-trust-genesis-request.yml`. The workflow independently verifies that the push changed exactly the fixed request file and validates every request field before using it.
+
+The source-bundle workflow `.github/workflows/zero-trust-genesis-release.yml` retains `workflow_dispatch` for a future repository layout where that workflow is on the default branch.
+
+The genesis history verifier performs complete paginated queries of:
+
+- GitHub Releases;
+- previous runs of the same genesis workflow;
+- prior non-expired `ImageLab-GENESIS-RELEASE-AUTHORIZED` artifacts.
+
+It fails if it finds any prior authorized installer, authorization record, successful genesis run or authorized genesis artifact. This prevents a second genesis authorization even before the first output is published as a GitHub Release.
 
 For this one run only, G6 and G7 are recorded as `NOT_APPLICABLE_FIRST_RELEASE`, not `PASS`.
 
@@ -121,5 +147,7 @@ Inspect `final-verdict.json` and `release-evidence.zip`. A blocked workflow inte
 - Never use the current candidate as its own previous baseline.
 - Never replace physical user-machine L5 with a hosted runner or a manually typed PASS flag.
 - Never treat `NOT_APPLICABLE_FIRST_RELEASE` as `PASS`.
-- Never run genesis after the first genuine authorization record exists.
+- Never run genesis after the first genuine authorization record, successful genesis run or authorized genesis artifact exists.
 - A matching filename, source test, API test, internal candidate or operator-entered boolean is not a release.
+
+- Never bundle code changes with the reviewed genesis request file.
