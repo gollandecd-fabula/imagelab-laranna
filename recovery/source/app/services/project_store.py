@@ -209,8 +209,12 @@ class ProjectStore:
             incoming_ids.add(asset.id)
 
     def get_or_create(self, project_id: str) -> ProjectRecord:
+        """Bootstrap only the configured default; reads must never create projects."""
+
         with self._lock, self._project_lock(project_id):
-            return self._get_or_create_unlocked(project_id)
+            if project_id == settings.default_project_id:
+                return self._get_or_create_unlocked(project_id)
+            return self._get_unlocked(project_id)
 
     def get(self, project_id: str) -> ProjectRecord:
         with self._lock, self._project_lock(project_id):
