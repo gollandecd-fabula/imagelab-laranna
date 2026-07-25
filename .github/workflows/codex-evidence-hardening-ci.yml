@@ -5,9 +5,20 @@ on:
     branches:
       - bootstrap/zero-trust-gate
     paths:
+      - recovery/source/app/services/file_inspector.py
+      - recovery/source/app/services/project_store.py
+      - recovery/source/release_gate/fetch_pinned_json.py
       - recovery/source/release_gate/finalize_gate.py
+      - recovery/source/release_gate/finalize_unit_matrix.py
       - recovery/source/release_gate/run_update_rollback_gate.ps1
+      - recovery/source/.github/workflows/zero-trust-release.yml
+      - recovery/source/tests/test_project_lookup_resilience.py
+      - recovery/source/tests/test_project_store_concurrency.py
+      - recovery/source/tests/test_upload_surface_hardening.py
       - recovery/source/tests/test_zero_trust_release_gate.py
+      - recovery/source/docs/ZERO_TRUST_RELEASE_GATE_RTM_V1.md
+      - recovery/source/docs/ZERO_TRUST_RELEASE_GATE_RUNBOOK_V1.md
+      - recovery/evidence/full-audit-20260725/**
       - .github/workflows/codex-evidence-hardening-ci.yml
   workflow_dispatch:
 
@@ -40,15 +51,31 @@ jobs:
           python -m pip install -q --requirement requirements.txt
           python -m pip install -q pytest==8.4.2 httpx==0.28.1
       - name: Compile changed Python contracts
-        run: python -m compileall -q release_gate/finalize_gate.py tests/test_zero_trust_release_gate.py
-      - name: Run focused release-gate tests
-        run: python -m pytest tests/test_zero_trust_release_gate.py -vv --tb=short
+        run: >-
+          python -m compileall -q
+          app/services/file_inspector.py
+          app/services/project_store.py
+          release_gate/fetch_pinned_json.py
+          release_gate/finalize_gate.py
+          release_gate/finalize_unit_matrix.py
+          tests/test_project_lookup_resilience.py
+          tests/test_project_store_concurrency.py
+          tests/test_upload_surface_hardening.py
+          tests/test_zero_trust_release_gate.py
+      - name: Run focused hardening tests
+        run: >-
+          python -m pytest
+          tests/test_zero_trust_release_gate.py
+          tests/test_project_store_concurrency.py
+          tests/test_project_lookup_resilience.py
+          tests/test_upload_surface_hardening.py
+          -vv --tb=short
       - name: Run complete source test suite
         run: |
           set +e
           python -m pytest -q > full-suite.log 2>&1
           code=$?
-          tail -n 120 full-suite.log
+          tail -n 160 full-suite.log
           exit $code
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         if: always()
