@@ -1,0 +1,77 @@
+name: ImageLab Full Audit Source Snapshot
+
+on:
+  pull_request:
+    branches:
+      - bootstrap/zero-trust-gate
+    paths:
+      - recovery/source/**
+      - bootstrap/**
+      - AGENTS.md
+      - .github/workflows/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: imagelab-full-audit-snapshot-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  source-snapshot:
+    name: Build privacy-bounded audit snapshot
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      - name: Build deterministic source snapshot
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib
+          import json
+          import zipfile
+
+          root = Path('.').resolve()
+          output = root / 'imagelab-full-audit-source.zip'
+          included_roots = [root / 'recovery' / 'source', root / 'bootstrap', root / '.github' / 'workflows']
+          individual = [root / 'AGENTS.md']
+          forbidden_parts = {'.git', '__pycache__', '.pytest_cache', 'data', 'output', 'build', 'dist'}
+          forbidden_names = {'.env', 'feedback.json', 'audit.json', 'launcher.log'}
+          files = []
+          for source_root in included_roots:
+              if source_root.exists():
+                  files.extend(path for path in source_root.rglob('*') if path.is_file())
+          files.extend(path for path in individual if path.is_file())
+          selected = []
+          for path in sorted(set(files)):
+              relative = path.relative_to(root)
+              if forbidden_parts.intersection(relative.parts) or path.name in forbidden_names:
+                  continue
+              selected.append((path, relative.as_posix()))
+          with zipfile.ZipFile(output, 'w', zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
+              for path, relative in selected:
+                  info = zipfile.ZipInfo(relative, date_time=(2026, 1, 1, 0, 0, 0))
+                  info.compress_type = zipfile.ZIP_DEFLATED
+                  info.external_attr = 0o600 << 16
+                  archive.writestr(info, path.read_bytes())
+          manifest = {
+              'schema': 1,
+              'status': 'PASS',
+              'head_sha': '${{ github.event.pull_request.head.sha || github.sha }}',
+              'file_count': len(selected),
+              'zip_sha256': hashlib.sha256(output.read_bytes()).hexdigest(),
+              'privacy_exclusions': sorted(forbidden_parts | forbidden_names),
+          }
+          Path('imagelab-full-audit-source.json').write_text(json.dumps(manifest, indent=2), 'utf-8')
+          print(json.dumps(manifest, indent=2))
+          PY
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        with:
+          name: ImageLab-full-audit-source
+          path: |
+            imagelab-full-audit-source.zip
+            imagelab-full-audit-source.json
+          retention-days: 14
+          if-no-files-found: error
