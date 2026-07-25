@@ -67,8 +67,9 @@ def test_windows_launcher_reports_startup_failures_and_logs_output() -> None:
     assert "cmd.Stderr = logFile" in source
     assert "if err := cmd.Start(); err != nil" in source
     assert "_ = cmd.Start()" not in source
-    assert '"PYTHONNOUSERSITE"' in source
-    assert '"1"' in source[source.index('"PYTHONNOUSERSITE"'):source.index('"PYTHONNOUSERSITE"') + 120]
+    assert '"PYTHONNOUSERSITE"' in source and '"1"' in source
+    assert "withEnvOverrides" in source
+    assert "terminateOwnedProcess" in source
 
 
 def test_windows_installer_does_not_ignore_shortcut_or_launch_errors() -> None:
@@ -84,3 +85,10 @@ def test_uninstaller_reports_start_failures_and_preserves_user_data() -> None:
     assert "if err := cmd.Start(); err != nil" in source
     assert "Пользовательские проекты сохраняются" in source
     assert 'ImageLab by LarannA", "data"' not in source
+    assert "validateInstallRoot" in source
+    assert "readInstallManifest" in source
+    assert "IMAGELAB_UNINSTALL_ROOT" in source
+    assert "ExecutablePath.StartsWith" in source
+    assert "uninstall-status.json" in source
+    assert "Test-Path -LiteralPath $root" in source
+    assert "fmt.Sprintf(`Start-Sleep" not in source
