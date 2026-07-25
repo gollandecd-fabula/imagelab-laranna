@@ -16,7 +16,9 @@ import tempfile
 import zipfile
 
 MAX_MEMBERS = 5_000
-MAX_UNCOMPRESSED_BYTES = 1_000_000_000
+MAX_ARCHIVE_BYTES = 128 * 1024 * 1024
+MAX_UNCOMPRESSED_BYTES = 256 * 1024 * 1024
+MAX_MEMBER_BYTES = 128 * 1024 * 1024
 REQUIRED_FILES = (
     "app/main.py",
     "app/config.py",
@@ -39,6 +41,14 @@ FORBIDDEN_BASENAMES = {
     "feedback.json",
     "audit.json",
 }
+WINDOWS_RESERVED_BASENAMES = {
+    "CON",
+    "PRN",
+    "AUX",
+    "NUL",
+    *{f"COM{index}" for index in range(1, 10)},
+    *{f"LPT{index}" for index in range(1, 10)},
+}
 
 
 def sha256_file(path: Path) -> str:
@@ -49,15 +59,43 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def member_mode(member: zipfile.ZipInfo) -> int:
+    return (member.external_attr >> 16) & 0xFFFF
+
+
+def normalized_parts(name: str) -> tuple[str, ...]:
+    path = PurePosixPath(name)
+    return tuple(part for part in path.parts if part not in {"", "."})
+
+
+def unsafe_windows_component(part: str) -> bool:
+    if not part or part.endswith((" ", ".")) or ":" in part:
+        return True
+    if any(ord(character) < 32 for character in part):
+        return True
+    basename = part.split(".", 1)[0].upper()
+    return basename in WINDOWS_RESERVED_BASENAMES
+
+
+def windows_member_key(member: zipfile.ZipInfo) -> str:
+    parts = normalized_parts(member.filename.rstrip("/"))
+    return "/".join(part.casefold() for part in parts)
+
+
 def is_unsafe_member(member: zipfile.ZipInfo) -> bool:
     path = PurePosixPath(member.filename)
-    parts = tuple(part for part in path.parts if part not in {"", "."})
-    mode = (member.external_attr >> 16) & 0xFFFF
+    parts = normalized_parts(member.filename)
+    mode = member_mode(member)
+    special_mode = bool(mode) and not member.is_dir() and not stat.S_ISREG(mode)
     return (
-        path.is_absolute()
+        not parts
+        or path.is_absolute()
         or ".." in parts
         or "\\" in member.filename
+        or "\x00" in member.filename
+        or any(unsafe_windows_component(part) for part in parts)
         or stat.S_ISLNK(mode)
+        or special_mode
     )
 
 
@@ -72,6 +110,32 @@ def is_forbidden_member(name: str) -> bool:
         or lower.endswith((".pyc", ".pyo"))
         or path.name.lower() in FORBIDDEN_BASENAMES
     )
+
+
+def windows_collisions(members: list[zipfile.ZipInfo]) -> list[str]:
+    by_key: dict[str, list[zipfile.ZipInfo]] = {}
+    for member in members:
+        key = windows_member_key(member)
+        by_key.setdefault(key, []).append(member)
+
+    collisions: set[str] = set()
+    for grouped in by_key.values():
+        if len(grouped) > 1:
+            collisions.update(member.filename for member in grouped)
+
+    file_keys = {
+        windows_member_key(member): member.filename
+        for member in members
+        if not member.is_dir()
+    }
+    all_keys = {windows_member_key(member): member.filename for member in members}
+    for file_key, file_name in file_keys.items():
+        prefix = file_key + "/"
+        for key, name in all_keys.items():
+            if key.startswith(prefix):
+                collisions.add(file_name)
+                collisions.add(name)
+    return sorted(collisions)
 
 
 def write_evidence(path: Path, evidence: dict[str, object]) -> None:
@@ -101,7 +165,7 @@ def main() -> int:
     expected_sha256 = args.expected_sha256.lower()
     failures: list[str] = []
     evidence: dict[str, object] = {
-        "schema": 3,
+        "schema": 4,
         "status": "FAIL",
         "expected": {
             "sha256": expected_sha256,
@@ -123,6 +187,10 @@ def main() -> int:
         if failures:
             raise RuntimeError("bootstrap input admission failed")
 
+        archive_size = args.archive.stat().st_size
+        if archive_size > MAX_ARCHIVE_BYTES:
+            failures.append("SOURCE_ZIP_ARCHIVE_LIMIT_EXCEEDED")
+
         checksum_tokens = args.checksum.read_text(encoding="utf-8").strip().split()
         if len(checksum_tokens) != 2:
             failures.append("SOURCE_CHECKSUM_FORMAT_INVALID")
@@ -134,6 +202,7 @@ def main() -> int:
             "pinned_sha256": pinned_sha256,
             "actual_sha256": actual_sha256,
             "pinned_filename": pinned_filename,
+            "archive_size_bytes": archive_size,
         }
         if not re.fullmatch(r"[0-9a-f]{64}", pinned_sha256):
             failures.append("SOURCE_CHECKSUM_NOT_SHA256")
@@ -147,14 +216,19 @@ def main() -> int:
         with zipfile.ZipFile(args.archive) as bundle:
             members = bundle.infolist()
             names = [member.filename for member in members]
-            bad_crc = bundle.testzip()
             total_uncompressed = sum(int(member.file_size) for member in members)
+            oversized_members = sorted(
+                member.filename
+                for member in members
+                if int(member.file_size) > MAX_MEMBER_BYTES
+            )
             duplicate_names = sorted(
                 name for name in set(names) if names.count(name) > 1
             )
             unsafe = sorted(
                 member.filename for member in members if is_unsafe_member(member)
             )
+            collisions = windows_collisions(members)
             forbidden = sorted(
                 member.filename
                 for member in members
@@ -166,19 +240,23 @@ def main() -> int:
                 "members_sha256": hashlib.sha256(
                     "\n".join(sorted(names)).encode("utf-8")
                 ).hexdigest(),
-                "crc_failure": bad_crc,
+                "crc_failure": None,
+                "oversized_members": oversized_members,
                 "duplicate_members": duplicate_names,
+                "windows_collisions": collisions,
                 "unsafe_members": unsafe,
                 "forbidden_members": forbidden,
             }
-            if bad_crc is not None:
-                failures.append("SOURCE_ZIP_CRC_FAILURE")
             if len(members) > MAX_MEMBERS:
                 failures.append("SOURCE_ZIP_MEMBER_LIMIT_EXCEEDED")
             if total_uncompressed > MAX_UNCOMPRESSED_BYTES:
                 failures.append("SOURCE_ZIP_UNCOMPRESSED_LIMIT_EXCEEDED")
+            if oversized_members:
+                failures.append("SOURCE_ZIP_MEMBER_SIZE_LIMIT_EXCEEDED")
             if duplicate_names:
                 failures.append("SOURCE_ZIP_DUPLICATE_MEMBER")
+            if collisions:
+                failures.append("SOURCE_ZIP_WINDOWS_COLLISION")
             if unsafe:
                 failures.append("SOURCE_ZIP_UNSAFE_MEMBER")
             if forbidden:
@@ -187,31 +265,43 @@ def main() -> int:
             if failures:
                 evidence["extract_state"] = "BLOCKED_BY_ARCHIVE_ADMISSION"
             else:
-                args.extract_to.parent.mkdir(parents=True, exist_ok=True)
-                stage = Path(
-                    tempfile.mkdtemp(
-                        prefix=f".{args.extract_to.name}-",
-                        suffix=".tmp",
-                        dir=args.extract_to.parent,
+                # CRC requires decompression, so it runs only after all metadata,
+                # size, path and privacy limits have admitted the archive.
+                bad_crc = bundle.testzip()
+                evidence["archive"]["crc_failure"] = bad_crc
+                if bad_crc is not None:
+                    failures.append("SOURCE_ZIP_CRC_FAILURE")
+                    evidence["extract_state"] = "BLOCKED_BY_ARCHIVE_ADMISSION"
+                else:
+                    args.extract_to.parent.mkdir(parents=True, exist_ok=True)
+                    stage = Path(
+                        tempfile.mkdtemp(
+                            prefix=f".{args.extract_to.name}-",
+                            suffix=".tmp",
+                            dir=args.extract_to.parent,
+                        )
                     )
-                )
-                evidence["extract_state"] = "STAGING"
-                for member in members:
-                    target = stage / PurePosixPath(member.filename)
-                    target_resolved = target.resolve()
+                    evidence["extract_state"] = "STAGING"
                     stage_resolved = stage.resolve()
-                    if (
-                        target_resolved != stage_resolved
-                        and stage_resolved not in target_resolved.parents
-                    ):
-                        failures.append("ZIP_EXTRACTION_ESCAPE")
-                        break
-                    if member.is_dir():
-                        target.mkdir(parents=True, exist_ok=True)
-                    else:
-                        target.parent.mkdir(parents=True, exist_ok=True)
-                        with bundle.open(member) as source, target.open("xb") as destination:
-                            shutil.copyfileobj(source, destination)
+                    for member in members:
+                        target = stage / PurePosixPath(member.filename)
+                        target_resolved = target.resolve()
+                        if (
+                            target_resolved != stage_resolved
+                            and stage_resolved not in target_resolved.parents
+                        ):
+                            failures.append("ZIP_EXTRACTION_ESCAPE")
+                            break
+                        if member.is_dir():
+                            target.mkdir(parents=True, exist_ok=True)
+                        else:
+                            target.parent.mkdir(parents=True, exist_ok=True)
+                            with bundle.open(member) as source, target.open(
+                                "xb"
+                            ) as destination:
+                                shutil.copyfileobj(
+                                    source, destination, length=1024 * 1024
+                                )
 
         if not failures and stage is not None:
             missing = [item for item in REQUIRED_FILES if not (stage / item).is_file()]
