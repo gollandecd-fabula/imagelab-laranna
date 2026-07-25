@@ -10,6 +10,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -39,6 +41,37 @@ type healthResponse struct {
 	Version   string `json:"version"`
 	BuildID   string `json:"build_id"`
 	InstallID string `json:"install_id"`
+}
+
+func envKey(entry string) string {
+	if index := strings.IndexByte(entry, '='); index >= 0 {
+		return strings.ToUpper(entry[:index])
+	}
+	return strings.ToUpper(entry)
+}
+
+func withEnvOverrides(base []string, overrides map[string]string) []string {
+	overrideKeys := make(map[string]bool, len(overrides))
+	ordered := make([]string, 0, len(overrides))
+	for key := range overrides {
+		overrideKeys[strings.ToUpper(key)] = true
+		ordered = append(ordered, key)
+	}
+	sort.Slice(ordered, func(i, j int) bool { return strings.ToUpper(ordered[i]) < strings.ToUpper(ordered[j]) })
+	result := make([]string, 0, len(base)+len(overrides))
+	seen := map[string]bool{}
+	for _, entry := range base {
+		key := envKey(entry)
+		if overrideKeys[key] || seen[key] {
+			continue
+		}
+		seen[key] = true
+		result = append(result, entry)
+	}
+	for _, key := range ordered {
+		result = append(result, key+"="+overrides[key])
+	}
+	return result
 }
 
 func messageBox(title, text string, flags uintptr) {
@@ -146,7 +179,7 @@ func findExactHealth(manifest installManifest) (int, bool) {
 	return 0, false
 }
 
-func waitForExactHealth(manifest installManifest, processExit <-chan error) error {
+func waitForExactHealth(manifest installManifest, processExit <-chan error) (bool, error) {
 	deadline := time.NewTimer(75 * time.Second)
 	defer deadline.Stop()
 	ticker := time.NewTicker(300 * time.Millisecond)
@@ -155,19 +188,39 @@ func waitForExactHealth(manifest installManifest, processExit <-chan error) erro
 		select {
 		case <-ticker.C:
 			if _, ok := findExactHealth(manifest); ok {
-				return nil
+				return false, nil
 			}
 		case err := <-processExit:
 			if _, ok := findExactHealth(manifest); ok {
-				return nil
+				return true, nil
 			}
 			if err == nil {
-				return fmt.Errorf("процесс запуска завершился до готовности сервера")
+				return true, fmt.Errorf("процесс запуска завершился до готовности сервера")
 			}
-			return fmt.Errorf("процесс запуска завершился: %w", err)
+			return true, fmt.Errorf("процесс запуска завершился: %w", err)
 		case <-deadline.C:
-			return fmt.Errorf("новая версия не ответила за 75 секунд")
+			return false, fmt.Errorf("новая версия не ответила за 75 секунд")
 		}
+	}
+}
+
+func terminateOwnedProcess(cmd *exec.Cmd, processExit <-chan error) error {
+	if cmd == nil || cmd.Process == nil {
+		return nil
+	}
+	pid := cmd.Process.Pid
+	output, taskkillErr := exec.Command("taskkill.exe", "/PID", strconv.Itoa(pid), "/T", "/F").CombinedOutput()
+	if taskkillErr != nil {
+		_ = cmd.Process.Kill()
+	}
+	select {
+	case <-processExit:
+		return nil
+	case <-time.After(12 * time.Second):
+		if taskkillErr != nil {
+			return fmt.Errorf("не удалось завершить процесс %d: %w: %s", pid, taskkillErr, strings.TrimSpace(string(output)))
+		}
+		return fmt.Errorf("процесс %d не завершился после taskkill", pid)
 	}
 }
 
@@ -224,17 +277,17 @@ func main() {
 
 	cmd := exec.Command(python, bootstrap)
 	cmd.Dir = installDir
-	cmd.Env = append(os.Environ(),
-		"IMAGELAB_DATA_DIR="+dataDir,
-		"IMAGELAB_STATIC_DIR="+filepath.Join(installDir, "app", "static"),
-		"IMAGELAB_AI_MODEL_DIR="+filepath.Join(installDir, "models"),
-		"PYTHONPATH="+installDir+";"+filepath.Join(installDir, "runtime", "Lib", "site-packages"),
-		"PYTHONNOUSERSITE=1",
-		"IMAGELAB_EXPECTED_VERSION="+appVersion,
-		"IMAGELAB_EXPECTED_BUILD_ID="+buildID,
-		"IMAGELAB_EXPECTED_INSTALL_ID="+manifest.InstallID,
-		"IMAGELAB_INSTALL_ID="+manifest.InstallID,
-	)
+	cmd.Env = withEnvOverrides(os.Environ(), map[string]string{
+		"IMAGELAB_DATA_DIR":            dataDir,
+		"IMAGELAB_STATIC_DIR":          filepath.Join(installDir, "app", "static"),
+		"IMAGELAB_AI_MODEL_DIR":        filepath.Join(installDir, "models"),
+		"PYTHONPATH":                   installDir + ";" + filepath.Join(installDir, "runtime", "Lib", "site-packages"),
+		"PYTHONNOUSERSITE":             "1",
+		"IMAGELAB_EXPECTED_VERSION":    appVersion,
+		"IMAGELAB_EXPECTED_BUILD_ID":   buildID,
+		"IMAGELAB_EXPECTED_INSTALL_ID": manifest.InstallID,
+		"IMAGELAB_INSTALL_ID":          manifest.InstallID,
+	})
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: 0x00000008}
@@ -245,10 +298,19 @@ func main() {
 	}
 	exit := make(chan error, 1)
 	go func() { exit <- cmd.Wait() }()
-	if err := waitForExactHealth(manifest, exit); err != nil {
-		_, _ = fmt.Fprintf(logFile, "startup verification failed: %v\n", err)
+	processExited, healthErr := waitForExactHealth(manifest, exit)
+	if healthErr != nil {
+		_, _ = fmt.Fprintf(logFile, "startup verification failed: %v\n", healthErr)
+		if !processExited {
+			if stopErr := terminateOwnedProcess(cmd, exit); stopErr != nil {
+				_, _ = fmt.Fprintf(logFile, "startup cleanup failed: %v\n", stopErr)
+				healthErr = fmt.Errorf("%w; cleanup: %v", healthErr, stopErr)
+			} else {
+				_, _ = fmt.Fprintln(logFile, "failed startup process tree terminated")
+			}
+		}
 		_ = logFile.Close()
-		fail("Запущенный сервер не подтвердил точную новую версию. Подробности сохранены в журнале:\n"+logPath, err)
+		fail("Запущенный сервер не подтвердил точную новую версию. Процесс не оставлен работать в фоне. Подробности сохранены в журнале:\n"+logPath, healthErr)
 		return
 	}
 	_, _ = fmt.Fprintln(logFile, "startup identity verified")
