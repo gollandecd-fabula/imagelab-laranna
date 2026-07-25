@@ -3,7 +3,7 @@ from __future__ import annotations
 import io
 
 import pytest
-from PIL import Image, features
+from PIL import Image
 
 from app.services.file_inspector import (
     UploadValidationError,
@@ -50,19 +50,20 @@ def test_multiframe_tiff_is_rejected_before_persistence() -> None:
 
 
 def test_animated_webp_is_rejected_when_codec_supports_animation() -> None:
-    if not features.check("webp_anim"):
-        pytest.skip("Pillow build has no animated WebP support")
     first = Image.new("RGBA", (16, 16), (255, 0, 0, 255))
     second = Image.new("RGBA", (16, 16), (0, 255, 0, 255))
     buffer = io.BytesIO()
-    first.save(
-        buffer,
-        format="WEBP",
-        save_all=True,
-        append_images=[second],
-        duration=100,
-        loop=0,
-        lossless=True,
-    )
+    try:
+        first.save(
+            buffer,
+            format="WEBP",
+            save_all=True,
+            append_images=[second],
+            duration=100,
+            loop=0,
+            lossless=True,
+        )
+    except (OSError, KeyError):
+        pytest.skip("Pillow build has no animated WebP encoder")
     with pytest.raises(UploadValidationError, match="анимированные"):
         inspect_upload(buffer.getvalue(), "animated.webp")
