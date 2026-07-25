@@ -67,7 +67,8 @@ def test_windows_launcher_reports_startup_failures_and_logs_output() -> None:
     assert "cmd.Stderr = logFile" in source
     assert "if err := cmd.Start(); err != nil" in source
     assert "_ = cmd.Start()" not in source
-    assert "PYTHONNOUSERSITE=1" in source
+    assert '"PYTHONNOUSERSITE"' in source
+    assert '"1"' in source[source.index('"PYTHONNOUSERSITE"'):source.index('"PYTHONNOUSERSITE"') + 120]
 
 
 def test_windows_installer_does_not_ignore_shortcut_or_launch_errors() -> None:
