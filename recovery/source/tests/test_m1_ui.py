@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from app.main import app
+from app.entry import app
 
 client = TestClient(app)
 
@@ -72,3 +72,19 @@ def test_frontend_wires_ai_runtime_feedback_training_and_rollback() -> None:
         "/ai/analyze", "/ai/explain", "collectAIRecords", "renderAI",
     ]:
         assert marker in js
+
+
+def test_m1_responsive_and_operation_mode_contracts_are_wired() -> None:
+    html = client.get('/').text
+    assert '/static/m1-hardening.css?v=m1' in html
+    assert '/static/m1-hardening.js?v=m1' in html
+    css = client.get('/static/m1-hardening.css?v=m1').text
+    js = client.get('/static/m1-hardening.js?v=m1').text
+    base_js = client.get('/static/app.js?v=1.4.9-recovery-candidate').text
+    assert '@media(max-width:1100px)' in css
+    assert '@media(max-width:800px)' in css
+    assert 'grid-template-columns:150px minmax(0,1fr) 290px' in css
+    assert 'syncOperationModeControlsM1' in js
+    assert "repair.checked = forcedOff ? false : Boolean(state.autoRepairPreference)" in js
+    assert 'if (state.busy)' in js
+    assert 'state.selectionAssetId !== asset.id' in base_js
