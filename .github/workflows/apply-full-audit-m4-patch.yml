@@ -47,7 +47,7 @@ jobs:
           set -euo pipefail
           mapfile -t changed < <(git diff --name-only HEAD^ HEAD)
           [[ ${#changed[@]} -eq 1 && "${changed[0]}" == ".audit/m4.trigger" ]]
-          [[ "$(cat .audit/m4.trigger)" == "APPLY-fcc1d10bc67c4cbb8b443ee02c3a778af92275e0eef54062c2cbbb69293cdb0c" ]]
+          [[ "$(cat .audit/m4.trigger)" == "APPLY-fcc1d10bc67c4cbb8b443ee02c3a778af92275e0eef54062c2cbbb69293cdb0c-V2" ]]
           base64 --decode .audit/m4.patch.gz.b64 | gzip --decompress > /tmp/m4.patch
           echo 'fcc1d10bc67c4cbb8b443ee02c3a778af92275e0eef54062c2cbbb69293cdb0c  /tmp/m4.patch' | sha256sum --check --strict
           git apply --check /tmp/m4.patch
@@ -74,13 +74,13 @@ jobs:
           PY
           GO111MODULE=off GOOS=windows GOARCH=amd64 go test -c -o "$RUNNER_TEMP/installer-tests.exe" .
           rm payload.zip
-      - name: Commit explicit tested paths
+      - name: Commit installer code and remove payload
         if: ${{ steps.gate.outputs.apply == 'true' }}
         env:
           HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
         run: |
           set -euo pipefail
-          git add .github/workflows/codex-evidence-hardening-ci.yml recovery/source/windows_installer/installer/main.go recovery/source/windows_installer/installer/main_test.go
+          git add recovery/source/windows_installer/installer/main.go recovery/source/windows_installer/installer/main_test.go
           git rm -f .audit/m4.patch.gz.b64 .audit/m4.trigger
           git config user.name 'ImageLab Audit Bot'
           git config user.email 'audit-bot@users.noreply.github.com'
