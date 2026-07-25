@@ -37,9 +37,12 @@ def test_timeout_paths_have_no_unbounded_communicate_or_taskkill() -> None:
 
 def test_isolated_processing_is_mandatory_in_all_manifests() -> None:
     assert EXPECTED["isolated-processing"] == "tests/test_isolated_processing.py"
+    assert EXPECTED["upload-surface-hardening"] == "tests/test_upload_surface_hardening.py"
     source_gate = (ROOT / "release_gate" / "source_gate.py").read_text("utf-8")
     workflow = (ROOT / ".github" / "workflows" / "zero-trust-release.yml").read_text("utf-8")
     assert 'ROOT / "tests" / "test_isolated_processing.py"' in source_gate
     assert "id: isolated-processing" in workflow
     assert "file: tests/test_isolated_processing.py" in workflow
-    assert len(EXPECTED) == 26
+    assert "id: upload-surface-hardening" in workflow
+    assert "file: tests/test_upload_surface_hardening.py" in workflow
+    assert len(EXPECTED) == 27
