@@ -19,7 +19,14 @@ from app.models import AssetRecord, CheckItem
 
 
 ALLOWED_RASTER_FORMATS = {"PNG", "JPEG", "WEBP", "TIFF", "BMP"}
-FORMAT_SUFFIX = {"PNG": ".png", "JPEG": ".jpg", "WEBP": ".webp", "TIFF": ".tiff", "BMP": ".bmp", "SVG": ".svg"}
+FORMAT_SUFFIX = {
+    "PNG": ".png",
+    "JPEG": ".jpg",
+    "WEBP": ".webp",
+    "TIFF": ".tiff",
+    "BMP": ".bmp",
+    "SVG": ".svg",
+}
 FORMAT_MIME = {
     "PNG": "image/png",
     "JPEG": "image/jpeg",
@@ -29,10 +36,25 @@ FORMAT_MIME = {
     "SVG": "image/svg+xml",
 }
 SVG_FORBIDDEN_TAGS = {
-    "script", "foreignObject", "iframe", "object", "embed", "image",
-    "audio", "video", "canvas", "style", "animate", "animateMotion", "animateTransform", "set",
+    "script",
+    "foreignObject",
+    "iframe",
+    "object",
+    "embed",
+    "image",
+    "audio",
+    "video",
+    "canvas",
+    "style",
+    "animate",
+    "animateMotion",
+    "animateTransform",
+    "set",
 }
-SVG_LENGTH_RE = re.compile(r"^\s*([0-9]*\.?[0-9]+)\s*(px|mm|cm|in|pt)?\s*$", re.I)
+SVG_LENGTH_RE = re.compile(
+    r"^\s*([0-9]*\.?[0-9]+)\s*(px|mm|cm|in|pt)?\s*$", re.I
+)
+SVG_CSS_URL_RE = re.compile(r"url\(\s*(['\"]?)(.*?)\1\s*\)", re.I)
 MAX_SVG_BYTES = 10 * 1024 * 1024
 MAX_SVG_ELEMENTS = 50_000
 MAX_SVG_TOTAL_TEXT = 2 * 1024 * 1024
@@ -93,7 +115,7 @@ def _extract_ppi(image: Image.Image) -> tuple[float, float, str]:
         x_raw, y_raw = exif.get(282), exif.get(283)
         if x_raw is not None and y_raw is not None:
             x, y = float(x_raw), float(y_raw)
-            if unit == 3:  # pixels per centimetre -> pixels per inch
+            if unit == 3:
                 x *= 2.54
                 y *= 2.54
             if 1 <= x <= 100_000 and 1 <= y <= 100_000:
@@ -115,7 +137,9 @@ def _svg_length(value: str | None) -> tuple[float | None, str | None]:
     return number, (match.group(2) or "px").lower()
 
 
-def _length_to_px_mm(value: float | None, unit: str | None) -> tuple[float | None, float | None]:
+def _length_to_px_mm(
+    value: float | None, unit: str | None
+) -> tuple[float | None, float | None]:
     if value is None or unit is None:
         return None, None
     if unit == "mm":
@@ -131,13 +155,36 @@ def _length_to_px_mm(value: float | None, unit: str | None) -> tuple[float | Non
 
 def _dangerous_css(value: str) -> bool:
     compact = value.replace("\x00", "").strip().lower()
-    return any(token in compact for token in ("javascript:", "expression(", "@import", "url(", "-moz-binding"))
+    if any(
+        token in compact
+        for token in (
+            "javascript:",
+            "expression(",
+            "@import",
+            "-moz-binding",
+            "http://",
+            "https://",
+            "file:",
+            "data:",
+        )
+    ):
+        return True
+    if "url(" not in compact:
+        return False
+    matches = list(SVG_CSS_URL_RE.finditer(compact))
+    if not matches:
+        return True
+    for match in matches:
+        target = match.group(2).strip()
+        if not target.startswith("#") or len(target) <= 1:
+            return True
+    return False
 
 
 def inspect_and_sanitize_svg(data: bytes) -> SvgInfo:
     if not data or len(data) > MAX_SVG_BYTES:
         raise UploadValidationError("SVG пустой или превышает лимит 10 МБ")
-    lowered = data[:8192].lower()
+    lowered = data.lower()
     if b"<!doctype" in lowered or b"<!entity" in lowered:
         raise UploadValidationError("Небезопасный SVG: DTD и сущности запрещены")
     try:
@@ -158,22 +205,35 @@ def inspect_and_sanitize_svg(data: bytes) -> SvgInfo:
             raise UploadValidationError("SVG содержит слишком много элементов")
         local_name = element.tag.split("}")[-1]
         if local_name in SVG_FORBIDDEN_TAGS:
-            raise UploadValidationError(f"Небезопасный SVG: запрещён элемент {local_name}")
+            raise UploadValidationError(
+                f"Небезопасный SVG: запрещён элемент {local_name}"
+            )
         if len(element.attrib) > 100:
-            raise UploadValidationError("SVG-элемент содержит слишком много атрибутов")
+            raise UploadValidationError(
+                "SVG-элемент содержит слишком много атрибутов"
+            )
         total_text += len(element.text or "") + len(element.tail or "")
         if total_text > MAX_SVG_TOTAL_TEXT:
             raise UploadValidationError("SVG содержит чрезмерный объём текста")
         for attr, value in list(element.attrib.items()):
             attr_name = attr.split("}")[-1].lower()
             value_text = str(value).strip()
-            value_lower = value_text.lower()
             if attr_name.startswith("on"):
-                raise UploadValidationError("Небезопасный SVG: обработчики событий запрещены")
-            if attr_name in {"href", "src"} and value_text and not value_text.startswith("#"):
-                raise UploadValidationError("Небезопасный SVG: разрешены только внутренние ссылки #id")
-            if attr_name in {"style", "fill", "stroke", "filter", "clip-path", "mask"} and _dangerous_css(value_lower):
-                raise UploadValidationError("Небезопасный SVG: внешние CSS/URL-ссылки запрещены")
+                raise UploadValidationError(
+                    "Небезопасный SVG: обработчики событий запрещены"
+                )
+            if (
+                attr_name in {"href", "src"}
+                and value_text
+                and not value_text.startswith("#")
+            ):
+                raise UploadValidationError(
+                    "Небезопасный SVG: разрешены только внутренние ссылки #id"
+                )
+            if _dangerous_css(value_text):
+                raise UploadValidationError(
+                    "Небезопасный SVG: внешние CSS/URL-ссылки запрещены"
+                )
 
     width_value, width_unit = _svg_length(root.attrib.get("width"))
     height_value, height_unit = _svg_length(root.attrib.get("height"))
@@ -184,15 +244,21 @@ def inspect_and_sanitize_svg(data: bytes) -> SvgInfo:
     if (width_px is None or height_px is None) and view_box:
         try:
             parts = [float(part) for part in view_box.replace(",", " ").split()]
-            if len(parts) != 4 or not all(abs(value) <= 1_000_000 for value in parts):
+            if len(parts) != 4 or not all(
+                abs(value) <= 1_000_000 for value in parts
+            ):
                 raise ValueError
             _, _, vb_w, vb_h = parts
             if vb_w <= 0 or vb_h <= 0:
                 raise ValueError
             width_px = width_px or vb_w
             height_px = height_px or vb_h
-            width_mm = width_mm or _physical_size_mm(int(round(vb_w)), settings.workspace_ppi)
-            height_mm = height_mm or _physical_size_mm(int(round(vb_h)), settings.workspace_ppi)
+            width_mm = width_mm or _physical_size_mm(
+                int(round(vb_w)), settings.workspace_ppi
+            )
+            height_mm = height_mm or _physical_size_mm(
+                int(round(vb_h)), settings.workspace_ppi
+            )
         except (ValueError, TypeError):
             raise UploadValidationError("Некорректный viewBox SVG")
 
@@ -218,7 +284,9 @@ def _make_preview(image: Image.Image, path: Path) -> None:
 
 def _atomic_write(directory: Path, final_name: str, data: bytes) -> None:
     directory.mkdir(parents=True, exist_ok=True)
-    fd, temp_name = tempfile.mkstemp(prefix=final_name + ".", suffix=".tmp", dir=directory)
+    fd, temp_name = tempfile.mkstemp(
+        prefix=final_name + ".", suffix=".tmp", dir=directory
+    )
     try:
         with os.fdopen(fd, "wb") as stream:
             stream.write(data)
@@ -233,13 +301,14 @@ def _atomic_write(directory: Path, final_name: str, data: bytes) -> None:
 
 
 def _supported_raster_magic(data: bytes) -> bool:
-    # Reject all parser families outside the explicit product contract before
-    # Pillow selects a decoder. This blocks EPS/PDF/FITS/JPEG2000 polyglots even
-    # when they are renamed with a supported extension.
     return (
         data.startswith(b"\x89PNG\r\n\x1a\n")
         or data.startswith(b"\xff\xd8\xff")
-        or (len(data) >= 12 and data.startswith(b"RIFF") and data[8:12] == b"WEBP")
+        or (
+            len(data) >= 12
+            and data.startswith(b"RIFF")
+            and data[8:12] == b"WEBP"
+        )
         or data.startswith((b"II*\x00", b"MM\x00*"))
         or data.startswith(b"BM")
     )
@@ -252,7 +321,7 @@ def inspect_upload(data: bytes, original_name: str) -> AssetRecord:
         raise UploadValidationError("Файл превышает лимит 50 МБ")
 
     asset_id = uuid.uuid4().hex
-    sha256 = hashlib.sha256(data).hexdigest()
+    source_sha256 = hashlib.sha256(data).hexdigest()
     safe_name = Path(original_name or "image").name[:255]
     now = datetime.now(timezone.utc).isoformat()
 
@@ -285,17 +354,29 @@ def inspect_upload(data: bytes, original_name: str) -> AssetRecord:
             preview_url=f"/api/assets/{asset_id}/preview",
             download_url=f"/api/assets/{asset_id}/file",
             checks=[
-                CheckItem(code="integrity", label="Файл не повреждён", passed=True),
-                CheckItem(code="format", label="Формат поддерживается", passed=True),
-                CheckItem(code="safe_svg", label="SVG безопасен", passed=True),
-                CheckItem(code="dimensions", label="Размер определён", passed=bool(info.width_px and info.height_px)),
+                CheckItem(
+                    code="integrity", label="Файл не повреждён", passed=True
+                ),
+                CheckItem(
+                    code="format", label="Формат поддерживается", passed=True
+                ),
+                CheckItem(
+                    code="safe_svg", label="SVG безопасен", passed=True
+                ),
+                CheckItem(
+                    code="dimensions",
+                    label="Размер определён",
+                    passed=bool(info.width_px and info.height_px),
+                ),
             ],
         )
         _atomic_write(settings.upload_dir, stored_name, info.sanitized)
         return record
 
     if not _supported_raster_magic(data):
-        raise UploadValidationError("Сигнатура файла не соответствует PNG, JPG, WEBP, TIFF или BMP")
+        raise UploadValidationError(
+            "Сигнатура файла не соответствует PNG, JPG, WEBP, TIFF или BMP"
+        )
 
     Image.MAX_IMAGE_PIXELS = settings.max_image_pixels
     preview_buffer = io.BytesIO()
@@ -307,10 +388,23 @@ def inspect_upload(data: bytes, original_name: str) -> AssetRecord:
         with Image.open(io.BytesIO(data)) as image:
             detected_format = (image.format or "").upper()
             if detected_format not in ALLOWED_RASTER_FORMATS:
-                raise UploadValidationError("Поддерживаются PNG, JPG, WEBP, TIFF, BMP и SVG")
+                raise UploadValidationError(
+                    "Поддерживаются PNG, JPG, WEBP, TIFF, BMP и SVG"
+                )
+            frame_count = int(getattr(image, "n_frames", 1) or 1)
+            if frame_count != 1:
+                raise UploadValidationError(
+                    "Многостраничные и анимированные изображения не поддерживаются"
+                )
             width, height = image.size
-            if width <= 0 or height <= 0 or width * height > settings.max_image_pixels:
-                raise UploadValidationError("Некорректный или чрезмерный размер изображения")
+            if (
+                width <= 0
+                or height <= 0
+                or width * height > settings.max_image_pixels
+            ):
+                raise UploadValidationError(
+                    "Некорректный или чрезмерный размер изображения"
+                )
             ppi_x, ppi_y, ppi_origin = _extract_ppi(image)
             color_mode = image.mode
             has_alpha = _alpha_present(image)
@@ -321,14 +415,20 @@ def inspect_upload(data: bytes, original_name: str) -> AssetRecord:
             preview = ImageOps.exif_transpose(image).copy()
             preview.thumbnail((1400, 1400), Image.Resampling.LANCZOS)
             if preview.mode not in {"RGB", "RGBA"}:
-                preview = preview.convert("RGBA" if _alpha_present(preview) else "RGB")
+                preview = preview.convert(
+                    "RGBA" if _alpha_present(preview) else "RGB"
+                )
             preview.save(preview_buffer, format="PNG", optimize=True)
     except UploadValidationError:
         raise
-    except (UnidentifiedImageError, OSError, ValueError) as exc:
-        raise UploadValidationError("Повреждённый файл или неподдерживаемый формат") from exc
+    except (UnidentifiedImageError, OSError, ValueError, EOFError) as exc:
+        raise UploadValidationError(
+            "Повреждённый файл или неподдерживаемый формат"
+        ) from exc
     except (Image.DecompressionBombError, Image.DecompressionBombWarning) as exc:
-        raise UploadValidationError("Изображение превышает безопасный лимит пикселей") from exc
+        raise UploadValidationError(
+            "Изображение превышает безопасный лимит пикселей"
+        ) from exc
 
     record = AssetRecord(
         id=asset_id,
@@ -336,7 +436,7 @@ def inspect_upload(data: bytes, original_name: str) -> AssetRecord:
         stored_name=stored_name,
         preview_name=preview_name,
         size_bytes=len(data),
-        sha256=sha256,
+        sha256=source_sha256,
         mime_type=FORMAT_MIME[detected_format],
         format=detected_format,
         width_px=width,
@@ -353,17 +453,40 @@ def inspect_upload(data: bytes, original_name: str) -> AssetRecord:
         preview_url=f"/api/assets/{asset_id}/preview",
         download_url=f"/api/assets/{asset_id}/file",
         checks=[
-            CheckItem(code="integrity", label="Файл не повреждён", passed=True),
-            CheckItem(code="format", label="Формат поддерживается", passed=True),
-            CheckItem(code="dimensions", label="Размер определён", passed=True),
-            CheckItem(code="resolution", label="Разрешение определено", passed=True, detail=f"{_round(ppi_x)} PPI"),
-            CheckItem(code="transparency", label="Прозрачность проверена", passed=True, detail="Есть" if has_alpha else "Нет"),
-            CheckItem(code="profile", label="Цветовой профиль проверен", passed=True, detail=profile),
+            CheckItem(
+                code="integrity", label="Файл не повреждён", passed=True
+            ),
+            CheckItem(
+                code="format", label="Формат поддерживается", passed=True
+            ),
+            CheckItem(
+                code="dimensions", label="Размер определён", passed=True
+            ),
+            CheckItem(
+                code="resolution",
+                label="Разрешение определено",
+                passed=True,
+                detail=f"{_round(ppi_x)} PPI",
+            ),
+            CheckItem(
+                code="transparency",
+                label="Прозрачность проверена",
+                passed=True,
+                detail="Есть" if has_alpha else "Нет",
+            ),
+            CheckItem(
+                code="profile",
+                label="Цветовой профиль проверен",
+                passed=True,
+                detail=profile,
+            ),
         ],
     )
     _atomic_write(settings.upload_dir, stored_name, data)
     try:
-        _atomic_write(settings.preview_dir, preview_name, preview_buffer.getvalue())
+        _atomic_write(
+            settings.preview_dir, preview_name, preview_buffer.getvalue()
+        )
     except Exception:
         try:
             (settings.upload_dir / stored_name).unlink()
