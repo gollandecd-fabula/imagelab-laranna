@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -61,19 +62,104 @@ func messageBox(title, text string, flags uintptr) {
 	proc.Call(0, uintptr(unsafe.Pointer(m)), uintptr(unsafe.Pointer(t)), flags)
 }
 
+func unsafeWindowsComponent(component string) bool {
+	if component == "" || strings.HasSuffix(component, " ") || strings.HasSuffix(component, ".") || strings.Contains(component, ":") {
+		return true
+	}
+	for _, character := range component {
+		if character < 32 {
+			return true
+		}
+	}
+	base := strings.ToUpper(strings.SplitN(component, ".", 2)[0])
+	if base == "CON" || base == "PRN" || base == "AUX" || base == "NUL" {
+		return true
+	}
+	if len(base) == 4 && (strings.HasPrefix(base, "COM") || strings.HasPrefix(base, "LPT")) && base[3] >= '1' && base[3] <= '9' {
+		return true
+	}
+	return false
+}
+
+func archiveEntryKey(name string) (string, error) {
+	if name == "" || strings.Contains(name, "\\") || strings.ContainsRune(name, '\x00') {
+		return "", fmt.Errorf("unsafe archive path: %q", name)
+	}
+	clean := path.Clean(name)
+	if clean == "." || clean == ".." || strings.HasPrefix(clean, "/") || strings.HasPrefix(clean, "../") {
+		return "", fmt.Errorf("unsafe archive path: %q", name)
+	}
+	parts := strings.Split(strings.TrimSuffix(clean, "/"), "/")
+	for _, component := range parts {
+		if component == "." || component == ".." || unsafeWindowsComponent(component) {
+			return "", fmt.Errorf("unsafe Windows archive component %q in %q", component, name)
+		}
+	}
+	return strings.ToLower(strings.Join(parts, "/")), nil
+}
+
+func validateArchiveEntries(reader *zip.Reader) error {
+	const maxMembers = 5000
+	const maxMemberBytes = uint64(256 * 1024 * 1024)
+	const maxTotalBytes = uint64(512 * 1024 * 1024)
+	if len(reader.File) > maxMembers {
+		return fmt.Errorf("archive member limit exceeded: %d", len(reader.File))
+	}
+	type entryKind struct{ directory bool }
+	entries := make(map[string]entryKind, len(reader.File))
+	var total uint64
+	for _, file := range reader.File {
+		key, err := archiveEntryKey(file.Name)
+		if err != nil {
+			return err
+		}
+		mode := file.Mode()
+		if mode&(os.ModeSymlink|os.ModeDevice|os.ModeNamedPipe|os.ModeSocket|os.ModeCharDevice) != 0 || (!file.FileInfo().IsDir() && !mode.IsRegular()) {
+			return fmt.Errorf("unsupported archive member type: %s", file.Name)
+		}
+		if _, exists := entries[key]; exists {
+			return fmt.Errorf("duplicate Windows archive path: %s", file.Name)
+		}
+		if file.UncompressedSize64 > maxMemberBytes {
+			return fmt.Errorf("archive member size limit exceeded: %s", file.Name)
+		}
+		if ^uint64(0)-total < file.UncompressedSize64 {
+			return errors.New("archive uncompressed size overflow")
+		}
+		total += file.UncompressedSize64
+		if total > maxTotalBytes {
+			return errors.New("archive uncompressed size limit exceeded")
+		}
+		entries[key] = entryKind{directory: file.FileInfo().IsDir()}
+	}
+	for key, kind := range entries {
+		if kind.directory {
+			continue
+		}
+		parts := strings.Split(key, "/")
+		for index := 1; index < len(parts); index++ {
+			parent := strings.Join(parts[:index], "/")
+			if parentKind, exists := entries[parent]; exists && !parentKind.directory {
+				return fmt.Errorf("archive file-directory collision: %s", key)
+			}
+		}
+	}
+	return nil
+}
+
 func safeExtract(reader *zip.Reader, destination string) error {
+	if err := validateArchiveEntries(reader); err != nil {
+		return err
+	}
 	base, err := filepath.Abs(destination)
 	if err != nil {
 		return err
 	}
 	for _, file := range reader.File {
-		clean := filepath.Clean(file.Name)
-		if filepath.IsAbs(clean) || clean == "." || strings.HasPrefix(clean, "..") {
-			return fmt.Errorf("unsafe archive path: %s", file.Name)
-		}
-		target := filepath.Join(base, clean)
+		clean := path.Clean(file.Name)
+		target := filepath.Join(base, filepath.FromSlash(clean))
 		targetAbs, err := filepath.Abs(target)
-		if err != nil || (targetAbs != base && !strings.HasPrefix(targetAbs, base+string(os.PathSeparator))) {
+		if err != nil || (targetAbs != base && !strings.HasPrefix(strings.ToLower(targetAbs), strings.ToLower(base+string(os.PathSeparator)))) {
 			return fmt.Errorf("archive traversal: %s", file.Name)
 		}
 		if file.FileInfo().IsDir() {
@@ -89,12 +175,12 @@ func safeExtract(reader *zip.Reader, destination string) error {
 		if err != nil {
 			return err
 		}
-		out, err := os.OpenFile(target, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
+		out, err := os.OpenFile(target, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
 		if err != nil {
 			in.Close()
 			return err
 		}
-		_, copyErr := io.Copy(out, in)
+		written, copyErr := io.Copy(out, in)
 		closeErr := out.Close()
 		in.Close()
 		if copyErr != nil {
@@ -102,6 +188,9 @@ func safeExtract(reader *zip.Reader, destination string) error {
 		}
 		if closeErr != nil {
 			return closeErr
+		}
+		if uint64(written) != file.UncompressedSize64 {
+			return fmt.Errorf("archive member size mismatch: %s", file.Name)
 		}
 	}
 	return nil
