@@ -7,14 +7,13 @@ Base: `bootstrap/zero-trust-gate` at `12208d708f3870fc2323ad351b3a2abe14fa672a`
 
 ## Scope lock
 
-This audit assesses and, where supported, corrects the complete current program and delivery chain without changing the selected product specification:
+This audit corrects the current application and delivery chain without changing the selected product specification:
 
 - uploaded-image processing only; no text-to-image mode;
 - physical dimensions in millimetres; edge softness in pixels; no mm/cm toggle;
 - background removal and print extraction remain separate operations;
 - exact candidate identity and evidence are not relabelled or weakened;
-- no installer publication, `main` modification or merge to the protected release line;
-- no fabricated historical authorization baseline;
+- no installer publication, protected-branch merge or release authorization;
 - hosted runners cannot replace physical user-machine L5;
 - new AI engines are not integrated before M0-M2 stabilization and code freeze.
 
@@ -22,101 +21,158 @@ This audit assesses and, where supported, corrects the complete current program 
 
 | Capability | Supported method | Gate result |
 |---|---|---|
-| Read and inspect repository source, tests, workflows and evidence | GitHub connector, exact branch refs and exact workflow artifacts | PASS |
-| Modify source, tests, workflows and documentation | GitHub contents API on the authorized audit branch | PASS |
-| Execute Linux/Windows automated checks | GitHub Actions plus local exact-source reproduction | PASS |
-| Maintain the approved one-time Genesis policy | Manual root Genesis workflow plus reviewed request gate, both fail-closed | PASS FOR IMPLEMENTATION; NO AUTHORIZATION RUN |
-| Perform physical user-machine L5 | Dmitry's real Windows machine and witnessed evidence | BLOCKED — external physical action pending final candidate |
-| Publish installer or authorize release | Forbidden while any release gate is blocked | BLOCKED BY SPEC |
-
-Supported audit and correction work proceeds. External prerequisites cannot be simulated.
+| Inspect repository source, tests, workflows and evidence | GitHub connector, exact refs and workflow artifacts | PASS |
+| Modify the authorized audit branch | GitHub contents API | PASS |
+| Execute Linux and Windows automated checks | GitHub Actions plus local exact-source reproduction | PASS |
+| Execute a real browser contract | Playwright Chromium on hosted Ubuntu | PASS FOR M1 CONTRACT |
+| Maintain the one-time Genesis policy | Manual fail-closed workflows | PASS FOR IMPLEMENTATION; NOT RUN |
+| Perform physical user-machine L5 | Dmitry's actual Windows computer | BLOCKED UNTIL FINAL CANDIDATE |
+| Publish or authorize a release | Forbidden while a release gate is blocked | BLOCKED BY SPEC |
 
 ## M0 execution record — governance baseline cleanup
 
 User authorization: granted on 2026-07-26.  
-Baseline head inspected: `ceb2b112e2fb16cb8a451f572a69ac4538b05a95`.
+Baseline inspected: `ceb2b112e2fb16cb8a451f572a69ac4538b05a95`.
 
-Implemented changes:
+Implemented:
 
-1. Deleted temporary automatic write workflow `.github/workflows/apply-full-audit-ui-patch.yml` (`5cc3c204f62af87d637b059989ee8d137d0c5319`).
-2. Deleted failed binary patch payload `.audit/ui.patch.gz.b64` (`3e9759469ee671e6b47386b836f8eec3ae5923a4`).
-3. Deleted obsolete patch trigger `.audit/ui.trigger` (`ae45b095c8804455ba294632ba829387cc14a896`).
-4. Restored the executable root manual Genesis workflow with `recovery/source` working directories and root-relative authorized-output paths (`30a97f4357f80532a4755fdc4a6702210cbc3ae6`).
+1. Deleted the temporary automatic write workflow and its binary payload/trigger.
+2. Restored the executable manual root Genesis workflow.
+3. Restored green governance, bootstrap, dependency, snapshot and evidence-hardening CI.
 
-Verification on the exact M0 change set:
+Evidence:
 
 | Evidence | Result |
 |---|---|
-| Local workflow governance contracts | PASS — 4/4 |
-| Local Genesis release/request contracts | PASS — 12/12 |
-| Local complete application source suite | PASS — 194/194 |
-| Remote Workflow Governance CI run `30172617537` | PASS |
-| Remote Evidence Hardening CI run `30172617543` | PASS — Python complete suite, Windows ZIP admission and PowerShell parser |
-| Remote Bootstrap Verifier run `30172617572` | PASS |
-| Remote Dependency Security Audit run `30172617538` | PASS |
-| Remote Full Audit Source Snapshot run `30172617551` | PASS |
+| Local governance contracts | PASS — 4/4 |
+| Local Genesis contracts | PASS — 12/12 |
+| Local complete source suite | PASS — 194/194 |
+| Remote Governance `30172617537` | PASS |
+| Remote Evidence Hardening `30172617543` | PASS |
+| Remote Bootstrap `30172617572` | PASS |
+| Remote Dependency Audit `30172617538` | PASS |
+| Remote Source Snapshot `30172617551` | PASS |
 
-**M0 status: PASS.**  
-**Next stage: M1 — NOT STARTED / NOT AUTHORIZED IN THIS EXECUTION.**
+**M0 status: PASS.**
+
+## M1 execution record — application, UI and Windows lifecycle hardening
+
+User authorization: granted on 2026-07-26.  
+M1 code head verified: `8034d400ac45b1c48591d9ec76b46ec96fed05c7`.
+
+### Implemented corrections
+
+1. **Responsive UI**
+   - removed the effective fixed-width clipping through an audited responsive CSS layer;
+   - added layouts for 1300, 1100 and 800 px widths;
+   - preserved the original UI source and served the hardening layer through `app.entry`.
+2. **Operation-mode truthfulness**
+   - fast and check-only modes visually uncheck and disable global auto-repair;
+   - professional mode restores the stored user preference;
+   - busy state cannot be silently undone by `syncLocks`.
+3. **Browser critical path**
+   - covered navigation through all nine modules;
+   - covered 1024/800 width overflow;
+   - covered per-asset mask isolation;
+   - covered cancelled AI training confirmation;
+   - covered malformed JSON and visible fail-closed error state.
+4. **Launcher process ownership**
+   - deduplicated case-insensitive environment variables;
+   - timeout or identity failure terminates the launcher-owned process tree;
+   - the process is waited/reaped and cleanup failure is reported.
+5. **Uninstaller safety**
+   - validates install root and `install-manifest.json` identity before deletion;
+   - passes paths through environment variables instead of PowerShell source interpolation;
+   - stops only processes whose executable path belongs to the installation root;
+   - verifies process exit and directory deletion;
+   - writes `uninstall-status.json` and preserves user projects.
+6. **Mandatory gates**
+   - added a real Chromium job;
+   - added Windows launcher and uninstaller Go tests;
+   - retained the complete Python suite, JavaScript syntax, ZIP and PowerShell gates.
+
+### M1 verification
+
+| Evidence | Result |
+|---|---|
+| Local complete Python suite excluding separately executed browser test | PASS |
+| Local Chromium browser contract | PASS — 2/2 |
+| Local JavaScript syntax | PASS |
+| Local Windows Go package cross-compilation | PASS |
+| Remote Workflow Governance run `30174283262` | PASS |
+| Remote Dependency Security Audit run `30174283184` | PASS |
+| Remote Bootstrap Verifier run `30174283181` | PASS |
+| Remote Full Audit Source Snapshot run `30174283185` | PASS |
+| Remote Evidence Hardening run `30174283224` | PASS |
+| Remote Python complete suite job `89720511214` | PASS |
+| Remote Browser UI M1 job `89720511145` | PASS |
+| Remote Windows launcher/uninstaller job `89720511191` | PASS |
+| Remote Windows installer ZIP job `89720511210` | PASS |
+| Remote PowerShell parser job `89720511188` | PASS |
+
+**M1 status: PASS for the authorized M1 scope.**  
+**M2 status: NOT STARTED / NOT AUTHORIZED IN THIS EXECUTION.**
+
+M1 does not assign a new release identity. The current historical version/build identity remains invalid for release after source changes. New version, Build ID, source SHA and installer SHA belong to M2 code freeze.
 
 ## Requirements Traceability Matrix
 
-| ID | Requirement / risk domain | Required action | Verification | PASS criterion | Current status |
-|---|---|---|---|---|---|
-| AUD-001 | Product-scope compliance | Search UI/API/config for text-to-image, cm toggle, merged operations or legal claims | Static scan + targeted tests | No prohibited function or terminology; separate operations remain | PENDING M1 |
-| AUD-002 | Exact identity and deterministic build | Verify version/build/source/installer identity propagation and reproducibility | Manifest/code/workflow inspection + tests | No mutable or filename-only identity path; exact SHA propagated | OLD 1.4.9 IDENTITY INVALIDATED; NEW IDENTITY REQUIRED AFTER M2 FREEZE |
-| AUD-003 | Archive/package admission | Check traversal, duplicate names, symlinks, CRC, decompression size, privacy denylist and atomic extraction | Adversarial tests | Every malformed or oversized archive fails before publication | PARTIAL PASS — current Windows ZIP admission tests PASS; broader package gate remains M1/M2 |
-| AUD-004 | Installer atomicity and recovery | Check staging, pre/post self-test, promotion, process shutdown, rollback and partial-install cleanup | Source inspection + Windows tests | Failure cannot leave mixed or falsely healthy installation | PENDING M1 |
-| AUD-005 | Local service exposure | Check bind address, port discovery, CORS, Host handling, browser launch and cross-origin write surface | Static + runtime tests | Loopback-only; untrusted origins/hosts cannot mutate state | PARTIAL; complete M1 review pending |
-| AUD-006 | Upload validation and resource exhaustion | Check extension/MIME/signature, bytes/pixels/frames, decompression bombs and malformed images | Adversarial upload tests | Invalid or oversized inputs fail before expensive processing | PARTIAL; complete M1 review pending |
-| AUD-007 | SVG/XML safety | Check DTD/entity, script/event/external references, CSS/URL, canonicalization and path injection | Adversarial SVG tests | Dangerous active/external content rejected; canonical bytes deterministic | PARTIAL; complete M1 review pending |
-| AUD-008 | Project-store integrity | Prevent stale AI snapshots from overwriting concurrent project state; preserve locks and atomic JSON | Concurrency regression plus complete suite | No traversal, lost update, partial JSON or asset/project mismatch | CODE AND REGRESSION PASS IN CURRENT COMPLETE SUITE |
-| AUD-009 | Temporary/output file lifecycle | Check unique paths, cleanup on success/failure, collision resistance and permissions | Tests + static scan | No stale sensitive temp files or cross-request collisions | M0 TEMP PATCH FILES REMOVED; APPLICATION TEMP LIFECYCLE PENDING M1 |
-| AUD-010 | Command/process execution | Check shell use, quoting, inherited environment, executable resolution and timeout tree termination | Static scan + Windows tests | No user-controlled command injection; child trees terminate | PENDING M1 |
-| AUD-011 | Output correctness | Verify PNG PPI/size/alpha, halftone, SVG and lineage/history selection | Existing and added tests | Binary outputs match declared operation and source lineage | PARTIAL; complete M1 review pending |
-| AUD-012 | Update/rollback project preservation | Establish invariant over multiple projects with raster/SVG, history, presets, titles and active selections | Windows before/update/rollback snapshots | Update preserves all state; rollback restores complete baseline | PENDING M1 — physical/Windows evidence incomplete |
-| AUD-013 | Release authorization and physical L5 provenance | Bind exact source/installer/version/build/install to external physical record and witness | Parser/adversarial tests plus genuine physical run | No authorized output without exact valid record and all gates | ROOT GENESIS WORKFLOW RESTORED; CONTRACTS PASS; ACTUAL PHYSICAL L5 NOT VERIFIED |
-| AUD-014 | Dependency and action supply chain | Pin actions/tool versions and audit packages | Governance + dependency audit | Immutable action refs and bounded dependencies | M0 PASS FOR CURRENT ROOT WORKFLOWS AND DEPENDENCIES; RECHECK REQUIRED AFTER EVERY CHANGE |
-| AUD-015 | Workflow trigger and permission matrix | Classify every workflow; reject automatic repository-write workflows | Parse every root workflow | Automatic validation read-only; release/authorization manual-only | M0 FIXED/PASS — GOVERNANCE RUN `30172617537` |
-| AUD-016 | Privacy and evidence leakage | Search logs/artifacts/source bundles for user data, paths, tokens and retention | Static/adversarial tests | No secrets or real user content; retention bounded | PENDING M1 |
-| AUD-017 | Error contracts and false success | Check API statuses, UI messages, evidence fields and exception handling | Tests | Failure cannot appear or finalize as PASS | PARTIAL; complete M1 review pending |
-| AUD-018 | Concurrency and denial of service | Check limits, simultaneous writes, audit locking, process count and queues | Stress/concurrency tests | Bounded resources and deterministic failure without corruption | PARTIAL; wider audit pending M1 |
-| AUD-019 | Browser/UI safety and critical flow | Check selectors, disabled states, upload/operation/history/export and identity display | Browser/source tests | Required user path executable and errors visible | PENDING M1 |
-| AUD-020 | Test/evidence trustworthiness | Find string-only tests, self-asserted PASS, stale evidence and unexecuted critical code | Red-team review + CI | Critical behavior has runtime/adversarial coverage; claims bounded | M0 CI BASELINE PASS; INDEPENDENT FULL REVIEW PENDING M11 |
+| ID | Requirement / risk domain | Required verification | PASS criterion | Current status |
+|---|---|---|---|---|
+| AUD-001 | Product-scope compliance | Static scan and source contracts | No text-to-image, cm toggle, merged background/print operation or legal claim | PASS IN CURRENT COMPLETE SUITE; RECHECK AT FREEZE |
+| AUD-002 | Exact identity and deterministic build | Frozen source/build/manifest test | New exact identity propagated everywhere | BLOCKED FOR M2 — OLD IDENTITY INVALIDATED |
+| AUD-003 | Archive/package admission | Adversarial Windows ZIP tests | Hostile archive rejected before installation | PASS FOR CURRENT INSTALLER ZIP POLICY; FINAL PACKAGE RECHECK M2 |
+| AUD-004 | Installer atomicity and recovery | Installer/update/rollback lifecycle | No mixed or falsely healthy installation | PARTIAL — LAUNCHER/UNINSTALLER PASS; UPDATE/ROLLBACK IS M2 |
+| AUD-005 | Local service exposure | Host/origin/runtime tests | Loopback only; cross-origin mutation blocked | PASS IN CURRENT SOURCE SUITE |
+| AUD-006 | Upload validation and resource exhaustion | Malformed/oversized upload tests | Rejected before expensive processing | PASS IN CURRENT SOURCE SUITE |
+| AUD-007 | SVG/XML safety | Adversarial SVG tests | Active/external content rejected | PASS IN CURRENT SOURCE SUITE |
+| AUD-008 | Project-store integrity | Concurrency and atomic JSON tests | No lost update, partial state or project mismatch | PASS IN CURRENT SOURCE SUITE |
+| AUD-009 | Temporary/output lifecycle | Failure cleanup tests and scan | No stale sensitive temp files | PASS FOR M0/M1 CHANGED PATHS; FINAL RECHECK M2 |
+| AUD-010 | Command/process execution | Windows launcher/uninstaller tests | No injection; owned process trees terminate | M1 FIXED/PASS — JOB `89720511191` |
+| AUD-011 | Output correctness | PNG/SVG/lineage tests | Output matches declared operation and source lineage | CURRENT TESTS PASS; FULL PROCESSING FREEZE GATE IS M2 |
+| AUD-012 | Update/rollback project preservation | Multi-project mixed raster/SVG Windows gate | Update preserves all state; rollback restores baseline | BLOCKED FOR M2 |
+| AUD-013 | Release authorization and physical L5 | Genesis contracts plus actual physical run | No authorization without exact valid L5 | IMPLEMENTATION PASS; ACTUAL L5 BLOCKED |
+| AUD-014 | Dependency and action supply chain | Governance and dependency audit | Immutable actions and bounded dependencies | PASS ON M1 HEAD; RECHECK AFTER EVERY CHANGE |
+| AUD-015 | Workflow trigger/permission matrix | Parse every root workflow | Automatic validation is read-only | PASS ON M1 HEAD |
+| AUD-016 | Privacy and evidence leakage | Artifact/log/release scan | No secrets or user content leakage | PARTIAL; FINAL RELEASE SCAN M2/M11 |
+| AUD-017 | Error contracts and false success | API and browser failure tests | Failure remains visible/non-success | M1 FIXED/PASS INCLUDING MALFORMED JSON |
+| AUD-018 | Concurrency and denial of service | Limits/concurrency/process tests | Bounded failure without corruption | PARTIAL PASS; RELEASE STRESS GATE M2/M11 |
+| AUD-019 | Browser/UI safety and critical flow | Real Chromium test | Required flow works; state does not leak | M1 FIXED/PASS — JOB `89720511145` |
+| AUD-020 | Test/evidence trustworthiness | Independent review and final rerun | Claims do not exceed evidence | CURRENT CI PASS; INDEPENDENT REVIEW REMAINS M11 |
 
-## Confirmed remaining findings after M0
+## Remaining blockers after M1
 
-1. **P1 — launcher failure cleanup:** timeout or identity mismatch must terminate and reap the process started by the launcher.
-2. **P1 — uninstaller safety:** quoting, ownership, verified deletion and user-project preservation require Windows coverage.
-3. **P1 — browser/UI gaps:** responsive widths, stale mask isolation, confirmation cancellation, malformed JSON and busy-state coverage remain incomplete.
-4. **P1 — update/rollback generalization gap:** multi-project and raster/mixed-state evidence remains incomplete.
-5. **Identity boundary:** all application-source corrections require a new version/build/source/installer identity after M2 code freeze.
-6. **Physical boundary:** hosted/parser tests cannot establish real physical provenance.
+1. **M2 code freeze and identity:** assign a new version/Build ID only after all M2 source corrections are frozen.
+2. **M2 update/rollback preservation:** prove multi-project mixed raster/SVG state preservation on Windows.
+3. **M2 processing/output freeze:** rerun full output, lineage, export and package gates on the frozen candidate.
+4. **Later independent review:** final remote commits require an independent red-team review.
+5. **Physical boundary:** hosted Windows and parser tests do not replace physical user-machine L5.
+6. **Release boundary:** Genesis and installer publication remain forbidden.
 
-## Stage completion criteria
+## Stage completion status
 
 ### M0 — PASS
 
-- temporary write applier and payloads removed;
-- root executable Genesis workflow restored without authorizing a release;
-- governance, dependency, bootstrap, snapshot and evidence-hardening checks green;
-- local complete source suite green;
-- release remains fail-closed.
+- governance baseline clean;
+- temporary write mechanism removed;
+- mandatory M0 CI green.
+
+### M1 — PASS
+
+- responsive and fail-closed UI behavior verified in Chromium;
+- launcher failure cleanup verified on Windows;
+- uninstaller ownership, quoting and deletion contracts verified on Windows;
+- complete source suite and all mandatory CI green.
 
 ### Program completion — NOT MET
 
-1. Every AUD row ends as PASS, FIXED/PASS, BLOCKED or FAIL with exact evidence.
-2. Every correction has focused automated tests.
-3. Complete source suite and production self-test run after final corrections.
-4. Windows-specific corrections receive Windows execution evidence.
-5. Independent review is performed on the actual final remote commits.
-6. No protected-branch merge, publication or authorization occurs before all required evidence.
-7. Final report separates hosted PASS, actual physical L5 and Genesis/normal authorization state.
+The program is not a release candidate and is not authorized. M2, independent review, exact release packaging, physical L5 and Genesis remain incomplete.
 
 Current state:
 
 `M0_COMPLETE`  
-`M1_NOT_STARTED`  
+`M1_COMPLETE`  
+`M2_NOT_STARTED`  
 `FAIL-CLOSED`  
 `PROTOCOL_IMPLEMENTATION_INCOMPLETE`  
 `MILESTONE_NOT_COMPLETE`  
