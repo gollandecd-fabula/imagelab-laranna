@@ -82,15 +82,17 @@ def _asset(asset_id: str, name: str, color: str) -> dict[str, object]:
 def _ui_document() -> str:
     html = (ROOT / "app" / "static" / "index.html").read_text("utf-8")
     css = (ROOT / "app" / "static" / "styles.css").read_text("utf-8")
+    hardening_css = (ROOT / "app" / "static" / "m1-hardening.css").read_text("utf-8")
     js = (ROOT / "app" / "static" / "app.js").read_text("utf-8").replace("</script", "<\\/script")
+    hardening_js = (ROOT / "app" / "static" / "m1-hardening.js").read_text("utf-8").replace("</script", "<\\/script")
     html = html.replace("<head>", '<head><base href="http://imagelab.test/">', 1)
     html = html.replace(
-        '<link rel="stylesheet" href="/static/styles.css?v=1.4.9-recovery-candidate-m1-ui-hardening">',
-        f"<style>{css}</style>",
+        '<link rel="stylesheet" href="/static/styles.css?v=1.4.9-recovery-candidate">',
+        f"<style>{css}\n{hardening_css}</style>",
     )
     html = html.replace(
-        '<script src="/static/app.js?v=1.4.9-recovery-candidate-m1-ui-hardening"></script>',
-        f"<script>{js}</script>",
+        '<script src="/static/app.js?v=1.4.9-recovery-candidate"></script>',
+        f"<script>{js}</script><script>{hardening_js}</script>",
     )
     return html
 
