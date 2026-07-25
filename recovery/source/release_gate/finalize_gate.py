@@ -6,6 +6,7 @@ import json
 import shutil
 import sys
 import zipfile
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +30,9 @@ PROJECT_EVIDENCE_FIELDS = (
     "project_file_sha256",
     "active_asset_id",
 )
+PHYSICAL_L5_STEPS = {"upload", "operation", "history", "export"}
+PHYSICAL_L5_MAX_AGE = timedelta(hours=72)
+PHYSICAL_L5_MAX_BYTES = 1024 * 1024
 
 
 def sha256(path: Path) -> str:
@@ -49,13 +53,46 @@ def read_optional(path: Path, missing: list[str]) -> dict[str, Any]:
         missing.append(path.as_posix())
         return {"status": "MISSING", "evidence_path": path.as_posix()}
     try:
+        if path.stat().st_size > PHYSICAL_L5_MAX_BYTES and path.name == "physical-l5.json":
+            raise ValueError("physical L5 record exceeds 1 MiB")
         value = json.loads(path.read_text("utf-8-sig"))
         if not isinstance(value, dict):
             raise TypeError("top-level JSON evidence must be an object")
         return value
     except Exception as exc:
         missing.append(f"{path.as_posix()}:malformed:{type(exc).__name__}")
-        return {"status": "MALFORMED", "evidence_path": path.as_posix(), "error": str(exc)}
+        return {
+            "status": "MALFORMED",
+            "evidence_path": path.as_posix(),
+            "error": str(exc),
+        }
+
+
+def parse_utc_timestamp(value: object) -> datetime | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return None
+    return parsed.astimezone(timezone.utc)
+
+
+def clear_authorized_outputs(output: Path) -> None:
+    patterns = (
+        "*RELEASE_AUTHORIZED*.exe",
+        "*GENESIS_RELEASE_AUTHORIZED*.exe",
+        "ImageLab-RELEASE-AUTHORIZATION.json",
+        "ImageLab-GENESIS-RELEASE-AUTHORIZATION.json",
+        "installer-sha256.txt",
+    )
+    for pattern in patterns:
+        for path in output.glob(pattern):
+            if path.is_file():
+                path.unlink(missing_ok=True)
 
 
 def validate_selftest(
@@ -146,7 +183,9 @@ def validate_project_transition(
     )
     after = validate_project_snapshot(
         f"{name}:after",
-        data.get("project_evidence_after_update") if name == "update" else data.get("project_evidence_after_rollback"),
+        data.get("project_evidence_after_update")
+        if name == "update"
+        else data.get("project_evidence_after_rollback"),
         expected_asset_sha256=canonical_sha,
         failed=failed,
     )
@@ -175,14 +214,139 @@ def validate_project_transition(
     return before, after, original_sha, canonical_sha
 
 
+def validate_physical_l5(
+    data: dict[str, Any],
+    *,
+    record_path: Path,
+    expected_record_sha256: str,
+    candidate: dict[str, Any],
+    installer_name: str,
+    installer_sha256: str,
+    clean_install_id: str,
+    independent_install_id: str,
+    failed: list[str],
+) -> dict[str, Any]:
+    if not expected_record_sha256:
+        failed.append("physical_l5_sha_pin_missing")
+    elif not valid_sha256(expected_record_sha256):
+        failed.append("physical_l5_sha_pin_invalid")
+    elif record_path.exists() and sha256(record_path) != expected_record_sha256.lower():
+        failed.append("physical_l5_sha_pin_mismatch")
+
+    if data.get("schema") != 1:
+        failed.append("physical_l5_schema")
+    if data.get("status") != "PASS":
+        failed.append("physical_l5_status")
+    if data.get("execution_environment") != "physical_user_windows":
+        failed.append("physical_l5_environment")
+    if data.get("hosted_runner") is not False:
+        failed.append("physical_l5_hosted_runner")
+
+    identity = candidate.get("identity") if isinstance(candidate.get("identity"), dict) else {}
+    source = candidate.get("source") if isinstance(candidate.get("source"), dict) else {}
+    candidate_record = data.get("candidate")
+    if not isinstance(candidate_record, dict):
+        failed.append("physical_l5_candidate_missing")
+        candidate_record = {}
+    expected_candidate = {
+        "source_sha256": source.get("sha256"),
+        "installer_name": installer_name,
+        "installer_sha256": installer_sha256,
+        "version": identity.get("version"),
+        "build_id": identity.get("build_id"),
+    }
+    for field, expected in expected_candidate.items():
+        if not expected or candidate_record.get(field) != expected:
+            failed.append(f"physical_l5_identity_mismatch:{field}")
+
+    physical_install_id = str(candidate_record.get("install_id", "")).strip()
+    if not physical_install_id:
+        failed.append("physical_l5_install_id_missing")
+    if physical_install_id in {clean_install_id, independent_install_id}:
+        failed.append("physical_l5_reused_hosted_install_id")
+
+    executed_at = parse_utc_timestamp(data.get("executed_at"))
+    now = datetime.now(timezone.utc)
+    if executed_at is None:
+        failed.append("physical_l5_timestamp_invalid")
+    else:
+        if executed_at > now + timedelta(minutes=5):
+            failed.append("physical_l5_timestamp_future")
+        if now - executed_at > PHYSICAL_L5_MAX_AGE:
+            failed.append("physical_l5_timestamp_stale")
+
+    scenario = data.get("scenario")
+    if not isinstance(scenario, dict):
+        failed.append("physical_l5_scenario_missing")
+        scenario = {}
+    if scenario.get("browser_driven") is not True:
+        failed.append("physical_l5_browser_not_verified")
+    steps = scenario.get("steps")
+    if not isinstance(steps, dict):
+        failed.append("physical_l5_steps_missing")
+        steps = {}
+    for step in sorted(PHYSICAL_L5_STEPS):
+        value = steps.get(step)
+        status = value.get("status") if isinstance(value, dict) else value
+        if status != "PASS":
+            failed.append(f"physical_l5_step_failed:{step}")
+
+    outputs = data.get("outputs")
+    if not isinstance(outputs, list) or not outputs:
+        failed.append("physical_l5_outputs_missing")
+        outputs = []
+    seen_names: set[str] = set()
+    for index, output in enumerate(outputs):
+        if not isinstance(output, dict):
+            failed.append(f"physical_l5_output_invalid:{index}")
+            continue
+        name = str(output.get("name", "")).strip()
+        if not name or name in seen_names:
+            failed.append(f"physical_l5_output_name:{index}")
+        seen_names.add(name)
+        if not valid_sha256(output.get("sha256")):
+            failed.append(f"physical_l5_output_sha:{index}")
+        if output.get("validator_status") != "PASS":
+            failed.append(f"physical_l5_output_validator:{index}")
+
+    witness = data.get("direct_witness")
+    if not isinstance(witness, dict):
+        failed.append("physical_l5_witness_missing")
+        witness = {}
+    witness_name = str(witness.get("name", "")).strip().casefold()
+    if witness_name not in {"dmitry", "дмитрий"}:
+        failed.append("physical_l5_witness_identity")
+    if witness.get("confirmed") is not True:
+        failed.append("physical_l5_witness_not_confirmed")
+    if len(str(witness.get("statement", "")).strip()) < 20:
+        failed.append("physical_l5_witness_statement_missing")
+    witnessed_at = parse_utc_timestamp(witness.get("witnessed_at"))
+    if witnessed_at is None:
+        failed.append("physical_l5_witness_timestamp_invalid")
+    elif executed_at is not None and abs((witnessed_at - executed_at).total_seconds()) > 24 * 3600:
+        failed.append("physical_l5_witness_timestamp_mismatch")
+
+    return {
+        "status": data.get("status", "MISSING"),
+        "record_sha256": sha256(record_path) if record_path.exists() else None,
+        "install_id": physical_install_id or None,
+        "executed_at": data.get("executed_at"),
+        "witness": witness.get("name"),
+        "provenance_limit": "independently SHA-pinned witness record; not cryptographic proof of physical provenance",
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--aggregate-dir", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument("--physical-l5-record", type=Path)
+    parser.add_argument("--physical-l5-sha256", default="")
     args = parser.parse_args()
     root = args.aggregate_dir.resolve()
     output = args.output_dir.resolve()
     output.mkdir(parents=True, exist_ok=True)
+    clear_authorized_outputs(output)
     verdict_path = output / "final-verdict.json"
 
     missing_evidence: list[str] = []
@@ -204,6 +368,12 @@ def main() -> int:
         independent_post = read_optional(root / "independent" / "postinstall-selftest.json", missing_evidence)
         independent_ui = read_optional(root / "independent" / "ui-gate.json", missing_evidence)
         independent_outputs = read_optional(root / "independent" / "output-validation.json", missing_evidence)
+        physical_path = (
+            args.physical_l5_record.resolve()
+            if args.physical_l5_record is not None
+            else root / "physical" / "physical-l5.json"
+        )
+        physical = read_optional(physical_path, missing_evidence)
 
         required = {
             "G0_source": source,
@@ -223,14 +393,19 @@ def main() -> int:
             "G8_postinstall_selftest": independent_post,
             "G8_independent_ui": independent_ui,
             "G8_independent_outputs": independent_outputs,
+            "L5_physical_user_machine": physical,
         }
         failed = [name for name, data in required.items() if data.get("status") != "PASS"]
         if missing_evidence:
             failed.append("required_evidence_missing_or_malformed")
 
-        installer_sha = str(candidate.get("installer", {}).get("sha256", ""))
+        installer_info = candidate.get("installer") if isinstance(candidate.get("installer"), dict) else {}
+        installer_sha = str(installer_info.get("sha256", ""))
+        installer_name = str(installer_info.get("name", "")).strip()
         if not valid_sha256(installer_sha):
             failed.append("candidate_installer_sha")
+        if not installer_name or Path(installer_name).name != installer_name or not installer_name.endswith(".exe"):
+            failed.append("candidate_installer_name")
 
         repro_sha = str(reproducibility.get("installer_sha256", ""))
         second_sha = str(reproducibility.get("second_build_sha256", ""))
@@ -250,7 +425,10 @@ def main() -> int:
             failed.append("baseline_not_release_authorized")
         if baseline.get("authorization_source") != "prior_finalizer_record":
             failed.append("baseline_authorization_source_invalid")
-        if baseline.get("authorization_record_status") != "RELEASE_AUTHORIZED":
+        if baseline.get("authorization_record_status") not in {
+            "RELEASE_AUTHORIZED",
+            "GENESIS_RELEASE_AUTHORIZED",
+        }:
             failed.append("baseline_authorization_record_status")
         authorization_record_sha = str(baseline.get("authorization_record_sha256", ""))
         if not valid_sha256(authorization_record_sha):
@@ -321,26 +499,46 @@ def main() -> int:
             if update_before.get(field) != rollback_after.get(field):
                 failed.append(f"project_end_to_end_mismatch:{field}")
 
+        physical_summary = validate_physical_l5(
+            physical,
+            record_path=physical_path,
+            expected_record_sha256=str(args.physical_l5_sha256).lower(),
+            candidate=candidate,
+            installer_name=installer_name,
+            installer_sha256=installer_sha,
+            clean_install_id=str(clean.get("install_id", "")),
+            independent_install_id=str(independent.get("install_id", "")),
+            failed=failed,
+        )
+
         installer_candidates = list((root / "build").glob("*.exe")) if (root / "build").exists() else []
         if len(installer_candidates) != 1:
             failed.append("exact_installer_missing_or_ambiguous")
             installer = None
         else:
             installer = installer_candidates[0]
+            if installer.name != installer_name:
+                failed.append("exact_installer_binary_name_mismatch")
             if not installer_sha or sha256(installer) != installer_sha:
                 failed.append("exact_installer_binary_sha_mismatch")
 
         evidence_files = [path for path in root.rglob("*") if path.is_file()] if root.exists() else []
-        if len(evidence_files) < 15:
+        if physical_path.exists() and physical_path not in evidence_files:
+            evidence_files.append(physical_path)
+        if len(evidence_files) < 16:
             failed.append("evidence_bundle_incomplete")
 
         status = "RELEASE_AUTHORIZED" if not failed else "RELEASE_BLOCKED"
         verdict = {
-            "schema": 3,
+            "schema": 4,
             "status": status,
             "installer_sha256": installer_sha,
             "identity": candidate.get("identity"),
+            "source_sha256": candidate.get("source", {}).get("sha256")
+            if isinstance(candidate.get("source"), dict)
+            else None,
             "gates": {name: data.get("status") for name, data in required.items()},
+            "physical_l5": physical_summary,
             "failed_conditions": sorted(set(failed)),
             "missing_or_malformed_evidence": sorted(set(missing_evidence)),
             "evidence_file_count": len(evidence_files),
@@ -349,32 +547,44 @@ def main() -> int:
 
         archive_path = output / "release-evidence.zip"
         with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
-            for path in sorted(evidence_files):
-                archive.write(path, path.relative_to(root).as_posix())
+            for path in sorted(set(evidence_files)):
+                if path.is_relative_to(root):
+                    archive_name = path.relative_to(root).as_posix()
+                else:
+                    archive_name = f"physical/{path.name}"
+                archive.write(path, archive_name)
             archive.write(verdict_path, "final-verdict.json")
 
         if status == "RELEASE_AUTHORIZED" and installer is not None:
             authorized = output / installer.name.replace("ZERO_TRUST", "RELEASE_AUTHORIZED")
             shutil.copy2(installer, authorized)
-            (output / "installer-sha256.txt").write_text(f"{installer_sha}  {authorized.name}\n", "utf-8")
+            (output / "installer-sha256.txt").write_text(
+                f"{installer_sha}  {authorized.name}\n", "utf-8"
+            )
             authorization_record = {
-                "schema": 1,
+                "schema": 2,
                 "status": "RELEASE_AUTHORIZED",
                 "authorization_source": "finalize_gate.py",
                 "installer_name": authorized.name,
                 "installer_sha256": installer_sha,
+                "source_sha256": verdict.get("source_sha256"),
                 "identity": candidate.get("identity"),
+                "physical_l5_evidence_sha256": physical_summary.get("record_sha256"),
+                "physical_l5_install_id": physical_summary.get("install_id"),
                 "final_verdict_sha256": sha256(verdict_path),
                 "release_evidence_sha256": sha256(archive_path),
             }
             (output / "ImageLab-RELEASE-AUTHORIZATION.json").write_text(
                 json.dumps(authorization_record, ensure_ascii=False, indent=2), "utf-8"
             )
+        else:
+            clear_authorized_outputs(output)
         print(json.dumps(verdict, ensure_ascii=False, indent=2))
         return 0 if status == "RELEASE_AUTHORIZED" else 1
     except Exception as exc:
+        clear_authorized_outputs(output)
         verdict = {
-            "schema": 3,
+            "schema": 4,
             "status": "RELEASE_BLOCKED",
             "failed_conditions": [f"{type(exc).__name__}: {exc}"],
             "missing_or_malformed_evidence": sorted(set(missing_evidence)),
