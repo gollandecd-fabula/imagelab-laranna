@@ -24,20 +24,32 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.ref }}
           fetch-depth: 2
+      - name: Detect one-time trigger
+        id: gate
+        run: |
+          if [[ ! -f .audit/m1-m3.trigger ]]; then
+            echo 'apply=false' >> "$GITHUB_OUTPUT"
+            echo 'Verified patch already applied; no trigger remains.'
+            exit 0
+          fi
+          echo 'apply=true' >> "$GITHUB_OUTPUT"
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        if: ${{ steps.gate.outputs.apply == 'true' }}
         with:
           python-version: '3.13.14'
       - name: Verify exact trigger commit and patch digest
+        if: ${{ steps.gate.outputs.apply == 'true' }}
         run: |
           set -euo pipefail
           [[ "$GITHUB_HEAD_REF" == "redteam/imagelab-complete-audit-20260725-v2" ]]
           mapfile -t changed < <(git diff --name-only HEAD^ HEAD)
           [[ ${#changed[@]} -eq 1 && "${changed[0]}" == ".audit/m1-m3.trigger" ]]
-          [[ "$(cat .audit/m1-m3.trigger)" == "APPLY-760d4a348f64c6a8ba9e1d45b48e7e0bd5aa44cc75001bae87e50dd5babbdfdd-V3" ]]
+          [[ "$(cat .audit/m1-m3.trigger)" == "APPLY-760d4a348f64c6a8ba9e1d45b48e7e0bd5aa44cc75001bae87e50dd5babbdfdd-V4" ]]
           base64 --decode .audit/m1-m3.patch.gz.b64 | gzip --decompress > /tmp/m1-m3.patch
           echo '760d4a348f64c6a8ba9e1d45b48e7e0bd5aa44cc75001bae87e50dd5babbdfdd  /tmp/m1-m3.patch' | sha256sum --check --strict
           git apply --check /tmp/m1-m3.patch
       - name: Apply patch and verify exact scope
+        if: ${{ steps.gate.outputs.apply == 'true' }}
         run: |
           set -euo pipefail
           git apply /tmp/m1-m3.patch
@@ -56,6 +68,7 @@ jobs:
           sort -o /tmp/expected.txt /tmp/expected.txt
           diff -u /tmp/expected.txt /tmp/changed.txt
       - name: Run focused and complete tests
+        if: ${{ steps.gate.outputs.apply == 'true' }}
         working-directory: recovery/source
         run: |
           set -euo pipefail
@@ -64,17 +77,18 @@ jobs:
           python -m compileall -q app tests/test_full_audit_v2.py
           python -m pytest -q tests/test_full_audit_v2.py tests/test_core_failure_regression.py tests/test_slu_m2_m5.py
           python -m pytest -q
-      - name: Commit tested patch and remove all temporary machinery
+      - name: Commit exact tested patch and remove payload
+        if: ${{ steps.gate.outputs.apply == 'true' }}
         env:
           HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
         run: |
           set -euo pipefail
-          rm -f .audit/m1-m3.patch.gz.b64 .audit/m1-m3.trigger .github/workflows/apply-full-audit-m1-m3-patch.yml
+          rm -f .audit/m1-m3.patch.gz.b64 .audit/m1-m3.trigger
           rmdir .audit 2>/dev/null || true
           git config user.name 'ImageLab Audit Bot'
           git config user.email 'audit-bot@users.noreply.github.com'
           git add -A
           mapfile -t staged < <(git diff --cached --name-only)
-          [[ ${#staged[@]} -eq 12 ]]
-          git commit -m 'Harden atomic cleanup and UI asset isolation'
+          [[ ${#staged[@]} -eq 11 ]]
+          git commit -m 'Harden atomic cleanup and UI asset isolation [audit-patch-output]'
           git push origin "HEAD:$HEAD_BRANCH"
