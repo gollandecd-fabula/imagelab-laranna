@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+from pathlib import Path
 
 import pytest
 from PIL import Image
@@ -10,6 +11,51 @@ from app.services.file_inspector import (
     inspect_and_sanitize_svg,
     inspect_upload,
 )
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_product_scope_is_uploaded_image_only_with_separate_operations() -> None:
+    html = (ROOT / "app" / "static" / "index.html").read_text("utf-8")
+    js = (ROOT / "app" / "static" / "app.js").read_text("utf-8")
+    api = (ROOT / "app" / "main.py").read_text("utf-8")
+    combined = f"{html}\n{js}\n{api}".casefold()
+
+    for required in (
+        'id="fileinput"',
+        'data-module="extract"',
+        'data-pane="extract"',
+        'id="applyextractprint"',
+        'data-module="cleanup"',
+        'data-pane="cleanup"',
+        'id="applycleanup"',
+        'id="removebackground"',
+        "ширина, мм",
+        "высота, мм",
+        "мягкость края, px",
+        "processselected('extract_print'",
+        "applycleanupflow",
+        "/upload",
+    ):
+        assert required in combined
+
+    for forbidden in (
+        "text-to-image",
+        "text2image",
+        "txt2img",
+        "генерация изображения по тексту",
+        "сгенерировать изображение по описанию",
+        "гарантируем авторские права",
+        "юридически безопасный принт",
+        'id="unittoggle"',
+        'id="units"',
+        'value="cm"',
+    ):
+        assert forbidden not in combined
+
+    assert js.index("#applyExtractPrint") != js.index("#applyCleanup")
+    assert "processSelected('extract_print'" in js
+    assert "processSelected('background'" in js or "remove_background" in js
 
 
 def test_svg_rejects_late_doctype_beyond_initial_probe_window() -> None:
