@@ -55,6 +55,45 @@ def test_project_store_prevents_multiprocess_lost_update(tmp_path: Path) -> None
     assert {asset.id for asset in project.assets} == {"a" * 8, "b" * 8}
 
 
+def test_stale_ai_snapshot_does_not_overwrite_live_project_changes(tmp_path: Path) -> None:
+    store = ProjectStore(tmp_path / "projects")
+    first = _asset("aaaabbbb")
+    store.add_assets("AI-MERGE", [first])
+
+    stale_project, stale_asset = store.find_asset(first.id) or (None, None)
+    assert stale_project is not None and stale_asset is not None
+
+    store.rename("AI-MERGE", "Renamed while AI was running")
+    store.set_preset("AI-MERGE", "DTF", "export", {"ppi": 300})
+    second = _asset("ccccdddd")
+    store.add_assets("AI-MERGE", [second])
+
+    live = store.get("AI-MERGE")
+    live_first = next(asset for asset in live.assets if asset.id == first.id)
+    live_first.ai = {"manual_analysis_improve": {"score": 0.8}}
+    store.save(live)
+
+    stale_asset.ai = {
+        **stale_asset.ai,
+        "manual_analysis": {"score": 0.9},
+        "manual_analysis_export": {"score": 0.9},
+    }
+    store.save(stale_project)
+
+    current = store.get("AI-MERGE")
+    assert current.title == "Renamed while AI was running"
+    assert current.workspace["presets"]["DTF"] == {
+        "module": "export",
+        "parameters": {"ppi": 300},
+    }
+    assert current.workspace["active_asset_id"] == second.id
+    assert [asset.id for asset in current.assets] == [first.id, second.id]
+    current_first = next(asset for asset in current.assets if asset.id == first.id)
+    assert current_first.ai["manual_analysis_improve"] == {"score": 0.8}
+    assert current_first.ai["manual_analysis_export"] == {"score": 0.9}
+    assert current_first.ai["manual_analysis"] == {"score": 0.9}
+
+
 def test_derived_commit_is_atomic_and_requires_live_source(tmp_path: Path) -> None:
     store = ProjectStore(tmp_path / "projects")
     source = _asset("a1b2c3d4")
