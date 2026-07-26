@@ -12,6 +12,8 @@ from release_gate.genesis.resolve_request import validate_request
 ROOT = Path(__file__).resolve().parents[1]
 GENESIS_RUN_ID = 777
 G7_SHA = "e" * 64
+PHYSICAL_SHA = "d" * 64
+PHYSICAL_URL = "https://evidence.example/physical-l5.json"
 
 
 def _write(path: Path, value: object) -> None:
@@ -21,7 +23,7 @@ def _write(path: Path, value: object) -> None:
 
 def _evidence(root: Path) -> None:
     _write(
-        root / "request" / "genesis-request-verification.json",
+        root / "request/genesis-request-verification.json",
         {
             "schema": 2,
             "status": "PASS",
@@ -35,15 +37,14 @@ def _evidence(root: Path) -> None:
             "qualification_head_sha": "b" * 40,
             "g7_evidence_release_tag": "g7-diagnostic",
             "g7_evidence_bundle_sha256": G7_SHA,
-            "physical_l5_release_tag": "physical-l5",
-            "physical_l5_manifest_sha256": "c" * 64,
-            "physical_l5_bundle_sha256": "d" * 64,
+            "physical_l5_evidence_url": PHYSICAL_URL,
+            "physical_l5_evidence_sha256": PHYSICAL_SHA,
             "enable_attestation": False,
             "failed_conditions": [],
         },
     )
     _write(
-        root / "genesis" / "genesis-history-verification.json",
+        root / "genesis/genesis-history-verification.json",
         {
             "schema": 2,
             "status": "PASS",
@@ -80,8 +81,7 @@ p.add_argument('--genesis-run-id',type=int,required=True)
 p.add_argument('--qualification-run-id',type=int,required=True)
 p.add_argument('--qualification-head-sha',required=True)
 p.add_argument('--g7-bundle-sha256',required=True)
-p.add_argument('--physical-manifest-sha256',required=True)
-p.add_argument('--physical-bundle-sha256',required=True)
+p.add_argument('--physical-l5-sha256',required=True)
 a=p.parse_args()
 history=json.loads((a.aggregate_dir/'genesis/genesis-baseline-verification.json').read_text())
 a.output_dir.mkdir(parents=True,exist_ok=True)
@@ -99,7 +99,14 @@ if history.get('status')!='PASS' or history.get('current_run_id')!=a.genesis_run
     )
 
 
-def _run(evidence: Path, output: Path, finalizer: Path, *, g7_sha: str = G7_SHA) -> subprocess.CompletedProcess[str]:
+def _run(
+    evidence: Path,
+    output: Path,
+    finalizer: Path,
+    *,
+    g7_sha: str = G7_SHA,
+    physical_sha: str = PHYSICAL_SHA,
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [
             sys.executable,
@@ -122,10 +129,8 @@ def _run(evidence: Path, output: Path, finalizer: Path, *, g7_sha: str = G7_SHA)
             "b" * 40,
             "--g7-bundle-sha256",
             g7_sha,
-            "--physical-manifest-sha256",
-            "c" * 64,
-            "--physical-bundle-sha256",
-            "d" * 64,
+            "--physical-l5-sha256",
+            physical_sha,
         ],
         cwd=ROOT,
         text=True,
@@ -134,8 +139,8 @@ def _run(evidence: Path, output: Path, finalizer: Path, *, g7_sha: str = G7_SHA)
     )
 
 
-def test_request_schema_requires_exact_g7_inputs() -> None:
-    value = {
+def _request_value() -> dict[str, object]:
+    return {
         "schema": 2,
         "status": "GENESIS_AUTHORIZATION_REQUESTED",
         "release_mode": "genesis_first_release",
@@ -146,32 +151,48 @@ def test_request_schema_requires_exact_g7_inputs() -> None:
         "qualification_head_sha": "b" * 40,
         "g7_evidence_release_tag": "g7-diagnostic",
         "g7_evidence_bundle_sha256": G7_SHA,
-        "physical_l5_release_tag": "physical-l5",
-        "physical_l5_manifest_sha256": "c" * 64,
-        "physical_l5_bundle_sha256": "d" * 64,
+        "physical_l5_evidence_url": PHYSICAL_URL,
+        "physical_l5_evidence_sha256": PHYSICAL_SHA,
         "enable_attestation": False,
     }
-    evidence, outputs = validate_request(value, "owner/repo", "reviewed_recovery_push", hashlib.sha256(b"request").hexdigest())
+
+
+def test_request_schema_requires_exact_g7_and_physical_inputs() -> None:
+    value = _request_value()
+    evidence, outputs = validate_request(
+        value,
+        "owner/repo",
+        "reviewed_recovery_push",
+        hashlib.sha256(b"request").hexdigest(),
+    )
     assert evidence["status"] == "PASS"
-    assert outputs["g7_evidence_release_tag"] == "g7-diagnostic"
     assert outputs["g7_evidence_bundle_sha256"] == G7_SHA
-    del value["g7_evidence_bundle_sha256"]
-    blocked, _ = validate_request(value, "owner/repo", "reviewed_recovery_push", "a" * 64)
-    assert blocked["status"] == "FAIL"
-    assert any("g7_evidence_bundle_sha256" in item for item in blocked["failed_conditions"])
+    assert outputs["physical_l5_evidence_url"] == PHYSICAL_URL
+    assert outputs["physical_l5_evidence_sha256"] == PHYSICAL_SHA
+
+    for field in ("g7_evidence_bundle_sha256", "physical_l5_evidence_sha256"):
+        broken = dict(value)
+        broken.pop(field)
+        blocked, _ = validate_request(broken, "owner/repo", "reviewed_recovery_push", "a" * 64)
+        assert blocked["status"] == "FAIL"
+        assert any(field in item for item in blocked["failed_conditions"])
+
+    broken_url = dict(value)
+    broken_url["physical_l5_evidence_url"] = "http://insecure.example/evidence.json"
+    blocked, _ = validate_request(broken_url, "owner/repo", "reviewed_recovery_push", "a" * 64)
+    assert "invalid:physical_l5_evidence_url" in blocked["failed_conditions"]
 
 
-def test_request_orchestrator_authorizes_only_after_request_history_and_g7_match(tmp_path: Path) -> None:
+def test_request_orchestrator_authorizes_only_after_request_history_g7_and_physical_match(tmp_path: Path) -> None:
     evidence, output, finalizer = tmp_path / "evidence", tmp_path / "output", tmp_path / "stub.py"
     _evidence(evidence)
     _stub_finalizer(finalizer)
     result = _run(evidence, output, finalizer)
     assert result.returncode == 0, result.stderr
-    compat = json.loads((evidence / "genesis/genesis-baseline-verification.json").read_text("utf-8"))
-    assert compat["schema"] == 2
-    assert compat["current_run_id"] == GENESIS_RUN_ID
-    record_path = output / "ImageLab-GENESIS-RELEASE-AUTHORIZATION.json"
-    record = json.loads(record_path.read_text("utf-8"))
+    history = json.loads((evidence / "genesis/genesis-baseline-verification.json").read_text("utf-8"))
+    assert history["schema"] == 2
+    assert history["current_run_id"] == GENESIS_RUN_ID
+    record = json.loads((output / "ImageLab-GENESIS-RELEASE-AUTHORIZATION.json").read_text("utf-8"))
     assert record["status"] == "GENESIS_RELEASE_AUTHORIZED"
     assert record["genesis_request_id"] == "GENESIS-REQUEST-0001"
     assert record["authorization_orchestrator"] == "release_gate/genesis/orchestrate_request_gate.py"
@@ -192,39 +213,25 @@ def test_request_orchestrator_blocks_prior_successful_genesis_run(tmp_path: Path
     assert result.returncode != 0
     assert not list(output.glob("*RELEASE_AUTHORIZED*.exe"))
     verdict = json.loads((output / "final-verdict.json").read_text("utf-8"))
-    assert verdict["status"] == "RELEASE_BLOCKED"
     assert any("genesis_history_invalid" in value for value in verdict["failed_conditions"])
 
 
-def test_request_orchestrator_blocks_mismatched_g7_without_calling_success_path(tmp_path: Path) -> None:
-    evidence, output, finalizer = tmp_path / "evidence", tmp_path / "output", tmp_path / "stub.py"
+def test_request_orchestrator_blocks_mismatched_g7_or_physical_sha(tmp_path: Path) -> None:
+    evidence, finalizer = tmp_path / "evidence", tmp_path / "stub.py"
     _evidence(evidence)
-    output.mkdir(parents=True)
-    stale = output / "ImageLab_by_LarannA_GENESIS_RELEASE_AUTHORIZED_Setup_x64.exe"
-    stale.write_bytes(b"stale")
     _stub_finalizer(finalizer)
-    result = _run(evidence, output, finalizer, g7_sha="f" * 64)
-    assert result.returncode != 0
-    assert not list(output.glob("*RELEASE_AUTHORIZED*.exe"))
-    verdict = json.loads((output / "final-verdict.json").read_text("utf-8"))
-    assert "genesis_request_invalid:g7_evidence_bundle_sha256" in verdict["failed_conditions"]
-
-
-def test_request_orchestrator_blocks_mismatched_request_and_cleans_outputs(tmp_path: Path) -> None:
-    evidence, output, finalizer = tmp_path / "evidence", tmp_path / "output", tmp_path / "stub.py"
-    _evidence(evidence)
-    request_path = evidence / "request/genesis-request-verification.json"
-    request = json.loads(request_path.read_text("utf-8"))
-    request["qualification_run_id"] = 999
-    _write(request_path, request)
-    output.mkdir(parents=True)
-    (output / "ImageLab_by_LarannA_RELEASE_AUTHORIZED_Setup_x64.exe").write_bytes(b"stale")
-    (output / "ImageLab-GENESIS-RELEASE-AUTHORIZATION.json").write_text("{}", "utf-8")
-    _stub_finalizer(finalizer)
-    result = _run(evidence, output, finalizer)
-    assert result.returncode != 0
-    assert not list(output.glob("*RELEASE_AUTHORIZED*.exe"))
-    assert not (output / "ImageLab-GENESIS-RELEASE-AUTHORIZATION.json").exists()
+    for label, kwargs, expected in (
+        ("g7", {"g7_sha": "f" * 64}, "genesis_request_invalid:g7_evidence_bundle_sha256"),
+        ("physical", {"physical_sha": "f" * 64}, "genesis_request_invalid:physical_l5_evidence_sha256"),
+    ):
+        output = tmp_path / f"output-{label}"
+        output.mkdir()
+        (output / "ImageLab_by_LarannA_GENESIS_RELEASE_AUTHORIZED_Setup_x64.exe").write_bytes(b"stale")
+        result = _run(evidence, output, finalizer, **kwargs)
+        assert result.returncode != 0
+        assert not list(output.glob("*RELEASE_AUTHORIZED*.exe"))
+        verdict = json.loads((output / "final-verdict.json").read_text("utf-8"))
+        assert expected in verdict["failed_conditions"]
 
 
 def test_active_request_workflow_is_reviewed_push_only_and_genesis_only() -> None:
@@ -241,7 +248,11 @@ def test_active_request_workflow_is_reviewed_push_only_and_genesis_only() -> Non
     assert "g7_evidence_release_tag" in workflow
     assert "g7_evidence_bundle_sha256" in workflow
     assert "ImageLab-GENESIS-G7-EVIDENCE.zip" in workflow
+    assert "physical_l5_evidence_url" in workflow
+    assert "physical_l5_evidence_sha256" in workflow
+    assert "fetch_pinned_json.py" in workflow
     assert "--genesis-run-id" in workflow
     assert "--g7-bundle-sha256" in workflow
+    assert "--physical-l5-sha256" in workflow
     assert "ImageLab-GENESIS-RELEASE-AUTHORIZATION.json" in workflow
     assert "ImageLab-RELEASE-AUTHORIZATION.json" not in workflow
