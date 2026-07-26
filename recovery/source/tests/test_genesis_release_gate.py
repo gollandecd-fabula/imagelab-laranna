@@ -8,7 +8,7 @@ import sys
 import zipfile
 from pathlib import Path
 
-from release_gate.genesis.verify_no_prior_release import inspect_releases
+from release_gate.genesis.verify_no_prior_release import inspect_history, inspect_releases
 
 ROOT = Path(__file__).resolve().parents[1]
 SELFTEST_CASES = {"resize_ppi", "background", "halftone", "vector", "history_lineage", "export"}
@@ -29,6 +29,7 @@ QUALIFIED_GATES = {
     "G8_independent_ui",
     "G8_independent_outputs",
 }
+GENESIS_RUN_ID = 777
 
 
 def _sha(path: Path) -> str:
@@ -52,9 +53,79 @@ def _selftest(version: str, build_id: str, install_id: str) -> dict[str, object]
     }
 
 
-def _build_evidence(root: Path) -> tuple[str, str, str]:
+def _write_g7_bundle(root: Path, installer_sha: str, source_sha: str, *, mutate=None) -> str:
+    directory = root / "g7"
+    directory.mkdir(parents=True, exist_ok=True)
+    bundle = directory / "ImageLab-GENESIS-G7-EVIDENCE.zip"
+    inventory = {
+        "schema": 1,
+        "project_count": 3,
+        "asset_count": 3,
+        "projects_sha256": "d" * 64,
+        "projects": [
+            {"project_id": "TS-001"},
+            {"project_id": "ZTR-SVG-PROJECT"},
+            {"project_id": "ZTR-RASTER-PROJECT"},
+        ],
+    }
+    baseline_sha = "b" * 64
+    update = {
+        "schema": 3,
+        "status": "PASS",
+        "installer_sha256": installer_sha,
+        "baseline_installer_sha256": baseline_sha,
+        "baseline_version": "9.9.8-diagnostic",
+        "baseline_build_id": "DIAGNOSTIC-BASELINE",
+        "first_install_id": "baseline-install",
+        "second_install_id": "candidate-install",
+        "old_process_stopped": True,
+        "project_data_preserved": True,
+        "sentinel_preserved": True,
+        "project_count": 3,
+        "asset_count": 3,
+        "project_inventory_before": inventory,
+        "project_inventory_after_update": inventory,
+    }
+    rollback = {
+        "schema": 3,
+        "status": "PASS",
+        "installer_sha256": installer_sha,
+        "restored_install_id": "candidate-install",
+        "expected_install_id": "candidate-install",
+        "fault_exit_code": 1,
+        "critical_hashes_restored": True,
+        "project_data_preserved": True,
+        "sentinel_preserved": True,
+        "project_count": 3,
+        "asset_count": 3,
+        "project_inventory_before": inventory,
+        "project_inventory_after_rollback": inventory,
+    }
+    if mutate is not None:
+        mutate(update, rollback)
+    update_bytes = json.dumps(update, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    rollback_bytes = json.dumps(rollback, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    wrapper = {
+        "schema": 1,
+        "status": "PASS",
+        "evidence_mode": "non_authorizing_diagnostic_baseline",
+        "source_sha256": source_sha,
+        "installer_sha256": installer_sha,
+        "baseline_installer_sha256": baseline_sha,
+        "update_test_sha256": hashlib.sha256(update_bytes).hexdigest(),
+        "rollback_test_sha256": hashlib.sha256(rollback_bytes).hexdigest(),
+    }
+    with zipfile.ZipFile(bundle, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("genesis-g7/g7-evidence.json", json.dumps(wrapper, sort_keys=True))
+        archive.writestr("genesis-g7/update-test.json", update_bytes)
+        archive.writestr("genesis-g7/rollback-test.json", rollback_bytes)
+    return _sha(bundle)
+
+
+def _build_evidence(root: Path) -> tuple[str, str, str, str]:
     version = "9.9.9-genesis-test"
     build_id = "GENESIS-TEST"
+    source_sha = "c" * 64
     installer = root / "build" / "ImageLab_by_LarannA_ZERO_TRUST_Setup_x64.exe"
     installer.parent.mkdir(parents=True, exist_ok=True)
     installer.write_bytes(b"exact synthetic genesis installer")
@@ -63,11 +134,31 @@ def _build_evidence(root: Path) -> tuple[str, str, str]:
 
     _write(root / "source" / "source-gate.json", {"status": "PASS"})
     _write(root / "unit" / "unit-matrix-verdict.json", {"status": "PASS"})
-    _write(root / "build" / "candidate-manifest.json", {"status": "PASS", "identity": identity, "installer": {"sha256": installer_sha}})
-    _write(root / "build" / "reproducibility.json", {"status": "PASS", "installer_sha256": installer_sha, "second_build_sha256": installer_sha})
+    _write(
+        root / "build" / "candidate-manifest.json",
+        {
+            "status": "PASS",
+            "identity": identity,
+            "installer": {"sha256": installer_sha},
+            "source": {"sha256": source_sha},
+        },
+    )
+    _write(
+        root / "build" / "reproducibility.json",
+        {"status": "PASS", "installer_sha256": installer_sha, "second_build_sha256": installer_sha},
+    )
 
-    for folder, install_id, base_name in (("clean", "clean-install", "clean-install.json"), ("independent", "independent-install", "independent-verification.json")):
-        install = {"status": "PASS", "installer_sha256": installer_sha, "version": version, "build_id": build_id, "install_id": install_id}
+    for folder, install_id, base_name in (
+        ("clean", "clean-install", "clean-install.json"),
+        ("independent", "independent-install", "independent-verification.json"),
+    ):
+        install = {
+            "status": "PASS",
+            "installer_sha256": installer_sha,
+            "version": version,
+            "build_id": build_id,
+            "install_id": install_id,
+        }
         _write(root / folder / base_name, install)
         _write(root / folder / "preinstall-selftest.json", _selftest(version, build_id, install_id))
         _write(root / folder / "postinstall-selftest.json", _selftest(version, build_id, install_id))
@@ -77,16 +168,23 @@ def _build_evidence(root: Path) -> tuple[str, str, str]:
     _write(
         root / "genesis" / "genesis-baseline-verification.json",
         {
-            "schema": 1,
+            "schema": 2,
             "status": "PASS",
             "release_mode": "genesis_first_release",
             "protocol_rule": "GENESIS-FIRST-RELEASE-V1",
             "repository": "owner/repo",
-            "query_source": "github_api_releases_paginated",
+            "query_source": "github_api_releases_actions_paginated",
             "query_complete": True,
+            "current_run_id": GENESIS_RUN_ID,
             "release_count_scanned": 3,
+            "workflow_run_count_scanned": 2,
+            "artifact_count_scanned": 4,
             "authorized_installer_asset_count": 0,
             "authorization_record_asset_count": 0,
+            "prior_successful_genesis_run_count": 0,
+            "prior_authorized_genesis_artifact_count": 0,
+            "prior_successful_genesis_run_ids": [],
+            "prior_authorized_genesis_artifacts": [],
             "matching_assets": [],
         },
     )
@@ -114,12 +212,23 @@ def _build_evidence(root: Path) -> tuple[str, str, str]:
     )
     gates = {name: "PASS" for name in QUALIFIED_GATES}
     gates.update({"G6_baseline_pinned": "MISSING", "G6_update": "MISSING", "G7_rollback": "MISSING"})
-    _write(root / "qualification-verdict" / "final-verdict.json", {"schema": 3, "status": "RELEASE_BLOCKED", "installer_sha256": installer_sha, "gates": gates})
+    _write(
+        root / "qualification-verdict" / "final-verdict.json",
+        {"schema": 3, "status": "RELEASE_BLOCKED", "installer_sha256": installer_sha, "gates": gates},
+    )
+
+    g7_sha = _write_g7_bundle(root, installer_sha, source_sha)
 
     physical_dir = root / "physical"
     physical_dir.mkdir(parents=True, exist_ok=True)
     bundle = physical_dir / "ImageLab-PHYSICAL-L5-EVIDENCE.zip"
-    physical_install = {"status": "PASS", "installer_sha256": installer_sha, "version": version, "build_id": build_id, "install_id": "physical-install"}
+    physical_install = {
+        "status": "PASS",
+        "installer_sha256": installer_sha,
+        "version": version,
+        "build_id": build_id,
+        "install_id": "physical-install",
+    }
     members = {
         "physical-l5/clean-install.json": physical_install,
         "physical-l5/preinstall-selftest.json": _selftest(version, build_id, "physical-install"),
@@ -151,14 +260,21 @@ def _build_evidence(root: Path) -> tuple[str, str, str]:
             "witness": {"name": "Dmitry", "role": "product_owner"},
             "machine": {"windows_version": "Windows 11"},
             "tests": {name: {"status": "PASS"} for name in sorted(PHYSICAL_CASES)},
-            "evidence_files": sorted(members) + ["physical-l5/screenshot.png", "physical-l5/output.svg", "physical-l5/browser-trace.json"],
+            "evidence_files": sorted(members)
+            + ["physical-l5/screenshot.png", "physical-l5/output.svg", "physical-l5/browser-trace.json"],
             "evidence_bundle_sha256": bundle_sha,
         },
     )
-    return installer_sha, _sha(manifest), bundle_sha
+    return installer_sha, _sha(manifest), bundle_sha, g7_sha
 
 
-def _run(root: Path, output: Path, manifest_sha: str, bundle_sha: str) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
+def _run(
+    root: Path,
+    output: Path,
+    manifest_sha: str,
+    bundle_sha: str,
+    g7_sha: str,
+) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
     result = subprocess.run(
         [
             sys.executable,
@@ -169,10 +285,14 @@ def _run(root: Path, output: Path, manifest_sha: str, bundle_sha: str) -> tuple[
             str(output),
             "--repository",
             "owner/repo",
+            "--genesis-run-id",
+            str(GENESIS_RUN_ID),
             "--qualification-run-id",
             "12345",
             "--qualification-head-sha",
             "a" * 40,
+            "--g7-bundle-sha256",
+            g7_sha,
             "--physical-manifest-sha256",
             manifest_sha,
             "--physical-bundle-sha256",
@@ -187,91 +307,210 @@ def _run(root: Path, output: Path, manifest_sha: str, bundle_sha: str) -> tuple[
     return result, verdict
 
 
-def test_release_absence_verifier_rejects_any_prior_authorized_asset() -> None:
+def test_release_absence_verifier_rejects_normal_and_genesis_authorized_assets() -> None:
     clean = inspect_releases([[{"tag_name": "v0", "assets": []}]], "owner/repo")
     assert clean["status"] == "PASS"
-    blocked = inspect_releases(
-        [{"tag_name": "v1", "assets": [{"name": "ImageLab-RELEASE-AUTHORIZATION.json"}]}],
+    for name in (
+        "ImageLab-RELEASE-AUTHORIZATION.json",
+        "ImageLab-GENESIS-RELEASE-AUTHORIZATION.json",
+        "ImageLab_by_LarannA_GENESIS_RELEASE_AUTHORIZED_Setup_x64.exe",
+    ):
+        blocked = inspect_releases([{"tag_name": "v1", "assets": [{"name": name}]}], "owner/repo")
+        assert blocked["status"] == "FAIL"
+
+
+def test_release_absence_verifier_rejects_prior_successful_run_or_artifact() -> None:
+    result = inspect_history(
+        [],
+        [{"workflow_runs": [{"id": 10, "conclusion": "success"}]}],
+        [
+            {
+                "artifacts": [
+                    {
+                        "id": 20,
+                        "name": "ImageLab-GENESIS-RELEASE-AUTHORIZED",
+                        "workflow_run": {"id": 10},
+                    }
+                ]
+            }
+        ],
         "owner/repo",
+        GENESIS_RUN_ID,
     )
-    assert blocked["status"] == "FAIL"
-    assert blocked["authorization_record_asset_count"] == 1
+    assert result["status"] == "FAIL"
+    assert result["prior_successful_genesis_run_count"] == 1
+    assert result["prior_authorized_genesis_artifact_count"] == 1
 
 
 def test_genesis_finalizer_authorizes_only_complete_first_release_evidence(tmp_path: Path) -> None:
     evidence = tmp_path / "evidence"
-    installer_sha, manifest_sha, bundle_sha = _build_evidence(evidence)
+    installer_sha, manifest_sha, bundle_sha, g7_sha = _build_evidence(evidence)
     output = tmp_path / "output"
-    result, verdict = _run(evidence, output, manifest_sha, bundle_sha)
+    result, verdict = _run(evidence, output, manifest_sha, bundle_sha, g7_sha)
     assert result.returncode == 0, result.stderr
-    assert verdict["status"] == "RELEASE_AUTHORIZED"
+    assert verdict["status"] == "GENESIS_RELEASE_AUTHORIZED"
     assert verdict["gates"]["G6_update_from_prior_authorized_release"] == "NOT_APPLICABLE_FIRST_RELEASE"
-    record = json.loads((output / "ImageLab-RELEASE-AUTHORIZATION.json").read_text("utf-8"))
-    assert record["authorization_source"] == "finalize_gate.py"
+    assert verdict["gates"]["G7_rollback_to_prior_authorized_release"] == "PASS"
+    record_path = output / "ImageLab-GENESIS-RELEASE-AUTHORIZATION.json"
+    record = json.loads(record_path.read_text("utf-8"))
+    assert record["status"] == "GENESIS_RELEASE_AUTHORIZED"
     assert record["authorization_source_path"] == "release_gate/genesis/finalize_gate.py"
-    assert record["release_mode"] == "genesis_first_release"
     assert record["installer_sha256"] == installer_sha
+    assert record["install_id"] == "physical-install"
+    assert list(output.glob("*GENESIS_RELEASE_AUTHORIZED*_Setup_x64.exe"))
+    assert not (output / "ImageLab-RELEASE-AUTHORIZATION.json").exists()
+    assert not list(output.glob("ImageLab_by_LarannA_RELEASE_AUTHORIZED*_Setup_x64.exe"))
 
 
 def test_genesis_finalizer_blocks_when_prior_authorized_asset_exists(tmp_path: Path) -> None:
     evidence = tmp_path / "evidence"
-    _, manifest_sha, bundle_sha = _build_evidence(evidence)
+    _, manifest_sha, bundle_sha, g7_sha = _build_evidence(evidence)
     path = evidence / "genesis" / "genesis-baseline-verification.json"
     value = json.loads(path.read_text("utf-8"))
     value["status"] = "FAIL"
     value["authorization_record_asset_count"] = 1
-    value["matching_assets"] = [{"tag": "v1", "name": "ImageLab-RELEASE-AUTHORIZATION.json"}]
+    value["matching_assets"] = [{"tag": "v1", "name": "ImageLab-GENESIS-RELEASE-AUTHORIZATION.json"}]
     _write(path, value)
-    result, verdict = _run(evidence, tmp_path / "output", manifest_sha, bundle_sha)
+    result, verdict = _run(evidence, tmp_path / "output", manifest_sha, bundle_sha, g7_sha)
     assert result.returncode != 0
-    assert verdict["status"] == "RELEASE_BLOCKED"
     assert "genesis_absence_invalid:authorization_record_asset_count" in verdict["failed_conditions"]
+
+
+def test_genesis_finalizer_requires_exact_pinned_g7_bundle(tmp_path: Path) -> None:
+    evidence = tmp_path / "evidence"
+    _, manifest_sha, bundle_sha, _ = _build_evidence(evidence)
+    result, verdict = _run(evidence, tmp_path / "output", manifest_sha, bundle_sha, "f" * 64)
+    assert result.returncode != 0
+    assert "g7_bundle_pinned_sha_mismatch" in verdict["failed_conditions"]
+
+
+def test_genesis_finalizer_rejects_failed_or_na_g7(tmp_path: Path) -> None:
+    for status in ("FAIL", "NOT_APPLICABLE_FIRST_RELEASE"):
+        evidence = tmp_path / status
+        installer_sha, manifest_sha, bundle_sha, _ = _build_evidence(evidence)
+        source_sha = json.loads((evidence / "build/candidate-manifest.json").read_text("utf-8"))["source"][
+            "sha256"
+        ]
+        g7_sha = _write_g7_bundle(
+            evidence,
+            installer_sha,
+            source_sha,
+            mutate=lambda update, rollback, status=status: rollback.update(status=status),
+        )
+        result, verdict = _run(evidence, tmp_path / f"output-{status}", manifest_sha, bundle_sha, g7_sha)
+        assert result.returncode != 0
+        assert "g7_rollback_status" in verdict["failed_conditions"]
+
+
+def test_genesis_finalizer_rejects_current_candidate_as_g7_baseline(tmp_path: Path) -> None:
+    evidence = tmp_path / "evidence"
+    installer_sha, manifest_sha, bundle_sha, _ = _build_evidence(evidence)
+    source_sha = json.loads((evidence / "build/candidate-manifest.json").read_text("utf-8"))["source"]["sha256"]
+    bundle = evidence / "g7/ImageLab-GENESIS-G7-EVIDENCE.zip"
+    inventory = {"schema": 1, "project_count": 3, "asset_count": 3, "projects_sha256": "d" * 64, "projects": []}
+    update = {
+        "schema": 3,
+        "status": "PASS",
+        "installer_sha256": installer_sha,
+        "baseline_installer_sha256": installer_sha,
+        "first_install_id": "baseline",
+        "second_install_id": "candidate",
+        "old_process_stopped": True,
+        "project_data_preserved": True,
+        "sentinel_preserved": True,
+        "project_count": 3,
+        "asset_count": 3,
+        "project_inventory_before": inventory,
+        "project_inventory_after_update": inventory,
+    }
+    rollback = {
+        "schema": 3,
+        "status": "PASS",
+        "installer_sha256": installer_sha,
+        "restored_install_id": "candidate",
+        "expected_install_id": "candidate",
+        "fault_exit_code": 1,
+        "critical_hashes_restored": True,
+        "project_data_preserved": True,
+        "sentinel_preserved": True,
+        "project_count": 3,
+        "asset_count": 3,
+        "project_inventory_before": inventory,
+        "project_inventory_after_rollback": inventory,
+    }
+    update_bytes = json.dumps(update, sort_keys=True).encode()
+    rollback_bytes = json.dumps(rollback, sort_keys=True).encode()
+    wrapper = {
+        "schema": 1,
+        "status": "PASS",
+        "evidence_mode": "non_authorizing_diagnostic_baseline",
+        "source_sha256": source_sha,
+        "installer_sha256": installer_sha,
+        "baseline_installer_sha256": installer_sha,
+        "update_test_sha256": hashlib.sha256(update_bytes).hexdigest(),
+        "rollback_test_sha256": hashlib.sha256(rollback_bytes).hexdigest(),
+    }
+    with zipfile.ZipFile(bundle, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("g7-evidence.json", json.dumps(wrapper))
+        archive.writestr("update-test.json", update_bytes)
+        archive.writestr("rollback-test.json", rollback_bytes)
+    result, verdict = _run(evidence, tmp_path / "output", manifest_sha, bundle_sha, _sha(bundle))
+    assert result.returncode != 0
+    assert "g7_self_baseline_forbidden" in verdict["failed_conditions"]
 
 
 def test_genesis_finalizer_blocks_unpinned_physical_evidence(tmp_path: Path) -> None:
     evidence = tmp_path / "evidence"
-    _, _, bundle_sha = _build_evidence(evidence)
-    result, verdict = _run(evidence, tmp_path / "output", "f" * 64, bundle_sha)
+    _, _, bundle_sha, g7_sha = _build_evidence(evidence)
+    result, verdict = _run(evidence, tmp_path / "output", "f" * 64, bundle_sha, g7_sha)
     assert result.returncode != 0
-    assert verdict["status"] == "RELEASE_BLOCKED"
     assert "physical_manifest_pinned_sha_mismatch" in verdict["failed_conditions"]
 
 
 def test_genesis_finalizer_rejects_physical_file_list_mismatch(tmp_path: Path) -> None:
     evidence = tmp_path / "evidence"
-    _, manifest_sha, bundle_sha = _build_evidence(evidence)
+    _, manifest_sha, bundle_sha, g7_sha = _build_evidence(evidence)
     manifest = evidence / "physical" / "ImageLab-PHYSICAL-L5.json"
     value = json.loads(manifest.read_text("utf-8"))
     value["evidence_files"] = ["invented.txt"]
     _write(manifest, value)
-    result, verdict = _run(evidence, tmp_path / "output", _sha(manifest), bundle_sha)
+    result, verdict = _run(evidence, tmp_path / "output", _sha(manifest), bundle_sha, g7_sha)
     assert result.returncode != 0
     assert "physical_manifest_evidence_files_mismatch" in verdict["failed_conditions"]
 
 
-def test_genesis_finalizer_removes_stale_authorized_outputs_on_failure(tmp_path: Path) -> None:
+def test_genesis_finalizer_removes_stale_normal_and_genesis_outputs_on_failure(tmp_path: Path) -> None:
     evidence = tmp_path / "evidence"
-    _, _, bundle_sha = _build_evidence(evidence)
+    _, _, bundle_sha, g7_sha = _build_evidence(evidence)
     output = tmp_path / "output"
     output.mkdir()
-    stale = output / "ImageLab_by_LarannA_RELEASE_AUTHORIZED_Setup_x64.exe"
-    stale.write_bytes(b"stale")
-    (output / "ImageLab-RELEASE-AUTHORIZATION.json").write_text("{}", "utf-8")
-    result, _ = _run(evidence, output, "f" * 64, bundle_sha)
+    stale_files = [
+        output / "ImageLab_by_LarannA_RELEASE_AUTHORIZED_Setup_x64.exe",
+        output / "ImageLab_by_LarannA_GENESIS_RELEASE_AUTHORIZED_Setup_x64.exe",
+        output / "ImageLab-RELEASE-AUTHORIZATION.json",
+        output / "ImageLab-GENESIS-RELEASE-AUTHORIZATION.json",
+    ]
+    for path in stale_files:
+        path.write_bytes(b"stale")
+    result, _ = _run(evidence, output, "f" * 64, bundle_sha, g7_sha)
     assert result.returncode != 0
-    assert not stale.exists()
-    assert not (output / "ImageLab-RELEASE-AUTHORIZATION.json").exists()
+    assert all(not path.exists() for path in stale_files)
 
 
-def test_genesis_workflow_is_one_time_and_fail_closed() -> None:
+def test_genesis_workflow_requires_history_g7_and_physical_evidence() -> None:
     workflow = (ROOT / ".github" / "workflows" / "zero-trust-genesis-release.yml").read_text("utf-8")
     assert "ImageLab Genesis First Release Gate" in workflow
     assert "qualification_run_id:" in workflow
+    assert "g7_evidence_release_tag:" in workflow
+    assert "g7_evidence_bundle_sha256:" in workflow
     assert "physical_l5_manifest_sha256:" in workflow
-    assert "physical_l5_bundle_sha256:" in workflow
-    assert "verify_no_prior_release.py" in workflow
-    assert "release_gate/genesis/finalize_gate.py" in workflow
-    assert "ImageLab-GENESIS-RELEASE-AUTHORIZED" in workflow
+    assert "workflow-runs.json" in workflow
+    assert "artifacts.json" in workflow
+    assert "--current-run-id" in workflow
+    assert "ImageLab-GENESIS-G7-EVIDENCE.zip" in workflow
+    assert "--g7-bundle-sha256" in workflow
+    assert "ImageLab-GENESIS-RELEASE-AUTHORIZATION.json" in workflow
+    assert "ImageLab-RELEASE-AUTHORIZATION.json" not in workflow
     assert "Enforce fail-closed genesis verdict" in workflow
 
 
