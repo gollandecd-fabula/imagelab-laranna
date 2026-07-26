@@ -167,14 +167,12 @@ jobs:
           set -euo pipefail
           mkdir -p aggregate/genesis
           gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/releases?per_page=100" > aggregate/genesis/releases.json
-          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" > aggregate/genesis/current-run.json
-          WORKFLOW_ID="$(python -c 'import json; print(json.load(open("aggregate/genesis/current-run.json"))["workflow_id"])')"
-          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/actions/workflows/$WORKFLOW_ID/runs?per_page=100" > aggregate/genesis/prior-workflow-runs.json
-          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/actions/artifacts?per_page=100&name=ImageLab-GENESIS-RELEASE-AUTHORIZED" > aggregate/genesis/prior-authorized-artifacts.json
+          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/actions/runs?per_page=100" > aggregate/genesis/all-authorization-runs.json
+          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/actions/artifacts?per_page=100" > aggregate/genesis/all-authorization-artifacts.json
           python release_gate/genesis/verify_no_prior_release.py \
             --releases-json aggregate/genesis/releases.json \
-            --workflow-runs-json aggregate/genesis/prior-workflow-runs.json \
-            --artifacts-json aggregate/genesis/prior-authorized-artifacts.json \
+            --workflow-runs-json aggregate/genesis/all-authorization-runs.json \
+            --artifacts-json aggregate/genesis/all-authorization-artifacts.json \
             --repository "$GITHUB_REPOSITORY" \
             --current-run-id "$GITHUB_RUN_ID" \
             --output aggregate/genesis/genesis-history-verification.json
