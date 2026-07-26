@@ -18,15 +18,13 @@ FIELDS = {
     "request_id",
     "qualification_run_id",
     "qualification_head_sha",
+    "g7_evidence_release_tag",
+    "g7_evidence_bundle_sha256",
     "physical_l5_release_tag",
     "physical_l5_manifest_sha256",
     "physical_l5_bundle_sha256",
     "enable_attestation",
 }
-
-
-def _sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def _is_sha256(value: object) -> bool:
@@ -37,11 +35,18 @@ def _is_commit_sha(value: object) -> bool:
     return bool(re.fullmatch(r"[0-9a-fA-F]{40}", str(value or "")))
 
 
+def _valid_tag(value: object) -> bool:
+    text = str(value or "")
+    return bool(text.strip()) and len(text) <= 200 and not any(character in text for character in "\r\n\0")
+
+
 def _placeholder_outputs() -> dict[str, str]:
     return {
         "request_id": "INVALID-GENESIS-REQUEST",
         "qualification_run_id": "0",
         "qualification_head_sha": "0" * 40,
+        "g7_evidence_release_tag": "INVALID",
+        "g7_evidence_bundle_sha256": "0" * 64,
         "physical_l5_release_tag": "INVALID",
         "physical_l5_manifest_sha256": "0" * 64,
         "physical_l5_bundle_sha256": "0" * 64,
@@ -49,7 +54,12 @@ def _placeholder_outputs() -> dict[str, str]:
     }
 
 
-def validate_request(value: Any, repository: str, source: str, request_sha256: str) -> tuple[dict[str, Any], dict[str, str]]:
+def validate_request(
+    value: Any,
+    repository: str,
+    source: str,
+    request_sha256: str,
+) -> tuple[dict[str, Any], dict[str, str]]:
     errors: list[str] = []
     if not isinstance(value, dict):
         value = {}
@@ -62,7 +72,7 @@ def validate_request(value: Any, repository: str, source: str, request_sha256: s
         errors.append("missing_fields:" + ",".join(missing))
 
     expected = {
-        "schema": 1,
+        "schema": 2,
         "status": STATUS,
         "release_mode": "genesis_first_release",
         "protocol_rule": RULE,
@@ -80,8 +90,15 @@ def validate_request(value: Any, repository: str, source: str, request_sha256: s
         errors.append("invalid:qualification_run_id")
     if not _is_commit_sha(value.get("qualification_head_sha")):
         errors.append("invalid:qualification_head_sha")
-    tag = str(value.get("physical_l5_release_tag") or "")
-    if not tag.strip() or len(tag) > 200 or any(ch in tag for ch in "\r\n\0"):
+
+    g7_tag = str(value.get("g7_evidence_release_tag") or "")
+    if not _valid_tag(g7_tag):
+        errors.append("invalid:g7_evidence_release_tag")
+    if not _is_sha256(value.get("g7_evidence_bundle_sha256")):
+        errors.append("invalid:g7_evidence_bundle_sha256")
+
+    physical_tag = str(value.get("physical_l5_release_tag") or "")
+    if not _valid_tag(physical_tag):
         errors.append("invalid:physical_l5_release_tag")
     if not _is_sha256(value.get("physical_l5_manifest_sha256")):
         errors.append("invalid:physical_l5_manifest_sha256")
@@ -92,7 +109,7 @@ def validate_request(value: Any, repository: str, source: str, request_sha256: s
 
     status = "PASS" if not errors else "FAIL"
     evidence = {
-        "schema": 1,
+        "schema": 2,
         "status": status,
         "release_mode": "genesis_first_release",
         "protocol_rule": RULE,
@@ -102,7 +119,9 @@ def validate_request(value: Any, repository: str, source: str, request_sha256: s
         "request_sha256": request_sha256,
         "qualification_run_id": run_id,
         "qualification_head_sha": str(value.get("qualification_head_sha") or "").lower(),
-        "physical_l5_release_tag": tag,
+        "g7_evidence_release_tag": g7_tag,
+        "g7_evidence_bundle_sha256": str(value.get("g7_evidence_bundle_sha256") or "").lower(),
+        "physical_l5_release_tag": physical_tag,
         "physical_l5_manifest_sha256": str(value.get("physical_l5_manifest_sha256") or "").lower(),
         "physical_l5_bundle_sha256": str(value.get("physical_l5_bundle_sha256") or "").lower(),
         "enable_attestation": value.get("enable_attestation"),
@@ -114,7 +133,9 @@ def validate_request(value: Any, repository: str, source: str, request_sha256: s
             "request_id": request_id,
             "qualification_run_id": str(run_id),
             "qualification_head_sha": str(value["qualification_head_sha"]).lower(),
-            "physical_l5_release_tag": tag,
+            "g7_evidence_release_tag": g7_tag,
+            "g7_evidence_bundle_sha256": str(value["g7_evidence_bundle_sha256"]).lower(),
+            "physical_l5_release_tag": physical_tag,
             "physical_l5_manifest_sha256": str(value["physical_l5_manifest_sha256"]).lower(),
             "physical_l5_bundle_sha256": str(value["physical_l5_bundle_sha256"]).lower(),
             "enable_attestation": "true" if value["enable_attestation"] else "false",
@@ -142,10 +163,15 @@ def main() -> int:
     try:
         raw = args.request.read_bytes()
         value = json.loads(raw.decode("utf-8-sig"))
-        evidence, outputs = validate_request(value, args.repository, args.source, hashlib.sha256(raw).hexdigest())
+        evidence, outputs = validate_request(
+            value,
+            args.repository,
+            args.source,
+            hashlib.sha256(raw).hexdigest(),
+        )
     except Exception as exc:
         evidence = {
-            "schema": 1,
+            "schema": 2,
             "status": "FAIL",
             "release_mode": "genesis_first_release",
             "protocol_rule": RULE,
