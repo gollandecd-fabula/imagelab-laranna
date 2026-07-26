@@ -53,8 +53,7 @@ def _validate_request_and_history(
     qualification_run_id: int,
     qualification_head_sha: str,
     g7_bundle_sha: str,
-    manifest_sha: str,
-    bundle_sha: str,
+    physical_l5_sha: str,
 ) -> list[str]:
     failed: list[str] = []
     expected_request = {
@@ -67,8 +66,7 @@ def _validate_request_and_history(
         "qualification_run_id": qualification_run_id,
         "qualification_head_sha": qualification_head_sha,
         "g7_evidence_bundle_sha256": g7_bundle_sha,
-        "physical_l5_manifest_sha256": manifest_sha,
-        "physical_l5_bundle_sha256": bundle_sha,
+        "physical_l5_evidence_sha256": physical_l5_sha,
         "failed_conditions": [],
     }
     for field, wanted in expected_request.items():
@@ -78,10 +76,14 @@ def _validate_request_and_history(
         failed.append("genesis_request_invalid:request_source")
     if not isinstance(request.get("enable_attestation"), bool):
         failed.append("genesis_request_invalid:enable_attestation")
-    for field in ("g7_evidence_release_tag", "physical_l5_release_tag"):
-        value = str(request.get(field) or "")
-        if not value.strip() or len(value) > 200 or any(character in value for character in "\r\n\0"):
-            failed.append(f"genesis_request_invalid:{field}")
+    g7_tag = str(request.get("g7_evidence_release_tag") or "")
+    if not g7_tag.strip() or len(g7_tag) > 200 or any(character in g7_tag for character in "\r\n\0"):
+        failed.append("genesis_request_invalid:g7_evidence_release_tag")
+    physical_url = str(request.get("physical_l5_evidence_url") or "")
+    if not physical_url.startswith("https://") or len(physical_url) > 2048 or any(
+        character in physical_url for character in "\r\n\0"
+    ):
+        failed.append("genesis_request_invalid:physical_l5_evidence_url")
     if not _is_sha256(request.get("request_sha256")):
         failed.append("genesis_request_invalid:request_sha256")
 
@@ -143,8 +145,7 @@ def main() -> int:
     parser.add_argument("--qualification-run-id", type=int, required=True)
     parser.add_argument("--qualification-head-sha", required=True)
     parser.add_argument("--g7-bundle-sha256", required=True)
-    parser.add_argument("--physical-manifest-sha256", required=True)
-    parser.add_argument("--physical-bundle-sha256", required=True)
+    parser.add_argument("--physical-l5-sha256", required=True)
     args = parser.parse_args()
 
     aggregate = args.aggregate_dir.resolve()
@@ -169,8 +170,7 @@ def main() -> int:
                 qualification_run_id=args.qualification_run_id,
                 qualification_head_sha=args.qualification_head_sha,
                 g7_bundle_sha=args.g7_bundle_sha256.lower(),
-                manifest_sha=args.physical_manifest_sha256.lower(),
-                bundle_sha=args.physical_bundle_sha256.lower(),
+                physical_l5_sha=args.physical_l5_sha256.lower(),
             )
         )
         finalizer_history_path.write_bytes(history_path.read_bytes())
@@ -198,10 +198,8 @@ def main() -> int:
         args.qualification_head_sha,
         "--g7-bundle-sha256",
         args.g7_bundle_sha256.lower(),
-        "--physical-manifest-sha256",
-        args.physical_manifest_sha256.lower(),
-        "--physical-bundle-sha256",
-        args.physical_bundle_sha256.lower(),
+        "--physical-l5-sha256",
+        args.physical_l5_sha256.lower(),
     ]
     completed = subprocess.run(command, text=True, capture_output=True)
     if completed.stdout:
