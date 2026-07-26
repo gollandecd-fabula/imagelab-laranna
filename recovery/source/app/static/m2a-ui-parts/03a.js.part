@@ -1,0 +1,31 @@
+dren();
+    const mobile=document.createElement('select'); mobile.className='m2a-mobile-nav'; mobile.setAttribute('aria-label','Раздел ImageLab');
+    groups.forEach(([label,items]) => {
+      const optgroup=document.createElement('optgroup'); optgroup.label=label;
+      const group=document.createElement('div'); group.className='nav-group'; group.innerHTML=`<span class="nav-group-label">${label}</span>`;
+      items.forEach(name => {
+        const title=meta[name][1], option=new Option(title,name); optgroup.append(option);
+        const b=document.createElement('button'); b.type='button'; b.className=`nav-item${name==='upload'?' active':''}`; b.dataset.module=name; b.innerHTML=`${svg(name)}<span>${title}</span>`; b.onclick=()=>activateModule(name); group.append(b);
+      });
+      mobile.append(optgroup); sidebar.append(group);
+    });
+    mobile.value='upload'; mobile.onchange=()=>activateModule(mobile.value); sidebar.prepend(mobile);
+  }
+
+  function buildTopbar() {
+    const chip=document.querySelector('.project-chip'); chip.classList.add('m2a-project-chip'); chip.tabIndex=0; chip.title='Открыть проекты'; chip.onclick=()=>activateModule('projects');
+    const spacer=document.querySelector('.top-spacer'), box=document.createElement('div'); box.className='m2a-history-actions';
+    box.innerHTML='<button class="icon-button" id="m2aUndo" title="Предыдущая версия">↶</button><button class="icon-button" id="m2aRedo" title="Следующая версия">↷</button><span id="m2aSaveState">сохранено</span>';
+    spacer.before(box); $('#m2aUndo').onclick=()=>moveHistory(-1); $('#m2aRedo').onclick=()=>moveHistory(1);
+  }
+
+  function buildPreviewTools() {
+    const actions=document.querySelector('.preview-toolbar .toolbar-actions');
+    const sourceButton=document.getElementById('sourceButton');
+    actions.replaceChildren();
+    if(sourceButton) actions.append(sourceButton);
+    const modes=document.createElement('div'); modes.className='m2a-preview-modes';
+    [['result','Результат'],['original','Оригинал'],['split','До/После'],['overlay','Overlay'],['difference','Разница'],['mask','Маска']].forEach(([mode,label])=>{const b=document.createElement('button'); b.className=`m2a-tool${mode==='result'?' active':''}`; b.dataset.previewMode=mode; b.textContent=label; b.onclick=()=>{S.mode=mode; renderPreview();}; modes.append(b);});
+    const zoom=document.createElement('div'); zoom.className='m2a-zoom'; zoom.innerHTML='<button id="m2aZoomOut">−</button><button id="m2aZoomValue">100%</button><button id="m2aZoomIn">+</button><button id="m2aFit">Fit</button><button id="m2aOneToOne">1:1</button><select id="m2aPreviewBackground"><option value="transparent">▦</option><option value="white">Белый</option><option value="black">Чёрный</option><option value="gray">Серый</option></select><button id="m2aInfoToggle">ⓘ</button>';
+    actions.append(modes,zoom); $('#m2aZoomOut').onclick=()=>setZoom(S.zoom-.25); $('#m2aZoomIn').onclick=()=>setZoom(S.zoom+.25); $('#m2aZoomValue').onclick=()=>setZoom(1); $('#m2aOneToOne').onclick=()=>setZoom(1); $('#m2aFit').onclick=fitPreview;
+    $('#m2aPreviewBackground').value=S.background; $('#m2aPreviewBackground').onchange=e=>{S.background=e.target.value; storage.set('imagelab.previewBackground',S.background); applyPreviewBackground();};

@@ -7,6 +7,11 @@ on:
     paths:
       - recovery/source/bootstrap.py
       - recovery/source/app/entry.py
+      - recovery/source/app/models.py
+      - recovery/source/app/services/image_processing.py
+      - recovery/source/app/services/m2a_processing.py
+      - recovery/source/app/services/__init__.py
+      - recovery/source/app/services/repair_service.py
       - recovery/source/app/services/file_inspector.py
       - recovery/source/app/services/project_store.py
       - recovery/source/app/static/index.html
@@ -14,6 +19,8 @@ on:
       - recovery/source/app/static/app.js
       - recovery/source/app/static/m1-hardening.css
       - recovery/source/app/static/m1-hardening.js
+      - recovery/source/app/static/m2a-ui.css
+      - recovery/source/app/static/m2a-ui-parts/**
       - recovery/source/release_gate/fetch_pinned_json.py
       - recovery/source/release_gate/finalize_gate.py
       - recovery/source/release_gate/finalize_unit_matrix.py
@@ -25,7 +32,10 @@ on:
       - recovery/source/windows_installer/uninstaller/main.go
       - recovery/source/windows_installer/uninstaller/main_test.go
       - recovery/source/tests/test_m1_ui.py
+      - recovery/source/tests/test_m2a_ui.py
       - recovery/source/tests/test_browser_m1.py
+      - recovery/source/tests/test_browser_m2a.py
+      - recovery/source/tests/test_geometry_m2a.py
       - recovery/source/tests/test_windows_packaging_config.py
       - recovery/source/.github/workflows/zero-trust-release.yml
       - recovery/source/tests/test_project_lookup_resilience.py
@@ -71,12 +81,18 @@ jobs:
           python -m compileall -q
           bootstrap.py
           app/entry.py
+          app/models.py
+          app/services/image_processing.py
+          app/services/m2a_processing.py
+          app/services/__init__.py
           app/services/file_inspector.py
           app/services/project_store.py
           release_gate/fetch_pinned_json.py
           release_gate/finalize_gate.py
           release_gate/finalize_unit_matrix.py
           tests/test_m1_ui.py
+          tests/test_m2a_ui.py
+          tests/test_geometry_m2a.py
           tests/test_project_lookup_resilience.py
           tests/test_project_store_concurrency.py
           tests/test_upload_surface_hardening.py
@@ -86,10 +102,14 @@ jobs:
         run: |
           node --check app/static/app.js
           node --check app/static/m1-hardening.js
+          cat app/static/m2a-ui-parts/*.js.part > /tmp/m2a-ui.js
+          node --check /tmp/m2a-ui.js
       - name: Run focused hardening tests
         run: >-
           python -m pytest
           tests/test_m1_ui.py
+          tests/test_m2a_ui.py
+          tests/test_geometry_m2a.py
           tests/test_windows_packaging_config.py
           tests/test_zero_trust_release_gate.py
           tests/test_project_store_concurrency.py
@@ -163,7 +183,7 @@ jobs:
           }
 
   browser-ui-contract:
-    name: Browser UI M1 contracts
+    name: Browser UI M1/M2A contracts
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     defaults:
@@ -179,8 +199,8 @@ jobs:
           python -m pip install -q --requirement requirements.txt
           python -m pip install -q pytest==8.4.2 httpx==0.28.1 playwright==1.60.0
           python -m playwright install --with-deps chromium
-      - name: Run real-browser M1 contracts
-        run: python -m pytest tests/test_browser_m1.py -vv --tb=short
+      - name: Run real-browser M1 and M2A contracts
+        run: python -m pytest tests/test_browser_m1.py tests/test_browser_m2a.py -vv --tb=short
 
   windows-lifecycle-contract:
     name: Windows launcher and uninstaller contracts

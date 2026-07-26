@@ -1,0 +1,18 @@
+    $('#m2aInfoToggle').onclick=()=>document.querySelector('.info-sidebar').classList.toggle('m2a-open');
+  }
+
+  function enhanceSizeUI(gridId, widthId, heightId) {
+    const grid=$(`#${gridId}`); if(!grid || grid.dataset.m2a)return; grid.dataset.m2a='1'; grid.dataset.sizeGrid=gridId; grid.classList.add('m2a-size-grid');
+    const chain=document.createElement('button'); chain.type='button'; chain.className='m2a-chain'; chain.dataset.linked=String(S.linked); chain.setAttribute('aria-pressed',String(S.linked)); chain.title='Связать ширину и высоту'; chain.innerHTML='<span></span><span></span>'; grid.children[0].after(chain);
+    chain.onclick=()=>{S.linked=!S.linked; chain.dataset.linked=String(S.linked); chain.setAttribute('aria-pressed',String(S.linked)); storage.set('imagelab.sizeLinked',String(S.linked)); updateSizeViews();};
+    const bind=(id,side)=>{const input=$(`#${id}`); input.addEventListener('input',()=>syncSize(side,widthId,heightId));}; bind(widthId,'width'); bind(heightId,'height');
+  }
+  function currentAspect() { const a=selectedAsset(); return a?.width_px && a?.height_px ? a.width_px/a.height_px : 1; }
+  function syncSize(side,wid,hid) {
+    if(S.sizeSyncing || !S.linked)return; const w=$(`#${wid}`),h=$(`#${hid}`),ratio=currentAspect(); S.sizeSyncing=true;
+    if(side==='width' && Number(w.value)>0) h.value=(Number(w.value)/ratio).toFixed(2); else if(side==='height' && Number(h.value)>0) w.value=(Number(h.value)*ratio).toFixed(2);
+    [['improveWidthMm','improveHeightMm'],['widthMm','heightMm']].forEach(([x,y])=>{if(x!==wid && Number(w.value)>0){$(`#${x}`).value=Number(w.value).toFixed(2);$(`#${y}`).value=Number(h.value).toFixed(2);}}); S.sizeSyncing=false; updateSizeViews();
+  }
+  function addGeometryControls() {
+    const pane=document.querySelector('[data-pane="geometry"]'), apply=$('#applyGeometry'); if(!pane || $('#m2aResample'))return;
+    const wrap=document.createElement('div'); wrap.innerHTML='<label>Ведущий размер<select id="m2aLeading"><option value="auto">Автоматически</option><option value="width">Ширина</option><option value="height">Высота</option></select></label><label class="check-row"><input id="m2aResample" type="checkbox" checked> Resample — изменять пиксели</label><strong class="field-group-title">Холст, мм</strong><div class="m2a-canvas-grid"><label>Сверху<inp
