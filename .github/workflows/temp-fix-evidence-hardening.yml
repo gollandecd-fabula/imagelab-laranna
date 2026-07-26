@@ -1,0 +1,150 @@
+name: Temporary Evidence Hardening Corrective Patch
+
+on:
+  push:
+    branches:
+      - redteam/imagelab-complete-audit-20260725-v2
+    paths:
+      - .github/workflows/temp-fix-evidence-hardening.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: imagelab-temp-evidence-hardening-fix
+  cancel-in-progress: false
+
+jobs:
+  apply-corrective-patch:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+        with:
+          ref: redteam/imagelab-complete-audit-20260725-v2
+          fetch-depth: 0
+      - name: Apply exact fail-closed corrections
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: Path, old: str, new: str) -> None:
+              text = path.read_text('utf-8')
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected one match, found {count}: {old[:80]!r}')
+              path.write_text(text.replace(old, new, 1), 'utf-8')
+
+          release_test = Path('recovery/source/tests/test_genesis_release_gate.py')
+          replace_once(
+              release_test,
+              "def _h(character: str) -> str:\n    return character * 64\n",
+              "HEX_DIGITS = '0123456789abcdef'\n\n\ndef _h(character: str) -> str:\n    if character not in HEX_DIGITS:\n        raise ValueError(f'invalid synthetic SHA digit: {character!r}')\n    return character * 64\n\n\ndef _hex_offset(character: str, offset: int) -> str:\n    return HEX_DIGITS[(HEX_DIGITS.index(character) + offset) % len(HEX_DIGITS)]\n",
+          )
+          replace_once(
+              release_test,
+              '"preview_file_sha256": _h(chr(ord(seed) + 1)),',
+              '"preview_file_sha256": _h(_hex_offset(seed, 1)),',
+          )
+          replace_once(
+              release_test,
+              '"parameters_sha256": _h(chr(ord(seed) + 2)),',
+              '"parameters_sha256": _h(_hex_offset(seed, 2)),',
+          )
+          replace_once(
+              release_test,
+              '"ai_sha256": _h(chr(ord(seed) + 3)),',
+              '"ai_sha256": _h(_hex_offset(seed, 3)),',
+          )
+
+          request_test = Path('recovery/source/tests/test_genesis_request_gate.py')
+          replace_once(
+              request_test,
+              'PHYSICAL_URL = "https://evidence.example/physical-l5.json"\n',
+              'PHYSICAL_URL = "https://evidence.example/physical-l5.json"\nAUTHORIZATION_WORKFLOWS = [\n    "ImageLab Genesis First Release Gate",\n    "ImageLab Genesis Request Gate",\n    "ImageLab Zero-Trust Release Gate",\n]\n',
+          )
+          old_history = '''        {
+            "schema": 2,
+            "status": "PASS",
+            "release_mode": "genesis_first_release",
+            "protocol_rule": "GENESIS-FIRST-RELEASE-V1",
+            "repository": "owner/repo",
+            "query_source": "github_api_releases_actions_paginated",
+            "query_complete": True,
+            "current_run_id": GENESIS_RUN_ID,
+            "release_count_scanned": 3,
+            "workflow_run_count_scanned": 4,
+            "artifact_count_scanned": 0,
+            "authorized_installer_asset_count": 0,
+            "authorization_record_asset_count": 0,
+            "prior_successful_genesis_run_count": 0,
+            "prior_authorized_genesis_artifact_count": 0,
+            "prior_successful_genesis_run_ids": [],
+            "prior_authorized_genesis_artifacts": [],
+            "matching_assets": [],
+        },'''
+          new_history = '''        {
+            "schema": 3,
+            "status": "PASS",
+            "release_mode": "genesis_first_release",
+            "protocol_rule": "GENESIS-FIRST-RELEASE-V1",
+            "repository": "owner/repo",
+            "query_source": "github_api_releases_all_authorization_runs_artifacts_paginated",
+            "query_complete": True,
+            "current_run_id": GENESIS_RUN_ID,
+            "authorization_workflow_names": AUTHORIZATION_WORKFLOWS,
+            "release_count_scanned": 3,
+            "workflow_run_count_scanned": 4,
+            "artifact_count_scanned": 0,
+            "authorized_installer_asset_count": 0,
+            "authorization_record_asset_count": 0,
+            "prior_successful_authorization_run_count": 0,
+            "prior_authorized_artifact_count": 0,
+            "prior_successful_authorization_runs": [],
+            "prior_authorized_artifacts": [],
+            "matching_assets": [],
+        },'''
+          replace_once(request_test, old_history, new_history)
+          replace_once(request_test, 'assert history["schema"] == 2', 'assert history["schema"] == 3')
+          replace_once(
+              request_test,
+              'history["prior_successful_genesis_run_count"] = 1\n    history["prior_successful_genesis_run_ids"] = [99]',
+              'history["prior_successful_authorization_run_count"] = 1\n    history["prior_successful_authorization_runs"] = [\n        {"id": 99, "name": "ImageLab Genesis Request Gate"}\n    ]',
+          )
+          replace_once(request_test, 'assert "prior-workflow-runs.json" in workflow', 'assert "all-authorization-runs.json" in workflow')
+          replace_once(request_test, 'assert "prior-authorized-artifacts.json" in workflow', 'assert "all-authorization-artifacts.json" in workflow')
+
+          request_workflow = Path('.github/workflows/zero-trust-genesis-request.yml')
+          old_block = '''          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/releases?per_page=100" > aggregate/genesis/releases.json
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" > aggregate/genesis/current-run.json
+          WORKFLOW_ID="$(python -c 'import json; print(json.load(open("aggregate/genesis/current-run.json"))["workflow_id"])')"
+          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/actions/workflows/$WORKFLOW_ID/runs?per_page=100" > aggregate/genesis/prior-workflow-runs.json
+          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/actions/artifacts?per_page=100&name=ImageLab-GENESIS-RELEASE-AUTHORIZED" > aggregate/genesis/prior-authorized-artifacts.json
+          python release_gate/genesis/verify_no_prior_release.py \\
+            --releases-json aggregate/genesis/releases.json \\
+            --workflow-runs-json aggregate/genesis/prior-workflow-runs.json \\
+            --artifacts-json aggregate/genesis/prior-authorized-artifacts.json \\
+'''
+          new_block = '''          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/releases?per_page=100" > aggregate/genesis/releases.json
+          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/actions/runs?per_page=100" > aggregate/genesis/all-authorization-runs.json
+          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/actions/artifacts?per_page=100" > aggregate/genesis/all-authorization-artifacts.json
+          python release_gate/genesis/verify_no_prior_release.py \\
+            --releases-json aggregate/genesis/releases.json \\
+            --workflow-runs-json aggregate/genesis/all-authorization-runs.json \\
+            --artifacts-json aggregate/genesis/all-authorization-artifacts.json \\
+'''
+          replace_once(request_workflow, old_block, new_block)
+
+          temp_workflow = Path('.github/workflows/temp-fix-evidence-hardening.yml')
+          temp_workflow.unlink()
+          PY
+      - name: Commit corrective patch to exact PR branch
+        run: |
+          set -euo pipefail
+          git config user.name "ImageLab corrective automation"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "fix: align Genesis fixtures and request history contract"
+          git push origin HEAD:redteam/imagelab-complete-audit-20260725-v2
