@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import os
 import subprocess
 import sys
 import zipfile
@@ -17,6 +16,11 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _is_sha256(value: object) -> bool:
+    text = str(value or "").lower()
+    return len(text) == 64 and all(character in "0123456789abcdef" for character in text)
+
+
 def _read(path: Path) -> dict[str, Any]:
     value = json.loads(path.read_text("utf-8-sig"))
     if not isinstance(value, dict):
@@ -25,29 +29,18 @@ def _read(path: Path) -> dict[str, Any]:
 
 
 def _cleanup_authorized(output: Path) -> None:
-    for path in list(output.glob("*RELEASE_AUTHORIZED*.exe")) + [
-        output / "ImageLab-RELEASE-AUTHORIZATION.json",
-        output / "installer-sha256.txt",
-    ]:
+    candidates = list(output.glob("*RELEASE_AUTHORIZED*.exe"))
+    candidates.extend(
+        [
+            output / "ImageLab-RELEASE-AUTHORIZATION.json",
+            output / "ImageLab-GENESIS-RELEASE-AUTHORIZATION.json",
+            output / "installer-sha256.txt",
+            output / ".authorization-record-orchestrated.tmp",
+        ]
+    )
+    for path in candidates:
         if path.exists():
             path.unlink()
-
-
-def _compatibility_evidence(history: dict[str, Any], repository: str, valid: bool) -> dict[str, Any]:
-    return {
-        "schema": 1,
-        "status": "PASS" if valid else "FAIL",
-        "release_mode": "genesis_first_release",
-        "protocol_rule": RULE,
-        "repository": repository,
-        "query_source": "github_api_releases_paginated",
-        "query_complete": bool(history.get("query_complete")) if valid else False,
-        "release_count_scanned": history.get("release_count_scanned", 0),
-        "authorized_installer_asset_count": history.get("authorized_installer_asset_count"),
-        "authorization_record_asset_count": history.get("authorization_record_asset_count"),
-        "matching_assets": history.get("matching_assets", []),
-        "history_evidence_sha256": None,
-    }
 
 
 def _validate_request_and_history(
@@ -55,15 +48,17 @@ def _validate_request_and_history(
     history: dict[str, Any],
     *,
     repository: str,
+    genesis_run_id: int,
     request_id: str,
     qualification_run_id: int,
     qualification_head_sha: str,
+    g7_bundle_sha: str,
     manifest_sha: str,
     bundle_sha: str,
 ) -> list[str]:
     failed: list[str] = []
     expected_request = {
-        "schema": 1,
+        "schema": 2,
         "status": "PASS",
         "release_mode": "genesis_first_release",
         "protocol_rule": RULE,
@@ -71,6 +66,7 @@ def _validate_request_and_history(
         "request_id": request_id,
         "qualification_run_id": qualification_run_id,
         "qualification_head_sha": qualification_head_sha,
+        "g7_evidence_bundle_sha256": g7_bundle_sha,
         "physical_l5_manifest_sha256": manifest_sha,
         "physical_l5_bundle_sha256": bundle_sha,
         "failed_conditions": [],
@@ -82,8 +78,11 @@ def _validate_request_and_history(
         failed.append("genesis_request_invalid:request_source")
     if not isinstance(request.get("enable_attestation"), bool):
         failed.append("genesis_request_invalid:enable_attestation")
-    request_sha = str(request.get("request_sha256") or "")
-    if len(request_sha) != 64 or any(ch not in "0123456789abcdef" for ch in request_sha.lower()):
+    for field in ("g7_evidence_release_tag", "physical_l5_release_tag"):
+        value = str(request.get(field) or "")
+        if not value.strip() or len(value) > 200 or any(character in value for character in "\r\n\0"):
+            failed.append(f"genesis_request_invalid:{field}")
+    if not _is_sha256(request.get("request_sha256")):
         failed.append("genesis_request_invalid:request_sha256")
 
     expected_history = {
@@ -94,6 +93,7 @@ def _validate_request_and_history(
         "repository": repository,
         "query_source": "github_api_releases_actions_paginated",
         "query_complete": True,
+        "current_run_id": genesis_run_id,
         "authorized_installer_asset_count": 0,
         "authorization_record_asset_count": 0,
         "prior_successful_genesis_run_count": 0,
@@ -116,7 +116,7 @@ def _write_blocked(output: Path, aggregate: Path, failed: list[str]) -> None:
     _cleanup_authorized(output)
     output.mkdir(parents=True, exist_ok=True)
     verdict = {
-        "schema": 4,
+        "schema": 5,
         "status": "RELEASE_BLOCKED",
         "release_mode": "genesis_first_release",
         "protocol_rule": RULE,
@@ -138,9 +138,11 @@ def main() -> int:
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--finalizer", type=Path, required=True)
     parser.add_argument("--repository", required=True)
+    parser.add_argument("--genesis-run-id", type=int, required=True)
     parser.add_argument("--genesis-request-id", required=True)
     parser.add_argument("--qualification-run-id", type=int, required=True)
     parser.add_argument("--qualification-head-sha", required=True)
+    parser.add_argument("--g7-bundle-sha256", required=True)
     parser.add_argument("--physical-manifest-sha256", required=True)
     parser.add_argument("--physical-bundle-sha256", required=True)
     args = parser.parse_args()
@@ -150,8 +152,10 @@ def main() -> int:
     output.mkdir(parents=True, exist_ok=True)
     history_path = aggregate / "genesis" / "genesis-history-verification.json"
     request_path = aggregate / "request" / "genesis-request-verification.json"
-    compat_path = aggregate / "genesis" / "genesis-baseline-verification.json"
+    finalizer_history_path = aggregate / "genesis" / "genesis-baseline-verification.json"
     failed: list[str] = []
+    request: dict[str, Any] = {}
+
     try:
         request = _read(request_path)
         history = _read(history_path)
@@ -160,24 +164,22 @@ def main() -> int:
                 request,
                 history,
                 repository=args.repository,
+                genesis_run_id=args.genesis_run_id,
                 request_id=args.genesis_request_id,
                 qualification_run_id=args.qualification_run_id,
                 qualification_head_sha=args.qualification_head_sha,
+                g7_bundle_sha=args.g7_bundle_sha256.lower(),
                 manifest_sha=args.physical_manifest_sha256.lower(),
                 bundle_sha=args.physical_bundle_sha256.lower(),
             )
         )
-        compat = _compatibility_evidence(history, args.repository, not failed)
-        compat["history_evidence_sha256"] = _sha256(history_path)
-        compat_path.write_text(json.dumps(compat, ensure_ascii=False, indent=2), "utf-8")
+        finalizer_history_path.write_bytes(history_path.read_bytes())
     except Exception as exc:
         failed.append(f"genesis_orchestrator_input:{type(exc).__name__}:{exc}")
-        compat_path.parent.mkdir(parents=True, exist_ok=True)
-        compat_path.write_text(
-            json.dumps(_compatibility_evidence({}, args.repository, False), ensure_ascii=False, indent=2),
-            "utf-8",
-        )
-        request = {}
+
+    if failed:
+        _write_blocked(output, aggregate, failed)
+        return 1
 
     command = [
         sys.executable,
@@ -186,24 +188,38 @@ def main() -> int:
         str(aggregate),
         "--output-dir",
         str(output),
+        "--repository",
+        args.repository,
+        "--genesis-run-id",
+        str(args.genesis_run_id),
+        "--qualification-run-id",
+        str(args.qualification_run_id),
+        "--qualification-head-sha",
+        args.qualification_head_sha,
+        "--g7-bundle-sha256",
+        args.g7_bundle_sha256.lower(),
+        "--physical-manifest-sha256",
+        args.physical_manifest_sha256.lower(),
+        "--physical-bundle-sha256",
+        args.physical_bundle_sha256.lower(),
     ]
     completed = subprocess.run(command, text=True, capture_output=True)
     if completed.stdout:
         print(completed.stdout, end="")
     if completed.stderr:
         print(completed.stderr, end="", file=sys.stderr)
-
-    if failed or completed.returncode != 0:
-        if completed.returncode == 0:
-            failed.append("legacy_genesis_finalizer_unexpected_success")
-        _write_blocked(output, aggregate, failed or ["legacy_genesis_finalizer_blocked"])
-        return 1
+    if completed.returncode != 0:
+        return completed.returncode
 
     try:
-        record_path = output / "ImageLab-RELEASE-AUTHORIZATION.json"
+        record_path = output / "ImageLab-GENESIS-RELEASE-AUTHORIZATION.json"
         record = _read(record_path)
-        if record.get("status") != "RELEASE_AUTHORIZED":
-            raise ValueError("authorization record is not RELEASE_AUTHORIZED")
+        if record.get("status") != "GENESIS_RELEASE_AUTHORIZED":
+            raise ValueError("authorization record is not GENESIS_RELEASE_AUTHORIZED")
+        if (output / "ImageLab-RELEASE-AUTHORIZATION.json").exists():
+            raise ValueError("ordinary authorization record emitted in Genesis mode")
+        if list(output.glob("ImageLab_by_LarannA_RELEASE_AUTHORIZED*_Setup_x64.exe")):
+            raise ValueError("ordinary authorized installer emitted in Genesis mode")
         record.update(
             {
                 "authorization_orchestrator": "release_gate/genesis/orchestrate_request_gate.py",
@@ -217,7 +233,11 @@ def main() -> int:
         temp.replace(record_path)
         return 0
     except Exception as exc:
-        _write_blocked(output, aggregate, [f"genesis_orchestrator_postprocess:{type(exc).__name__}:{exc}"])
+        _write_blocked(
+            output,
+            aggregate,
+            [f"genesis_orchestrator_postprocess:{type(exc).__name__}:{exc}"],
+        )
         return 1
 
 
