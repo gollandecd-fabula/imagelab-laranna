@@ -6,6 +6,7 @@ import json
 import re
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 RULE = "GENESIS-FIRST-RELEASE-V1"
 STATUS = "GENESIS_AUTHORIZATION_REQUESTED"
@@ -20,9 +21,8 @@ FIELDS = {
     "qualification_head_sha",
     "g7_evidence_release_tag",
     "g7_evidence_bundle_sha256",
-    "physical_l5_release_tag",
-    "physical_l5_manifest_sha256",
-    "physical_l5_bundle_sha256",
+    "physical_l5_evidence_url",
+    "physical_l5_evidence_sha256",
     "enable_attestation",
 }
 
@@ -40,6 +40,14 @@ def _valid_tag(value: object) -> bool:
     return bool(text.strip()) and len(text) <= 200 and not any(character in text for character in "\r\n\0")
 
 
+def _valid_https_url(value: object) -> bool:
+    text = str(value or "").strip()
+    if len(text) > 2048 or any(character in text for character in "\r\n\0"):
+        return False
+    parsed = urlsplit(text)
+    return parsed.scheme.lower() == "https" and bool(parsed.netloc) and parsed.username is None and parsed.password is None
+
+
 def _placeholder_outputs() -> dict[str, str]:
     return {
         "request_id": "INVALID-GENESIS-REQUEST",
@@ -47,9 +55,8 @@ def _placeholder_outputs() -> dict[str, str]:
         "qualification_head_sha": "0" * 40,
         "g7_evidence_release_tag": "INVALID",
         "g7_evidence_bundle_sha256": "0" * 64,
-        "physical_l5_release_tag": "INVALID",
-        "physical_l5_manifest_sha256": "0" * 64,
-        "physical_l5_bundle_sha256": "0" * 64,
+        "physical_l5_evidence_url": "https://invalid.invalid/physical-l5.json",
+        "physical_l5_evidence_sha256": "0" * 64,
         "enable_attestation": "false",
     }
 
@@ -97,13 +104,11 @@ def validate_request(
     if not _is_sha256(value.get("g7_evidence_bundle_sha256")):
         errors.append("invalid:g7_evidence_bundle_sha256")
 
-    physical_tag = str(value.get("physical_l5_release_tag") or "")
-    if not _valid_tag(physical_tag):
-        errors.append("invalid:physical_l5_release_tag")
-    if not _is_sha256(value.get("physical_l5_manifest_sha256")):
-        errors.append("invalid:physical_l5_manifest_sha256")
-    if not _is_sha256(value.get("physical_l5_bundle_sha256")):
-        errors.append("invalid:physical_l5_bundle_sha256")
+    physical_url = str(value.get("physical_l5_evidence_url") or "")
+    if not _valid_https_url(physical_url):
+        errors.append("invalid:physical_l5_evidence_url")
+    if not _is_sha256(value.get("physical_l5_evidence_sha256")):
+        errors.append("invalid:physical_l5_evidence_sha256")
     if not isinstance(value.get("enable_attestation"), bool):
         errors.append("invalid:enable_attestation")
 
@@ -121,9 +126,8 @@ def validate_request(
         "qualification_head_sha": str(value.get("qualification_head_sha") or "").lower(),
         "g7_evidence_release_tag": g7_tag,
         "g7_evidence_bundle_sha256": str(value.get("g7_evidence_bundle_sha256") or "").lower(),
-        "physical_l5_release_tag": physical_tag,
-        "physical_l5_manifest_sha256": str(value.get("physical_l5_manifest_sha256") or "").lower(),
-        "physical_l5_bundle_sha256": str(value.get("physical_l5_bundle_sha256") or "").lower(),
+        "physical_l5_evidence_url": physical_url,
+        "physical_l5_evidence_sha256": str(value.get("physical_l5_evidence_sha256") or "").lower(),
         "enable_attestation": value.get("enable_attestation"),
         "failed_conditions": errors,
     }
@@ -135,9 +139,8 @@ def validate_request(
             "qualification_head_sha": str(value["qualification_head_sha"]).lower(),
             "g7_evidence_release_tag": g7_tag,
             "g7_evidence_bundle_sha256": str(value["g7_evidence_bundle_sha256"]).lower(),
-            "physical_l5_release_tag": physical_tag,
-            "physical_l5_manifest_sha256": str(value["physical_l5_manifest_sha256"]).lower(),
-            "physical_l5_bundle_sha256": str(value["physical_l5_bundle_sha256"]).lower(),
+            "physical_l5_evidence_url": physical_url,
+            "physical_l5_evidence_sha256": str(value["physical_l5_evidence_sha256"]).lower(),
             "enable_attestation": "true" if value["enable_attestation"] else "false",
         }
     return evidence, outputs
