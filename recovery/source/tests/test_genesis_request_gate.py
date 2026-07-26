@@ -14,6 +14,11 @@ GENESIS_RUN_ID = 777
 G7_SHA = "e" * 64
 PHYSICAL_SHA = "d" * 64
 PHYSICAL_URL = "https://evidence.example/physical-l5.json"
+AUTHORIZATION_WORKFLOWS = [
+    "ImageLab Genesis First Release Gate",
+    "ImageLab Genesis Request Gate",
+    "ImageLab Zero-Trust Release Gate",
+]
 
 
 def _write(path: Path, value: object) -> None:
@@ -46,23 +51,24 @@ def _evidence(root: Path) -> None:
     _write(
         root / "genesis/genesis-history-verification.json",
         {
-            "schema": 2,
+            "schema": 3,
             "status": "PASS",
             "release_mode": "genesis_first_release",
             "protocol_rule": "GENESIS-FIRST-RELEASE-V1",
             "repository": "owner/repo",
-            "query_source": "github_api_releases_actions_paginated",
+            "query_source": "github_api_releases_all_authorization_runs_artifacts_paginated",
             "query_complete": True,
             "current_run_id": GENESIS_RUN_ID,
+            "authorization_workflow_names": AUTHORIZATION_WORKFLOWS,
             "release_count_scanned": 3,
             "workflow_run_count_scanned": 4,
             "artifact_count_scanned": 0,
             "authorized_installer_asset_count": 0,
             "authorization_record_asset_count": 0,
-            "prior_successful_genesis_run_count": 0,
-            "prior_authorized_genesis_artifact_count": 0,
-            "prior_successful_genesis_run_ids": [],
-            "prior_authorized_genesis_artifacts": [],
+            "prior_successful_authorization_run_count": 0,
+            "prior_authorized_artifact_count": 0,
+            "prior_successful_authorization_runs": [],
+            "prior_authorized_artifacts": [],
             "matching_assets": [],
         },
     )
@@ -190,7 +196,7 @@ def test_request_orchestrator_authorizes_only_after_request_history_g7_and_physi
     result = _run(evidence, output, finalizer)
     assert result.returncode == 0, result.stderr
     history = json.loads((evidence / "genesis/genesis-baseline-verification.json").read_text("utf-8"))
-    assert history["schema"] == 2
+    assert history["schema"] == 3
     assert history["current_run_id"] == GENESIS_RUN_ID
     record = json.loads((output / "ImageLab-GENESIS-RELEASE-AUTHORIZATION.json").read_text("utf-8"))
     assert record["status"] == "GENESIS_RELEASE_AUTHORIZED"
@@ -205,8 +211,10 @@ def test_request_orchestrator_blocks_prior_successful_genesis_run(tmp_path: Path
     history_path = evidence / "genesis/genesis-history-verification.json"
     history = json.loads(history_path.read_text("utf-8"))
     history["status"] = "FAIL"
-    history["prior_successful_genesis_run_count"] = 1
-    history["prior_successful_genesis_run_ids"] = [99]
+    history["prior_successful_authorization_run_count"] = 1
+    history["prior_successful_authorization_runs"] = [
+        {"id": 99, "name": "ImageLab Genesis Request Gate"}
+    ]
     _write(history_path, history)
     _stub_finalizer(finalizer)
     result = _run(evidence, output, finalizer)
@@ -243,8 +251,8 @@ def test_active_request_workflow_is_reviewed_push_only_and_genesis_only() -> Non
     assert "recovery/genesis-request/GENESIS-REQUEST.json" in workflow
     assert "changed-files.txt" in workflow
     assert "orchestrate_request_gate.py" in workflow
-    assert "prior-workflow-runs.json" in workflow
-    assert "prior-authorized-artifacts.json" in workflow
+    assert "all-authorization-runs.json" in workflow
+    assert "all-authorization-artifacts.json" in workflow
     assert "g7_evidence_release_tag" in workflow
     assert "g7_evidence_bundle_sha256" in workflow
     assert "ImageLab-GENESIS-G7-EVIDENCE.zip" in workflow
