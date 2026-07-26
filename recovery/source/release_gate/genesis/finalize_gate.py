@@ -6,13 +6,13 @@ import json
 import shutil
 import sys
 import zipfile
-from datetime import datetime
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from release_gate.finalize_gate import read_physical, validate_physical_l5
+
 RULE = "GENESIS-FIRST-RELEASE-V1"
 SELFTESTS = {"resize_ppi", "background", "halftone", "vector", "history_lineage", "export"}
-PHYSICAL_TESTS = SELFTESTS | {"installed_launch", "browser_ui_path", "output_file_validation"}
 QUALIFIED = {
     "G0_source",
     "G1_unit_matrix",
@@ -28,13 +28,6 @@ QUALIFIED = {
     "G8_postinstall_selftest",
     "G8_independent_ui",
     "G8_independent_outputs",
-}
-REQUIRED_PHYSICAL_ZIP = {
-    "clean-install.json",
-    "preinstall-selftest.json",
-    "postinstall-selftest.json",
-    "ui-gate.json",
-    "output-validation.json",
 }
 REQUIRED_G7_ZIP = {"g7-evidence.json", "update-test.json", "rollback-test.json"}
 
@@ -68,14 +61,6 @@ def load(path: Path, missing: list[str]) -> dict[str, Any]:
     except Exception as exc:
         missing.append(f"{path.as_posix()}:malformed:{type(exc).__name__}")
         return {"status": "MALFORMED"}
-
-
-def utc(value: object) -> bool:
-    try:
-        datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-        return str(value).endswith("Z")
-    except ValueError:
-        return False
 
 
 def check_selftest(
@@ -189,28 +174,27 @@ def check_qualification(
             failed.append(f"qualification_genesis_gate_unexpected_pass:{gate}")
 
 
-def zip_json(archive: zipfile.ZipFile, member: str, prefix: str, failed: list[str]) -> dict[str, Any]:
+def zip_json(archive: zipfile.ZipFile, member: str, failed: list[str]) -> dict[str, Any]:
     try:
         value = json.loads(archive.read(member).decode("utf-8-sig"))
         if not isinstance(value, dict):
             raise TypeError("JSON root is not an object")
         return value
     except Exception as exc:
-        failed.append(f"{prefix}_json_invalid:{PurePosixPath(member).name}:{type(exc).__name__}")
+        failed.append(f"g7_json_invalid:{PurePosixPath(member).name}:{type(exc).__name__}")
         return {}
 
 
-def safe_zip_members(archive: zipfile.ZipFile, prefix: str, failed: list[str]) -> dict[str, str]:
-    members = [name for name in archive.namelist() if not name.endswith("/")]
+def safe_zip_members(archive: zipfile.ZipFile, failed: list[str]) -> dict[str, str]:
     by_name: dict[str, str] = {}
-    for member in members:
+    for member in [name for name in archive.namelist() if not name.endswith("/")]:
         path = PurePosixPath(member)
         if path.is_absolute() or ".." in path.parts or "\\" in member:
-            failed.append(f"{prefix}_unsafe_member:{member}")
+            failed.append(f"g7_bundle_unsafe_member:{member}")
             continue
         basename = path.name
         if basename in by_name:
-            failed.append(f"{prefix}_duplicate_basename:{basename}")
+            failed.append(f"g7_bundle_duplicate_basename:{basename}")
             continue
         by_name[basename] = member
     return by_name
@@ -224,14 +208,15 @@ def check_g7_bundle(
     installer_sha: str,
     failed: list[str],
 ) -> dict[str, Any]:
+    initial_failure_count = len(failed)
     if not is_sha256(bundle_pin):
         failed.append("g7_bundle_pinned_sha_invalid")
     if not bundle.is_file():
         failed.append("g7_bundle_missing")
-        return {}
+        return {"status": "FAIL"}
     if is_sha256(bundle_pin) and digest(bundle) != bundle_pin.lower():
         failed.append("g7_bundle_pinned_sha_mismatch")
-        return {}
+        return {"status": "FAIL"}
 
     source = candidate.get("source") if isinstance(candidate.get("source"), dict) else {}
     source_sha = str(source.get("sha256") or "")
@@ -240,22 +225,22 @@ def check_g7_bundle(
 
     try:
         with zipfile.ZipFile(bundle) as archive:
-            by_name = safe_zip_members(archive, "g7_bundle", failed)
+            by_name = safe_zip_members(archive, failed)
             for name in REQUIRED_G7_ZIP - set(by_name):
                 failed.append(f"g7_bundle_missing:{name}")
             if not REQUIRED_G7_ZIP.issubset(by_name):
-                return {}
+                return {"status": "FAIL"}
             wrapper_member = by_name["g7-evidence.json"]
             update_member = by_name["update-test.json"]
             rollback_member = by_name["rollback-test.json"]
-            wrapper = zip_json(archive, wrapper_member, "g7", failed)
-            update = zip_json(archive, update_member, "g7", failed)
-            rollback = zip_json(archive, rollback_member, "g7", failed)
+            wrapper = zip_json(archive, wrapper_member, failed)
+            update = zip_json(archive, update_member, failed)
+            rollback = zip_json(archive, rollback_member, failed)
             update_bytes = archive.read(update_member)
             rollback_bytes = archive.read(rollback_member)
     except (OSError, zipfile.BadZipFile) as exc:
         failed.append(f"g7_bundle_invalid:{type(exc).__name__}")
-        return {}
+        return {"status": "FAIL"}
 
     expected_wrapper = {
         "schema": 1,
@@ -329,96 +314,12 @@ def check_g7_bundle(
         failed.append("g7_inventory_content_mismatch")
 
     return {
-        "status": "PASS" if not any(item.startswith("g7_") for item in failed) else "FAIL",
+        "status": "PASS" if len(failed) == initial_failure_count else "FAIL",
         "bundle_sha256": digest(bundle),
         "baseline_installer_sha256": baseline_sha,
         "source_sha256": source_sha,
         "installer_sha256": installer_sha,
     }
-
-
-def check_physical(
-    manifest: dict[str, Any],
-    manifest_path: Path,
-    bundle: Path,
-    *,
-    manifest_pin: str,
-    bundle_pin: str,
-    identity: dict[str, Any],
-    installer_sha: str,
-    failed: list[str],
-) -> None:
-    if not manifest_path.is_file() or digest(manifest_path) != manifest_pin:
-        failed.append("physical_manifest_pinned_sha_mismatch")
-    if not bundle.is_file() or digest(bundle) != bundle_pin:
-        failed.append("physical_bundle_pinned_sha_mismatch")
-        return
-    expected = {
-        "schema": 1,
-        "status": "PASS",
-        "evidence_level": "L5",
-        "execution_environment": "physical_user_machine",
-        "installer_sha256": installer_sha,
-        "app": identity.get("app"),
-        "version": identity.get("version"),
-        "build_id": identity.get("build_id"),
-        "evidence_bundle_sha256": bundle_pin,
-    }
-    for key, wanted in expected.items():
-        if not wanted or manifest.get(key) != wanted:
-            failed.append(f"physical_manifest_invalid:{key}")
-    if not utc(manifest.get("observed_at_utc")) or not str(manifest.get("install_id") or "").strip():
-        failed.append("physical_manifest_invalid:observation_or_install_id")
-    witness = manifest.get("witness")
-    machine = manifest.get("machine")
-    if not isinstance(witness, dict) or witness.get("role") != "product_owner" or not str(witness.get("name") or "").strip():
-        failed.append("physical_manifest_invalid:witness")
-    if not isinstance(machine, dict) or not str(machine.get("windows_version") or "").strip():
-        failed.append("physical_manifest_invalid:machine")
-    tests = manifest.get("tests")
-    if (
-        not isinstance(tests, dict)
-        or set(tests) != PHYSICAL_TESTS
-        or any(not isinstance(tests.get(name), dict) or tests[name].get("status") != "PASS" for name in PHYSICAL_TESTS)
-    ):
-        failed.append("physical_manifest_invalid:test_case_set")
-    if not isinstance(manifest.get("evidence_files"), list) or not manifest["evidence_files"]:
-        failed.append("physical_manifest_invalid:evidence_files")
-
-    try:
-        with zipfile.ZipFile(bundle) as archive:
-            by_name = safe_zip_members(archive, "physical_bundle", failed)
-            members = [name for name in archive.namelist() if not name.endswith("/")]
-            if set(manifest.get("evidence_files") or []) != set(members):
-                failed.append("physical_manifest_evidence_files_mismatch")
-            for name in REQUIRED_PHYSICAL_ZIP - set(by_name):
-                failed.append(f"physical_bundle_missing:{name}")
-            if not any(name.lower().endswith(".png") for name in members):
-                failed.append("physical_bundle_missing:png_evidence")
-            if not any(name.lower().endswith(".svg") for name in members):
-                failed.append("physical_bundle_missing:svg_evidence")
-            if not any("trace" in PurePosixPath(name).name.lower() for name in members):
-                failed.append("physical_bundle_missing:browser_trace")
-            values = {
-                name: zip_json(archive, member, "physical_bundle", failed)
-                for name, member in by_name.items()
-                if name in REQUIRED_PHYSICAL_ZIP
-            }
-            install = values.get("clean-install.json", {})
-            for label in ("clean-install.json", "ui-gate.json", "output-validation.json"):
-                value = values.get(label, {})
-                if value.get("status") != "PASS" or value.get("installer_sha256") != installer_sha:
-                    failed.append(f"physical_bundle_invalid:{label}")
-            if (
-                install.get("install_id") != manifest.get("install_id")
-                or install.get("version") != identity.get("version")
-                or install.get("build_id") != identity.get("build_id")
-            ):
-                failed.append("physical_bundle_identity_mismatch")
-            check_selftest("physical_preinstall", values.get("preinstall-selftest.json", {}), identity, install, failed)
-            check_selftest("physical_postinstall", values.get("postinstall-selftest.json", {}), identity, install, failed)
-    except (OSError, zipfile.BadZipFile) as exc:
-        failed.append(f"physical_bundle_invalid:{type(exc).__name__}")
 
 
 def cleanup_authorized(output: Path) -> None:
@@ -447,8 +348,7 @@ def main() -> int:
     parser.add_argument("--qualification-run-id", type=int, required=True)
     parser.add_argument("--qualification-head-sha", required=True)
     parser.add_argument("--g7-bundle-sha256", required=True)
-    parser.add_argument("--physical-manifest-sha256", required=True)
-    parser.add_argument("--physical-bundle-sha256", required=True)
+    parser.add_argument("--physical-l5-sha256", required=True)
     args = parser.parse_args()
 
     root = args.aggregate_dir.resolve()
@@ -475,20 +375,26 @@ def main() -> int:
             "G8_independent_ui": root / "independent/ui-gate.json",
             "G8_independent_outputs": root / "independent/output-validation.json",
             "GENESIS_no_prior_authorized_release": root / "genesis/genesis-baseline-verification.json",
-            "PHYSICAL_user_machine_L5": root / "physical/ImageLab-PHYSICAL-L5.json",
             "QUALIFICATION_exact_run": root / "qualification/qualification-run.json",
         }
         data = {name: load(path, missing) for name, path in paths.items()}
         prior = load(root / "qualification-verdict/final-verdict.json", missing)
+        physical_path = root / "physical/physical-l5.json"
+        physical = read_physical(physical_path, missing)
+        data["PHYSICAL_user_machine_L5"] = physical
         failed = [name for name, value in data.items() if value.get("status") != "PASS"]
         if missing:
             failed.append("required_evidence_missing_or_malformed")
 
         candidate = data["G2_candidate"]
         repro = data["G2_reproducibility"]
-        installer_sha = str((candidate.get("installer") or {}).get("sha256") or "")
+        installer_info = candidate.get("installer") if isinstance(candidate.get("installer"), dict) else {}
+        installer_sha = str(installer_info.get("sha256") or "")
+        installer_name = str(installer_info.get("name") or "")
         if not is_sha256(installer_sha):
             failed.append("candidate_installer_sha")
+        if not installer_name or Path(installer_name).name != installer_name or not installer_name.endswith(".exe"):
+            failed.append("candidate_installer_name")
         if repro.get("installer_sha256") != installer_sha or repro.get("second_build_sha256") != installer_sha:
             failed.append("candidate_reproducibility_sha_mismatch")
         for name, value in data.items():
@@ -525,29 +431,23 @@ def main() -> int:
             failed=failed,
         )
 
-        g7_bundle = root / "g7/ImageLab-GENESIS-G7-EVIDENCE.zip"
         g7 = check_g7_bundle(
-            g7_bundle,
+            root / "g7/ImageLab-GENESIS-G7-EVIDENCE.zip",
             bundle_pin=args.g7_bundle_sha256,
             candidate=candidate,
             installer_sha=installer_sha,
             failed=failed,
         )
 
-        physical_manifest_path = root / "physical/ImageLab-PHYSICAL-L5.json"
-        physical_bundle = root / "physical/ImageLab-PHYSICAL-L5-EVIDENCE.zip"
-        if not is_sha256(args.physical_manifest_sha256):
-            failed.append("physical_manifest_pinned_sha_invalid")
-        if not is_sha256(args.physical_bundle_sha256):
-            failed.append("physical_bundle_pinned_sha_invalid")
-        check_physical(
-            data["PHYSICAL_user_machine_L5"],
-            physical_manifest_path,
-            physical_bundle,
-            manifest_pin=args.physical_manifest_sha256.lower(),
-            bundle_pin=args.physical_bundle_sha256.lower(),
-            identity=identity,
-            installer_sha=installer_sha,
+        physical_summary = validate_physical_l5(
+            physical,
+            record_path=physical_path,
+            expected_record_sha256=args.physical_l5_sha256,
+            candidate=candidate,
+            installer_name=installer_name,
+            installer_sha256=installer_sha,
+            clean_install_id=str(data["G3_clean_install"].get("install_id") or ""),
+            independent_install_id=str(data["G8_independent"].get("install_id") or ""),
             failed=failed,
         )
 
@@ -559,7 +459,7 @@ def main() -> int:
             failed.append("exact_installer_binary_sha_mismatch")
 
         evidence = [path for path in root.rglob("*") if path.is_file()] if root.exists() else []
-        if len(evidence) < 19:
+        if len(evidence) < 18:
             failed.append("evidence_bundle_incomplete")
 
         status = "GENESIS_RELEASE_AUTHORIZED" if not failed else "RELEASE_BLOCKED"
@@ -578,6 +478,7 @@ def main() -> int:
             "qualification_head_sha": args.qualification_head_sha,
             "genesis_run_id": args.genesis_run_id,
             "g7_evidence": g7,
+            "physical_l5": physical_summary,
             "gates": gates,
             "failed_conditions": sorted(set(failed)),
             "missing_or_malformed_evidence": sorted(set(missing)),
@@ -600,7 +501,6 @@ def main() -> int:
             sha_tmp = output / ".installer-sha.tmp"
             shutil.copy2(installer, installer_tmp)
             sha_tmp.write_text(f"{installer_sha}  {authorized.name}\n", "utf-8")
-            physical_manifest = data["PHYSICAL_user_machine_L5"]
             record = {
                 "schema": 2,
                 "status": status,
@@ -612,14 +512,13 @@ def main() -> int:
                 "installer_sha256": installer_sha,
                 "source_sha256": str((candidate.get("source") or {}).get("sha256") or ""),
                 "identity": identity,
-                "install_id": physical_manifest.get("install_id"),
+                "install_id": physical_summary.get("install_id"),
                 "qualification_run_id": args.qualification_run_id,
                 "qualification_head_sha": args.qualification_head_sha,
                 "genesis_run_id": args.genesis_run_id,
                 "g7_evidence_bundle_sha256": args.g7_bundle_sha256.lower(),
                 "g7_baseline_installer_sha256": g7.get("baseline_installer_sha256"),
-                "physical_l5_manifest_sha256": args.physical_manifest_sha256.lower(),
-                "physical_l5_bundle_sha256": args.physical_bundle_sha256.lower(),
+                "physical_l5_record_sha256": args.physical_l5_sha256.lower(),
                 "final_verdict_sha256": digest(verdict_path),
                 "release_evidence_sha256": digest(archive_path),
             }
