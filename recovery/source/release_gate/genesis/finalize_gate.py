@@ -8,12 +8,13 @@ import sys
 import zipfile
 from pathlib import Path, PurePosixPath
 from typing import Any
+from urllib.parse import urlsplit
 
 SOURCE_ROOT = Path(__file__).resolve().parents[2]
 if str(SOURCE_ROOT) not in sys.path:
     sys.path.insert(0, str(SOURCE_ROOT))
 
-from release_gate.finalize_gate import read_physical, validate_physical_l5
+from release_gate.finalize_gate import read_physical, validate_physical_l5, validate_project_transition
 
 RULE = "GENESIS-FIRST-RELEASE-V1"
 SELFTESTS = {"resize_ppi", "background", "halftone", "vector", "history_lineage", "export"}
@@ -51,6 +52,20 @@ def digest_bytes(value: bytes) -> str:
 def is_sha256(value: object) -> bool:
     text = str(value or "").lower()
     return len(text) == 64 and all(character in "0123456789abcdef" for character in text)
+
+
+def is_loopback_url(value: object) -> bool:
+    try:
+        parsed = urlsplit(str(value or ""))
+        return (
+            parsed.scheme == "http"
+            and parsed.hostname in {"127.0.0.1", "localhost", "::1"}
+            and parsed.port is not None
+            and parsed.username is None
+            and parsed.password is None
+        )
+    except (TypeError, ValueError):
+        return False
 
 
 def load(path: Path, missing: list[str]) -> dict[str, Any]:
@@ -98,26 +113,31 @@ def check_absence(
     value: dict[str, Any], repository: str, genesis_run_id: int, failed: list[str]
 ) -> None:
     expected = {
-        "schema": 2,
+        "schema": 3,
         "status": "PASS",
         "release_mode": "genesis_first_release",
         "protocol_rule": RULE,
         "repository": repository,
-        "query_source": "github_api_releases_actions_paginated",
+        "query_source": "github_api_releases_all_authorization_runs_artifacts_paginated",
         "query_complete": True,
         "current_run_id": genesis_run_id,
+        "authorization_workflow_names": [
+            "ImageLab Genesis First Release Gate",
+            "ImageLab Genesis Request Gate",
+            "ImageLab Zero-Trust Release Gate",
+        ],
         "authorized_installer_asset_count": 0,
         "authorization_record_asset_count": 0,
-        "prior_successful_genesis_run_count": 0,
-        "prior_authorized_genesis_artifact_count": 0,
+        "prior_successful_authorization_run_count": 0,
+        "prior_authorized_artifact_count": 0,
     }
     for key, wanted in expected.items():
         if value.get(key) != wanted:
             failed.append(f"genesis_absence_invalid:{key}")
     for key in (
         "matching_assets",
-        "prior_successful_genesis_run_ids",
-        "prior_authorized_genesis_artifacts",
+        "prior_successful_authorization_runs",
+        "prior_authorized_artifacts",
     ):
         if value.get(key) != []:
             failed.append(f"genesis_absence_invalid:{key}")
@@ -280,6 +300,8 @@ def check_g7_bundle(
         failed.append("g7_update_project_data_not_preserved")
     if update.get("sentinel_preserved") is not True:
         failed.append("g7_update_sentinel_not_preserved")
+    if not is_loopback_url(update.get("second_url")):
+        failed.append("g7_update_candidate_not_runnable")
 
     first_install_id = str(update.get("first_install_id") or "")
     second_install_id = str(update.get("second_install_id") or "")
@@ -298,24 +320,16 @@ def check_g7_bundle(
         failed.append("g7_rollback_project_data_not_preserved")
     if rollback.get("sentinel_preserved") is not True:
         failed.append("g7_rollback_sentinel_not_preserved")
+    if not is_loopback_url(rollback.get("restored_url")):
+        failed.append("g7_rollback_restored_candidate_not_runnable")
 
+    validate_project_transition(update, rollback, failed)
     project_count = update.get("project_count")
     asset_count = update.get("asset_count")
     if isinstance(project_count, bool) or not isinstance(project_count, int) or project_count < 3:
         failed.append("g7_project_count_insufficient")
     if isinstance(asset_count, bool) or not isinstance(asset_count, int) or asset_count < 3:
         failed.append("g7_asset_count_insufficient")
-    if rollback.get("project_count") != project_count or rollback.get("asset_count") != asset_count:
-        failed.append("g7_inventory_counts_mismatch")
-
-    before = update.get("project_inventory_before")
-    after_update = update.get("project_inventory_after_update")
-    rollback_before = rollback.get("project_inventory_before")
-    after_rollback = rollback.get("project_inventory_after_rollback")
-    if not all(isinstance(value, dict) for value in (before, after_update, rollback_before, after_rollback)):
-        failed.append("g7_inventory_missing")
-    elif not (before == after_update == rollback_before == after_rollback):
-        failed.append("g7_inventory_content_mismatch")
 
     return {
         "status": "PASS" if len(failed) == initial_failure_count else "FAIL",
