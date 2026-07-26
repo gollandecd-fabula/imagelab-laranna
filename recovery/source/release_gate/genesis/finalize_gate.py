@@ -9,6 +9,10 @@ import zipfile
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+SOURCE_ROOT = Path(__file__).resolve().parents[2]
+if str(SOURCE_ROOT) not in sys.path:
+    sys.path.insert(0, str(SOURCE_ROOT))
+
 from release_gate.finalize_gate import read_physical, validate_physical_l5
 
 RULE = "GENESIS-FIRST-RELEASE-V1"
