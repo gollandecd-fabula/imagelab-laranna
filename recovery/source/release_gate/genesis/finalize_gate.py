@@ -14,7 +14,11 @@ SOURCE_ROOT = Path(__file__).resolve().parents[2]
 if str(SOURCE_ROOT) not in sys.path:
     sys.path.insert(0, str(SOURCE_ROOT))
 
-from release_gate.finalize_gate import read_physical, validate_physical_l5, validate_project_transition
+from release_gate.finalize_gate import (
+    read_physical,
+    validate_physical_l5,
+    validate_project_transition as _validate_project_transition,
+)
 
 RULE = "GENESIS-FIRST-RELEASE-V1"
 SELFTESTS = {"resize_ppi", "background", "halftone", "vector", "history_lineage", "export"}
@@ -66,6 +70,15 @@ def is_loopback_url(value: object) -> bool:
         )
     except (TypeError, ValueError):
         return False
+
+
+def validate_complete_project_transition(
+    update: dict[str, Any], rollback: dict[str, Any], failed: list[str]
+) -> None:
+    _, update_after = _validate_project_transition("update", update, failed=failed)
+    rollback_before, _ = _validate_project_transition("rollback", rollback, failed=failed)
+    if update_after and rollback_before and update_after != rollback_before:
+        failed.append("project_inventory_handoff_mismatch")
 
 
 def load(path: Path, missing: list[str]) -> dict[str, Any]:
@@ -323,7 +336,7 @@ def check_g7_bundle(
     if not is_loopback_url(rollback.get("restored_url")):
         failed.append("g7_rollback_restored_candidate_not_runnable")
 
-    validate_project_transition(update, rollback, failed)
+    validate_complete_project_transition(update, rollback, failed)
     project_count = update.get("project_count")
     asset_count = update.get("asset_count")
     if isinstance(project_count, bool) or not isinstance(project_count, int) or project_count < 3:
