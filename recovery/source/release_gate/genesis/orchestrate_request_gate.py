@@ -10,6 +10,11 @@ from pathlib import Path
 from typing import Any
 
 RULE = "GENESIS-FIRST-RELEASE-V1"
+AUTHORIZATION_WORKFLOWS = [
+    "ImageLab Genesis First Release Gate",
+    "ImageLab Genesis Request Gate",
+    "ImageLab Zero-Trust Release Gate",
+]
 
 
 def _sha256(path: Path) -> str:
@@ -88,20 +93,21 @@ def _validate_request_and_history(
         failed.append("genesis_request_invalid:request_sha256")
 
     expected_history = {
-        "schema": 2,
+        "schema": 3,
         "status": "PASS",
         "release_mode": "genesis_first_release",
         "protocol_rule": RULE,
         "repository": repository,
-        "query_source": "github_api_releases_actions_paginated",
+        "query_source": "github_api_releases_all_authorization_runs_artifacts_paginated",
         "query_complete": True,
         "current_run_id": genesis_run_id,
+        "authorization_workflow_names": AUTHORIZATION_WORKFLOWS,
         "authorized_installer_asset_count": 0,
         "authorization_record_asset_count": 0,
-        "prior_successful_genesis_run_count": 0,
-        "prior_authorized_genesis_artifact_count": 0,
-        "prior_successful_genesis_run_ids": [],
-        "prior_authorized_genesis_artifacts": [],
+        "prior_successful_authorization_run_count": 0,
+        "prior_authorized_artifact_count": 0,
+        "prior_successful_authorization_runs": [],
+        "prior_authorized_artifacts": [],
         "matching_assets": [],
     }
     for field, wanted in expected_history.items():
