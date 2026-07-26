@@ -2,14 +2,19 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 from pathlib import Path
 from typing import Any
 
 GENESIS_RULE = "GENESIS-FIRST-RELEASE-V1"
-AUTHORIZED_INSTALLER_PREFIX = "ImageLab_by_LarannA_RELEASE_AUTHORIZED"
+AUTHORIZED_INSTALLER_PREFIXES = (
+    "ImageLab_by_LarannA_RELEASE_AUTHORIZED",
+    "ImageLab_by_LarannA_GENESIS_RELEASE_AUTHORIZED",
+)
 AUTHORIZED_INSTALLER_SUFFIX = "_Setup_x64.exe"
-AUTHORIZATION_RECORD_NAME = "ImageLab-RELEASE-AUTHORIZATION.json"
+AUTHORIZATION_RECORD_NAMES = {
+    "ImageLab-RELEASE-AUTHORIZATION.json",
+    "ImageLab-GENESIS-RELEASE-AUTHORIZATION.json",
+}
 AUTHORIZED_ARTIFACT_NAME = "ImageLab-GENESIS-RELEASE-AUTHORIZED"
 
 
@@ -63,8 +68,10 @@ def inspect_history(
             if not isinstance(asset, dict):
                 raise TypeError(f"release {tag!r} contains a malformed asset")
             name = str(asset.get("name") or "")
-            is_installer = name.startswith(AUTHORIZED_INSTALLER_PREFIX) and name.endswith(AUTHORIZED_INSTALLER_SUFFIX)
-            is_record = name == AUTHORIZATION_RECORD_NAME
+            is_installer = any(name.startswith(prefix) for prefix in AUTHORIZED_INSTALLER_PREFIXES) and name.endswith(
+                AUTHORIZED_INSTALLER_SUFFIX
+            )
+            is_record = name in AUTHORIZATION_RECORD_NAMES
             if is_installer:
                 installer_count += 1
             if is_record:
