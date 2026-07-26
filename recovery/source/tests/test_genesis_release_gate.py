@@ -45,8 +45,17 @@ def _sha(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+HEX_DIGITS = '0123456789abcdef'
+
+
 def _h(character: str) -> str:
+    if character not in HEX_DIGITS:
+        raise ValueError(f'invalid synthetic SHA digit: {character!r}')
     return character * 64
+
+
+def _hex_offset(character: str, offset: int) -> str:
+    return HEX_DIGITS[(HEX_DIGITS.index(character) + offset) % len(HEX_DIGITS)]
 
 
 def _write(path: Path, value: object) -> None:
@@ -85,12 +94,12 @@ def _asset(
         "record_sha256": upload_sha,
         "upload_file_sha256": upload_sha,
         "upload_size_bytes": 1024,
-        "preview_file_sha256": _h(chr(ord(seed) + 1)),
+        "preview_file_sha256": _h(_hex_offset(seed, 1)),
         "preview_size_bytes": 512,
         "source_asset_id": source_asset_id,
         "operation": operation,
-        "parameters_sha256": _h(chr(ord(seed) + 2)),
-        "ai_sha256": _h(chr(ord(seed) + 3)),
+        "parameters_sha256": _h(_hex_offset(seed, 2)),
+        "ai_sha256": _h(_hex_offset(seed, 3)),
     }
     if format_name == "SVG":
         asset["preview_file_sha256"] = None
