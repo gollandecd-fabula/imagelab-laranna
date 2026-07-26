@@ -15,7 +15,15 @@ AUTHORIZATION_RECORD_NAMES = {
     "ImageLab-RELEASE-AUTHORIZATION.json",
     "ImageLab-GENESIS-RELEASE-AUTHORIZATION.json",
 }
-AUTHORIZED_ARTIFACT_NAME = "ImageLab-GENESIS-RELEASE-AUTHORIZED"
+AUTHORIZED_ARTIFACT_NAMES = {
+    "ImageLab-RELEASE-AUTHORIZED",
+    "ImageLab-GENESIS-RELEASE-AUTHORIZED",
+}
+AUTHORIZED_WORKFLOW_NAMES = {
+    "ImageLab Zero-Trust Release Gate",
+    "ImageLab Genesis First Release Gate",
+    "ImageLab Genesis Request Gate",
+}
 
 
 def _flatten_array(value: Any, key: str | None = None) -> list[dict[str, Any]]:
@@ -53,8 +61,8 @@ def inspect_history(
         raise ValueError("current_run_id must be a positive integer")
 
     releases = _flatten_array(releases_value)
-    runs = _flatten_array(workflow_runs_value, "workflow_runs")
-    artifacts = _flatten_array(artifacts_value, "artifacts")
+    all_runs = _flatten_array(workflow_runs_value, "workflow_runs")
+    all_artifacts = _flatten_array(artifacts_value, "artifacts")
     matching_assets: list[dict[str, str]] = []
     installer_count = 0
     record_count = 0
@@ -79,45 +87,87 @@ def inspect_history(
             if is_installer or is_record:
                 matching_assets.append({"tag": tag, "name": name})
 
-    prior_successful_runs = [
-        int(run.get("id"))
-        for run in runs
-        if run.get("conclusion") == "success" and int(run.get("id") or 0) != current_run_id
-    ]
+    relevant_runs = [run for run in all_runs if str(run.get("name") or "") in AUTHORIZED_WORKFLOW_NAMES]
+    prior_successful_runs: list[dict[str, Any]] = []
+    for run in relevant_runs:
+        run_id = int(run.get("id") or 0)
+        if run.get("conclusion") == "success" and run_id != current_run_id:
+            prior_successful_runs.append(
+                {
+                    "run_id": run_id,
+                    "workflow_name": str(run.get("name") or ""),
+                    "head_sha": str(run.get("head_sha") or ""),
+                    "created_at": run.get("created_at"),
+                }
+            )
+
+    relevant_artifacts = [artifact for artifact in all_artifacts if artifact.get("name") in AUTHORIZED_ARTIFACT_NAMES]
     prior_authorized_artifacts: list[dict[str, Any]] = []
-    for artifact in artifacts:
-        if artifact.get("name") != AUTHORIZED_ARTIFACT_NAME or artifact.get("expired") is True:
-            continue
+    for artifact in relevant_artifacts:
         workflow_run = artifact.get("workflow_run")
         run_id = int(workflow_run.get("id") or 0) if isinstance(workflow_run, dict) else 0
         if run_id != current_run_id:
-            prior_authorized_artifacts.append({"artifact_id": artifact.get("id"), "run_id": run_id})
+            prior_authorized_artifacts.append(
+                {
+                    "artifact_id": artifact.get("id"),
+                    "name": artifact.get("name"),
+                    "run_id": run_id,
+                    "expired": bool(artifact.get("expired")),
+                    "created_at": artifact.get("created_at"),
+                }
+            )
 
     status = "PASS" if not any((installer_count, record_count, prior_successful_runs, prior_authorized_artifacts)) else "FAIL"
     return {
-        "schema": 2,
+        "schema": 3,
         "status": status,
         "release_mode": "genesis_first_release",
         "protocol_rule": GENESIS_RULE,
         "repository": repository,
-        "query_source": "github_api_releases_actions_paginated",
+        "query_source": "github_api_releases_all_authorization_runs_artifacts_paginated",
         "query_complete": True,
         "current_run_id": current_run_id,
+        "authorization_workflow_names": sorted(AUTHORIZED_WORKFLOW_NAMES),
         "release_count_scanned": len(releases),
-        "workflow_run_count_scanned": len(runs),
-        "artifact_count_scanned": len(artifacts),
+        "workflow_run_count_scanned": len(relevant_runs),
+        "artifact_count_scanned": len(relevant_artifacts),
         "authorized_installer_asset_count": installer_count,
         "authorization_record_asset_count": record_count,
-        "prior_successful_genesis_run_count": len(prior_successful_runs),
-        "prior_authorized_genesis_artifact_count": len(prior_authorized_artifacts),
-        "prior_successful_genesis_run_ids": prior_successful_runs,
-        "prior_authorized_genesis_artifacts": prior_authorized_artifacts,
+        "prior_successful_authorization_run_count": len(prior_successful_runs),
+        "prior_authorized_artifact_count": len(prior_authorized_artifacts),
+        "prior_successful_authorization_runs": prior_successful_runs,
+        "prior_authorized_artifacts": prior_authorized_artifacts,
         "matching_assets": matching_assets,
     }
 
 
 def inspect_releases(value: Any, repository: str) -> dict[str, Any]:
     return inspect_history(value, [], [], repository, 1)
+
+
+def _failed_result(repository: str, current_run_id: int, error: Exception) -> dict[str, Any]:
+    return {
+        "schema": 3,
+        "status": "FAIL",
+        "release_mode": "genesis_first_release",
+        "protocol_rule": GENESIS_RULE,
+        "repository": repository,
+        "query_source": "github_api_releases_all_authorization_runs_artifacts_paginated",
+        "query_complete": False,
+        "current_run_id": current_run_id,
+        "authorization_workflow_names": sorted(AUTHORIZED_WORKFLOW_NAMES),
+        "release_count_scanned": 0,
+        "workflow_run_count_scanned": 0,
+        "artifact_count_scanned": 0,
+        "authorized_installer_asset_count": None,
+        "authorization_record_asset_count": None,
+        "prior_successful_authorization_run_count": None,
+        "prior_authorized_artifact_count": None,
+        "prior_successful_authorization_runs": [],
+        "prior_authorized_artifacts": [],
+        "matching_assets": [],
+        "error": f"{type(error).__name__}: {error}",
+    }
 
 
 def main() -> int:
@@ -137,27 +187,7 @@ def main() -> int:
         artifacts = json.loads(args.artifacts_json.read_text("utf-8-sig"))
         result = inspect_history(releases, runs, artifacts, args.repository, args.current_run_id)
     except Exception as exc:
-        result = {
-            "schema": 2,
-            "status": "FAIL",
-            "release_mode": "genesis_first_release",
-            "protocol_rule": GENESIS_RULE,
-            "repository": args.repository,
-            "query_source": "github_api_releases_actions_paginated",
-            "query_complete": False,
-            "current_run_id": args.current_run_id,
-            "release_count_scanned": 0,
-            "workflow_run_count_scanned": 0,
-            "artifact_count_scanned": 0,
-            "authorized_installer_asset_count": None,
-            "authorization_record_asset_count": None,
-            "prior_successful_genesis_run_count": None,
-            "prior_authorized_genesis_artifact_count": None,
-            "prior_successful_genesis_run_ids": [],
-            "prior_authorized_genesis_artifacts": [],
-            "matching_assets": [],
-            "error": f"{type(exc).__name__}: {exc}",
-        }
+        result = _failed_result(args.repository, args.current_run_id, exc)
     args.output.write_text(json.dumps(result, ensure_ascii=False, indent=2), "utf-8")
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0 if result.get("status") == "PASS" else 1
