@@ -158,7 +158,7 @@ jobs:
           set -euo pipefail
           mkdir -p aggregate/genesis
           gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/releases?per_page=100" > aggregate/genesis/releases.json
-          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/actions/workflows/zero-trust-genesis-release.yml/runs?per_page=100" > aggregate/genesis/workflow-runs.json
+          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/actions/runs?per_page=100" > aggregate/genesis/workflow-runs.json
           gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/actions/artifacts?per_page=100" > aggregate/genesis/artifacts.json
           python release_gate/genesis/verify_no_prior_release.py \
             --releases-json aggregate/genesis/releases.json \
