@@ -19,16 +19,12 @@ on:
         description: Independently pinned SHA-256 of ImageLab-GENESIS-G7-EVIDENCE.zip
         required: true
         type: string
-      physical_l5_release_tag:
-        description: Release tag containing the externally produced physical L5 manifest and evidence bundle
+      physical_l5_evidence_url:
+        description: HTTPS URL of the Dmitry-witnessed physical Windows L5 JSON record
         required: true
         type: string
-      physical_l5_manifest_sha256:
-        description: Independently pinned SHA-256 of ImageLab-PHYSICAL-L5.json
-        required: true
-        type: string
-      physical_l5_bundle_sha256:
-        description: Independently pinned SHA-256 of ImageLab-PHYSICAL-L5-EVIDENCE.zip
+      physical_l5_evidence_sha256:
+        description: Independently pinned SHA-256 of the physical Windows L5 JSON record
         required: true
         type: string
       enable_attestation:
@@ -193,25 +189,15 @@ jobs:
           test "$(find aggregate/g7 -maxdepth 1 -name 'ImageLab-GENESIS-G7-EVIDENCE.zip' -type f | wc -l)" -eq 1
           echo "$G7_BUNDLE_SHA256  aggregate/g7/ImageLab-GENESIS-G7-EVIDENCE.zip" | sha256sum --check --strict
 
-      - name: Download and pin physical user-machine L5 evidence
+      - name: Download independently pinned physical L5 evidence
         id: physical_l5
         continue-on-error: true
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PHYSICAL_TAG: ${{ inputs.physical_l5_release_tag }}
-          PHYSICAL_MANIFEST_SHA256: ${{ inputs.physical_l5_manifest_sha256 }}
-          PHYSICAL_BUNDLE_SHA256: ${{ inputs.physical_l5_bundle_sha256 }}
-        run: |
-          set -euo pipefail
-          [[ "$PHYSICAL_MANIFEST_SHA256" =~ ^[0-9a-fA-F]{64}$ ]] || { echo "physical manifest SHA-256 is invalid"; exit 1; }
-          [[ "$PHYSICAL_BUNDLE_SHA256" =~ ^[0-9a-fA-F]{64}$ ]] || { echo "physical bundle SHA-256 is invalid"; exit 1; }
-          mkdir -p aggregate/physical
-          gh release download "$PHYSICAL_TAG" --pattern 'ImageLab-PHYSICAL-L5.json' --dir aggregate/physical --clobber
-          gh release download "$PHYSICAL_TAG" --pattern 'ImageLab-PHYSICAL-L5-EVIDENCE.zip' --dir aggregate/physical --clobber
-          test "$(find aggregate/physical -maxdepth 1 -name 'ImageLab-PHYSICAL-L5.json' -type f | wc -l)" -eq 1
-          test "$(find aggregate/physical -maxdepth 1 -name 'ImageLab-PHYSICAL-L5-EVIDENCE.zip' -type f | wc -l)" -eq 1
-          echo "$PHYSICAL_MANIFEST_SHA256  aggregate/physical/ImageLab-PHYSICAL-L5.json" | sha256sum --check --strict
-          echo "$PHYSICAL_BUNDLE_SHA256  aggregate/physical/ImageLab-PHYSICAL-L5-EVIDENCE.zip" | sha256sum --check --strict
+        run: >-
+          python release_gate/fetch_pinned_json.py
+          --url "${{ inputs.physical_l5_evidence_url }}"
+          --sha256 "${{ inputs.physical_l5_evidence_sha256 }}"
+          --output aggregate/physical/physical-l5.json
+          --max-bytes 1048576
 
       - name: Generate one-time Genesis verdict and Genesis-only authorized outputs
         id: finalize
@@ -226,8 +212,7 @@ jobs:
           --qualification-run-id "${{ inputs.qualification_run_id }}"
           --qualification-head-sha "${{ inputs.qualification_head_sha }}"
           --g7-bundle-sha256 "${{ inputs.g7_evidence_bundle_sha256 }}"
-          --physical-manifest-sha256 "${{ inputs.physical_l5_manifest_sha256 }}"
-          --physical-bundle-sha256 "${{ inputs.physical_l5_bundle_sha256 }}"
+          --physical-l5-sha256 "${{ inputs.physical_l5_evidence_sha256 }}"
 
       - name: Attest exact Genesis-authorized release outputs
         if: ${{ steps.finalize.outcome == 'success' && inputs.enable_attestation }}
