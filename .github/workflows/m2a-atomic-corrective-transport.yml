@@ -1,0 +1,121 @@
+name: M2A Atomic Corrective Patch Transport
+
+on:
+  push:
+    branches: [transport/m2a-atomic-corrective-20260727]
+
+permissions:
+  contents: write
+  issues: read
+
+concurrency:
+  group: m2a-atomic-corrective-transport
+  cancel-in-progress: false
+
+jobs:
+  apply-exact-patch:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    env:
+      EXPECTED_PARENT: 410841404d3afc2788b8a01d2166699beb1cfc27
+      TARGET_BRANCH: redteam/imagelab-complete-audit-20260725-v2
+      PATCH_SHA256: 5ffe3be84bb32a60844d7c7f1b8725601c215bcea65285566358e3247df809f2
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+        with:
+          fetch-depth: 0
+
+      - name: Reconstruct and verify exact patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          : > /tmp/m2a.patch.b64
+          ids=(5090601364 5090612802 5090625168 5090637455 5090649963 5090655485)
+          for index in 1 2 3 4 5 6; do
+            id="${ids[$((index-1))]}"
+            body="$(curl -fsSL \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/issues/comments/$id" \
+              | python -c 'import json,sys; print(json.load(sys.stdin)["body"])')"
+            header="$(printf '%s\n' "$body" | head -n 1)"
+            test "$header" = "M2A_PATCH_CHUNK_${index}_OF_6"
+            printf '%s\n' "$body" | tail -n +2 | tr -d '[:space:]' >> /tmp/m2a.patch.b64
+          done
+          test "$(wc -c < /tmp/m2a.patch.b64)" -eq 30912
+          base64 --decode /tmp/m2a.patch.b64 | gzip -dc > /tmp/m2a.patch
+          test "$(sha256sum /tmp/m2a.patch | awk '{print $1}')" = "$PATCH_SHA256"
+          test "$(wc -c < /tmp/m2a.patch)" -eq 87275
+
+      - name: Require exact parent and apply indexed patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin "$TARGET_BRANCH"
+          remote_head="$(git ls-remote origin "refs/heads/$TARGET_BRANCH" | awk '{print $1}')"
+          test "$remote_head" = "$EXPECTED_PARENT"
+          git checkout --detach "$EXPECTED_PARENT"
+          git apply --check --index /tmp/m2a.patch
+          git apply --index /tmp/m2a.patch
+          cat > /tmp/expected-paths <<'PATHS'
+          .github/workflows/m2a-ui-completeness-ci.yml
+          recovery/source/app/m2a_api.py
+          recovery/source/app/static/m2a-ui-parts/01.js.part
+          recovery/source/app/static/m2a-ui-parts/05b.js.part
+          recovery/source/app/static/m2a-ui-parts/09-preview-controller.js.part
+          recovery/source/app/static/m2a-ui-parts/11-rtm-hardening.js.part
+          recovery/source/app/static/m2a-ui-parts/12-canvas-controller.js.part
+          recovery/source/docs/M2A_CORRECTIVE_CHANGE_REGISTER_V1_2.md
+          recovery/source/docs/M2A_EXECUTION_RTM_V1_2.md
+          recovery/source/tests/test_browser_m2a_contracts.py
+          recovery/source/tests/test_browser_m2a_matrix.py
+          recovery/source/tests/test_m2a_project_contracts.py
+          PATHS
+          git diff --cached --name-only | sort > /tmp/actual-paths
+          diff -u /tmp/expected-paths /tmp/actual-paths
+          git diff --cached --check
+
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.13.14'
+
+      - name: Install exact test dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install -q --requirement recovery/source/requirements.txt
+          python -m pip install -q pytest==8.4.2 httpx==0.28.1 playwright==1.60.0
+          python -m playwright install --with-deps chromium
+
+      - name: Run required M2A contracts
+        working-directory: recovery/source
+        shell: bash
+        env:
+          PYTHONUTF8: '1'
+        run: |
+          set -euo pipefail
+          python -m compileall -q app/entry.py app/m2a_api.py app/services/m2a_processing.py tests/test_m2a_ui.py tests/test_geometry_m2a.py tests/test_m2a_workspace.py tests/test_m2a_project_contracts.py tests/test_browser_m2a_contracts.py tests/test_browser_m2a_matrix.py
+          cat app/static/m2a-ui-parts/*.js.part > /tmp/m2a-ui.js
+          node --check /tmp/m2a-ui.js
+          python -m pytest tests/test_m2a_ui.py tests/test_geometry_m2a.py tests/test_m2a_workspace.py tests/test_m2a_project_contracts.py tests/test_browser_m2a.py tests/test_browser_m2a_matrix.py tests/test_browser_m2a_contracts.py -q --tb=short
+
+      - name: Create and push exactly one candidate commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "$(git diff --name-only)"
+          git diff --cached --name-only | sort > /tmp/actual-paths-after-tests
+          diff -u /tmp/expected-paths /tmp/actual-paths-after-tests
+          git config user.name "ImageLab Protocol Executor"
+          git config user.email "actions@users.noreply.github.com"
+          git commit -m "fix(m2a): close confirmed scope and UI defects with traceable contracts"
+          candidate="$(git rev-parse HEAD)"
+          test "$(git rev-parse HEAD^)" = "$EXPECTED_PARENT"
+          git diff-tree --no-commit-id --name-only -r HEAD | sort > /tmp/commit-paths
+          diff -u /tmp/expected-paths /tmp/commit-paths
+          git push origin "HEAD:refs/heads/$TARGET_BRANCH" \
+            "--force-with-lease=refs/heads/$TARGET_BRANCH:$EXPECTED_PARENT"
+          echo "candidate=$candidate" >> "$GITHUB_OUTPUT"
+          printf 'Candidate SHA: `%s`\n' "$candidate" >> "$GITHUB_STEP_SUMMARY"
