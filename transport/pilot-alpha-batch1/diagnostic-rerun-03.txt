@@ -1,0 +1,2 @@
+Trigger the current fail-closed transport workflow only.
+Product patch SHA-256 remains 4362daa98b2149aa17e1de65785a9b5b575b8e1c96cee202cfc09df34419abad.
