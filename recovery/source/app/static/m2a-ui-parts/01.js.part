@@ -1,0 +1,63 @@
+(() => {
+  'use strict';
+
+  const memoryStorage = new Map();
+  const storage = {
+    get(key, fallback = null) {
+      try {
+        const value = window.localStorage.getItem(key);
+        return value === null ? fallback : value;
+      } catch (_) {
+        return memoryStorage.has(key) ? memoryStorage.get(key) : fallback;
+      }
+    },
+    set(key, value) {
+      const normalized = String(value);
+      memoryStorage.set(key, normalized);
+      try { window.localStorage.setItem(key, normalized); } catch (_) { /* opaque test documents */ }
+    },
+  };
+
+  const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  })[char]);
+
+  const S = {
+    projects: [], mode: 'result', background: storage.get('imagelab.previewBackground') || 'transparent',
+    zoom: 1, linked: storage.get('imagelab.sizeLinked') !== 'false',
+    leading: storage.get('imagelab.sizeLeading') || 'auto',
+    resample: storage.get('imagelab.resample') !== 'false', busy: false,
+  };
+  window.imagelabM2A = S;
+  let activeProjectId = storage.get('imagelab.activeProjectId') || PROJECT_ID;
+  const baseFetch = window.fetch.bind(window);
+  window.fetch = (input, options) => {
+    if (typeof input !== 'string' || activeProjectId === PROJECT_ID) return baseFetch(input, options);
+    const from = `/api/projects/${encodeURIComponent(PROJECT_ID)}`;
+    const to = `/api/projects/${encodeURIComponent(activeProjectId)}`;
+    return baseFetch(input.replace(from, to), options);
+  };
+
+  const meta = {
+    projects:['P.','Проекты','Создание, выбор и переименование проектов'], presets:['P.','Профили','Сохранённые параметры модулей'], batch:['P.','Пакет','Очередь обработки файлов'],
+    upload:['1.','Загрузка','Исходные изображения проекта'], improve:['2.','Улучшение','Улучшение и восстановление'], extract:['3.','Достать принт','Извлечение принта с изделия'], selection:['4.','Выделение','AI-маска и ручная коррекция'], background:['5.','Фон','Отдельное удаление или замена фона'], cleanup:['6.','Очистка','Ореол, цвет и дефекты'], color:['7.','Цвет','Яркость, контраст, насыщенность и температура'], palette:['7.','Палитра','Анализ и фиксация цветов'], geometry:['8.','Размер и холст','Связанные размеры, Resample и поля'], halftone:['9.','Полутон','Производственный растр'], vector:['10.','Вектор','Проверяемый SVG'], dtf:['11.','DTF','Preflight и DTF Master'], masters:['12.','Мастера','Clean, Card и DTF Master'], logo:['13.','Логотип','Original, Black или Gray'], export:['14.','Экспорт','Создать экспорт'], cardlab:['15.','CardLab','Контролируемая передача файла'], settings:['S.','Настройки','Runtime, модели и диагностика']
+  };
+  Object.assign(moduleMeta, meta);
+  Object.assign(feedbackModuleMap, {projects:'upload',presets:'upload',batch:'upload',background:'cleanup',color:'improve',palette:'upload',dtf:'export',masters:'export',logo:'cleanup',cardlab:'export',settings:'upload'});
+  const groups = [
+    ['Проект',['projects','presets','batch']], ['Подготовка',['upload','improve','extract','selection','background','cleanup']],
+    ['Коррекция',['color','palette','geometry']], ['Производство',['halftone','vector','dtf','masters']],
+    ['Выход',['logo','export','cardlab']], ['Система',['settings']]
+  ];
+  const icons = {projects:'M4 5h6l2 2h8v12H4z',presets:'M5 4h14v16H5zM8 8h8M8 12h8M8 16h5',batch:'M4 5h7v6H4zM13 5h7v6h-7zM4 13h7v6H4zM13 13h7v6h-7z',upload:'M12 16V4m0 0L7 9m5-5 5 5M5 19h14',improve:'M12 3l1.5 4.2L18 9l-4.5 1.8L12 15l-1.5-4.2L6 9l4.5-1.8z',extract:'M5 5h14v14H5zM8 8h8v8H8z',selection:'M4 4h6M4 4v6M20 4h-6M20 4v6M4 20h6M4 20v-6M20 20h-6M20 20v-6',background:'M4 5h16v14H4zM6 16l4-5 3 3 2-2 3 4',cleanup:'M5 19l8-8 4 4-8 8zM14 10l3-3 3 3-3 3z',color:'M12 3a9 9 0 1 0 0 18c2 0 3-1 3-2.5 0-1-1-1.5-1-2.5 0-1.5 1-2.5 3-2.5h2a2 2 0 0 0 2-2 9 9 0 0 0-9-9z',palette:'M4 5h16v14H4zM7 8h3v3H7zM12 8h5M7 14h10',geometry:'M5 5h14v14H5zM9 5v14M5 10h14',halftone:'M7 7h2v2H7zM11 7h2v2h-2zM15 7h2v2h-2zM7 11h2v2H7zM11 11h2v2h-2zM15 11h2v2h-2z',vector:'M4 18L8 6h8l4 12-8 3zM8 6l4 15 4-15',dtf:'M5 4h14v16H5zM8 8h8M8 12h8M8 16h5',masters:'M12 3l3 6 6 .8-4.5 4.3 1.2 6.2L12 17l-5.7 3.3 1.2-6.2L3 9.8 9 9z',logo:'M6 4h12v16H6zM9 16V8h3a3 3 0 0 1 0 6H9M12 14l4 4',export:'M12 4v12m0 0 5-5m-5 5-5-5M5 20h14',cardlab:'M4 5h16v14H4zM7 8h10v3H7zM7 13h4v3H7zM13 13h4v3h-4z',settings:'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 3v2m0 14v2M3 12h2m14 0h2M5.6 5.6 7 7m10 10 1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4'};
+  const svg = key => `<svg class="nav-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="${icons[key] || icons.settings}"></path></svg>`;
+
+  function addPane(name, html) {
+    const n=document.createElement('div'); n.className='module-pane m2a-pane'; n.dataset.pane=name; n.innerHTML=html;
+    document.querySelector('.controls-column').append(n); return n;
+  }
+  function card(title, body='') { return `<div class="m2a-card"><strong>${title}</strong>${body ? `<p>${body}</p>` : ''}</div>`; }
+  function buildPanes() {
+    addPane('projects', `${card('Текущий проект','Создание, выбор и переименование без перезапуска программы')}<p id="m2aCurrentProject">Проект не открыт</p><div class="row-actions"><button class="secondary-button" id="m2aRenameProject">Переименовать</button><button class="secondary-button" id="m2aCloseProject">Закрыть</button></div><div class="divider"></div><label>Название<input id="m2aProjectTitle" maxlength="160"></label><label>Код проекта<input id="m2aProjectId" maxlength="64"></label><button class="primary-button wide" id="m2aCreateProject">Создать проект</button><div class="divider"></div><div id="m2aProjectList" class="m2a-list"></div>`);
+    addPane('presets', `${card('Профили параметров','Профиль сохраняет настройки выбранного модуля')}<label>Модуль<select id="m2aPresetModule"></select></label><label>Название<input id="m2aPresetName" maxlength="80"></label><button class="primary-button wide" id="m2aSavePreset">Сохранить текущие параметры</button><div class="divider"></div><div id="m2aPresetList" class="m2a-list"></div>`);
+    addPane('batch', `${card('Пакетная обработка','Одна операция применяется к выбранным файлам')

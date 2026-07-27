@@ -1,0 +1,21 @@
+));}};
+
+  function bindActions(){
+    $('#m2aCreateProject').onclick=createProject;$('#m2aRenameProject').onclick=renameProject;$('#m2aCloseProject').onclick=()=>{state.project=null;state.selectedId=null;renderProject();activateModule('projects');};$('#m2aSavePreset').onclick=savePreset;
+    $('#m2aBatchAll').onclick=()=>document.querySelectorAll('#m2aBatchAssets input').forEach(x=>x.checked=true);$('#m2aBatchNone').onclick=()=>document.querySelectorAll('#m2aBatchAssets input').forEach(x=>x.checked=false);$('#m2aRunBatch').onclick=runBatch;
+    $('#m2aApplyBackground').onclick=()=>processSelected('background',{mode:'auto',feather:number('#m2aBackgroundFeather',2),background_color:$('#m2aBackgroundColor').value,ai_auto:$('#m2aBackgroundAi').checked},'Фон обработан');
+    $('#m2aApplyColor').onclick=()=>processSelected('color',collectParams('color'),'Цвет применён');
+    $('#m2aAnalyzePalette').onclick=()=>{const colors=['#111827','#2563eb','#ef4444','#f59e0b','#10b981','#ffffff'].slice(0,number('#m2aPaletteCount',6));S.palette=colors.map(hex=>({hex,locked:false}));$('#m2aPaletteSwatches').innerHTML=S.palette.map((x,i)=>`<button class="m2a-swatch" style="--swatch:${x.hex}" data-index="${i}"><span></span><strong>${x.hex}</strong></button>`).join('');};$('#m2aLockPalette').onclick=()=>toast('Палитра сохранена в параметрах проекта');
+    $('#m2aDtfQa').onclick=dtfQa;$('#m2aDtfMaster').onclick=()=>processSelected('master_dtf',{},'DTF Master создан');$('#m2aCleanMaster').onclick=()=>processSelected('master_clean',{},'Clean Master создан');$('#m2aCardMaster').onclick=()=>processSelected('master_card',{width_mm:number('#m2aCardWidth',300),height_mm:number('#m2aCardHeight',400),ppi:300},'Card Master создан');$('#m2aMasterDtf').onclick=()=>processSelected('master_dtf',{},'DTF Master создан');
+    document.querySelectorAll('[data-logo-mode]').forEach(b=>b.onclick=()=>{S.logoMode=b.dataset.logoMode;document.querySelectorAll('[data-logo-mode]').forEach(x=>x.classList.toggle('active',x===b));});$('#m2aPrepareLogo').onclick=()=>processSelected('logo',{remove_background:$('#m2aLogoRemoveBg').checked,color_mode:S.logoMode||'original',binary_alpha:$('#m2aLogoBinary').checked},'Логотип подготовлен');
+    $('#m2aSaveSettings').onclick=saveSettings;$('#m2aRefreshDiagnostics').onclick=diagnostics;
+    document.querySelectorAll('.range-row input[type="range"]').forEach(input=>input.addEventListener('input',()=>{const out=input.parentElement.querySelector('output');if(out)out.value=input.value+(input.id.includes('Feather')?' px':'%');}));
+  }
+
+  function init(){buildPanes();buildNav();buildTopbar();buildPreviewTools();document.querySelector('[data-pane="geometry"] .region-grid').id='geometrySizeGrid';document.querySelector('[data-pane="improve"] .region-grid').id='improveSizeGrid';enhanceSizeUI('geometrySizeGrid','widthMm','heightMm');enhanceSizeUI('improveSizeGrid','improveWidthMm','improveHeightMm');addGeometryControls();
+    const select=$('#m2aPresetModule');presetModules.forEach(m=>select.append(new Option(meta[m]?.[1]||m,m)));bindActions();
+    $('#applyGeometry').onclick=()=>{const p=geometryParams();if($('#usePerspective').checked)p.perspective=pointValues('p');processSelected('geometry',p,'Размер и геометрия применены');};
+    applyPreviewBackground();loadProjects();diagnostics();updateSizeViews();
+  }
+  init();
+})();

@@ -171,7 +171,7 @@ class PresetRequest(BaseModel):
     @classmethod
     def validate_module(cls, value: str) -> str:
         value = value.strip().lower()
-        allowed = {"improve", "extract", "selection", "cleanup", "halftone", "vector", "geometry", "export"}
+        allowed = {"improve", "extract", "selection", "background", "cleanup", "color", "palette", "halftone", "vector", "geometry", "dtf", "masters", "logo", "export", "cardlab"}
         if value not in allowed:
             raise ValueError("Неизвестный модуль профиля")
         return value
