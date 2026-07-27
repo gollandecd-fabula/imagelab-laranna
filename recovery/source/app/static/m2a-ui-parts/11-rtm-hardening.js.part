@@ -1,0 +1,175 @@
+(() => {
+  'use strict';
+
+  const M = window.imagelabM2A || (window.imagelabM2A = {});
+  const byId = id => document.getElementById(id);
+
+  function historyType(asset) {
+    const operation = String(asset?.operation || '').toLowerCase();
+    if (!operation) return 'Original';
+    if (['select', 'selection', 'mask'].includes(operation)) return 'Mask';
+    if (operation === 'master_clean') return 'Clean Master';
+    if (operation === 'master_card') return 'Card Master';
+    if (operation === 'master_dtf') return 'DTF Master';
+    if (operation === 'halftone') return 'Halftone';
+    if (['vector', 'vectorize'].includes(operation) || String(asset?.format || '').toUpperCase() === 'SVG') return 'Vector';
+    if (operation === 'export') return 'Export';
+    return 'Working';
+  }
+  M.historyType = historyType;
+
+  const previousHistory = renderHistory;
+  renderHistory = function() {
+    previousHistory();
+    const assets = new Map((state.project?.assets || []).map(asset => [asset.id, asset]));
+    document.querySelectorAll('#historyStrip [data-asset-id]').forEach(button => {
+      const asset = assets.get(button.dataset.assetId);
+      const type = historyType(asset);
+      button.dataset.historyType = type;
+      const tag = button.querySelector('em');
+      if (tag) tag.textContent = type;
+      button.setAttribute('aria-label', `${type}: ${asset?.original_name || button.dataset.assetId}`);
+    });
+    updateHistoryActions();
+  };
+
+  function historyIndex() {
+    return (state.project?.assets || []).findIndex(asset => asset.id === state.selectedId);
+  }
+  function updateHistoryActions() {
+    const assets = state.project?.assets || [];
+    const index = historyIndex();
+    const undo = byId('m2aUndo');
+    const redo = byId('m2aRedo');
+    if (undo) undo.disabled = !assets.length || index <= 0 || state.busy;
+    if (redo) redo.disabled = !assets.length || index < 0 || index >= assets.length - 1 || state.busy;
+  }
+  async function switchHistory(delta) {
+    const assets = state.project?.assets || [];
+    const index = historyIndex();
+    const target = assets[index + delta];
+    if (!target || state.busy) return;
+    await pinActiveAsset(target.id);
+    updateHistoryActions();
+  }
+
+  const undo = byId('m2aUndo');
+  const redo = byId('m2aRedo');
+  if (undo) {
+    undo.textContent = '↶';
+    undo.title = 'Undo: предыдущая активная версия';
+    undo.setAttribute('aria-label', 'Undo: предыдущая активная версия');
+    undo.onclick = () => switchHistory(-1);
+  }
+  if (redo) {
+    redo.textContent = '↷';
+    redo.title = 'Redo: следующая активная версия';
+    redo.setAttribute('aria-label', 'Redo: следующая активная версия');
+    redo.onclick = () => switchHistory(1);
+  }
+
+  const saveState = byId('m2aSaveState');
+  if (saveState) {
+    saveState.classList.add('m2a-save-state');
+    saveState.dataset.state ||= 'saved';
+    saveState.setAttribute('role', 'status');
+    saveState.setAttribute('aria-live', 'polite');
+  }
+
+  const infoToggle = byId('m2aInfoToggle');
+  const infoSidebar = document.querySelector('.info-sidebar');
+  const narrowInfo = () => window.matchMedia('(max-width:1180px)').matches;
+  function setInfoOpen(open, {returnFocus = false} = {}) {
+    if (!infoToggle || !infoSidebar) return;
+    const drawerOpen = narrowInfo() ? Boolean(open) : true;
+    infoSidebar.classList.toggle('m2a-open', drawerOpen && narrowInfo());
+    infoSidebar.setAttribute('role', 'complementary');
+    infoSidebar.setAttribute('aria-label', 'Информация, QA, отчёт и AI');
+    infoSidebar.setAttribute('aria-hidden', String(narrowInfo() && !drawerOpen));
+    infoToggle.setAttribute('aria-expanded', String(drawerOpen));
+    infoToggle.setAttribute('aria-controls', 'm2aInfoDrawer');
+    infoSidebar.id = 'm2aInfoDrawer';
+    if (drawerOpen && narrowInfo()) {
+      requestAnimationFrame(() => infoSidebar.querySelector('button,[href],input,select,[tabindex]:not([tabindex="-1"])')?.focus());
+    } else if (returnFocus) {
+      infoToggle.focus();
+    }
+  }
+  if (infoToggle && infoSidebar) {
+    infoToggle.setAttribute('aria-label', 'Открыть информационную панель');
+    infoToggle.onclick = () => setInfoOpen(!infoSidebar.classList.contains('m2a-open'), {returnFocus: infoSidebar.classList.contains('m2a-open')});
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && narrowInfo() && infoSidebar.classList.contains('m2a-open')) {
+        event.preventDefault();
+        setInfoOpen(false, {returnFocus: true});
+      }
+    });
+    window.addEventListener('resize', () => setInfoOpen(infoSidebar.classList.contains('m2a-open')));
+    setInfoOpen(false);
+  }
+
+  function synchronizeSizePanels(sourceId) {
+    const pairs = {
+      widthMm: 'improveWidthMm',
+      improveWidthMm: 'widthMm',
+      heightMm: 'improveHeightMm',
+      improveHeightMm: 'heightMm',
+      geometryPpi: 'improvePpi',
+      improvePpi: 'geometryPpi',
+    };
+    const source = byId(sourceId);
+    const target = byId(pairs[sourceId]);
+    if (source && target && target.value !== source.value) target.value = source.value;
+    document.querySelectorAll('.m2a-chain').forEach(chain => {
+      chain.dataset.linked = String(M.linked !== false);
+      chain.setAttribute('aria-pressed', String(M.linked !== false));
+      chain.setAttribute('aria-label', M.linked !== false ? 'Разъединить ширину и высоту' : 'Связать ширину и высоту');
+    });
+  }
+  for (const id of ['widthMm', 'heightMm', 'improveWidthMm', 'improveHeightMm', 'geometryPpi', 'improvePpi']) {
+    byId(id)?.addEventListener('input', () => queueMicrotask(() => synchronizeSizePanels(id)));
+    byId(id)?.addEventListener('change', () => synchronizeSizePanels(id));
+  }
+  document.querySelectorAll('.m2a-chain').forEach(chain => chain.addEventListener('click', () => queueMicrotask(() => synchronizeSizePanels('widthMm'))));
+  synchronizeSizePanels('widthMm');
+
+  const closeProject = byId('m2aCloseProject');
+  if (closeProject) {
+    closeProject.onclick = () => {
+      state.project = null;
+      state.selectedId = null;
+      state.pendingSelectionId = null;
+      try { window.localStorage.removeItem('imagelab.activeProjectId'); } catch (_) { /* opaque test document */ }
+      renderProject();
+      activateModule('projects');
+      const current = byId('m2aCurrentProject');
+      if (current) current.textContent = 'Проект не открыт';
+    };
+  }
+
+  const previousProject = renderProject;
+  renderProject = function() {
+    previousProject();
+    if (!state.project) {
+      const projectName = byId('projectName');
+      if (projectName) projectName.textContent = 'Проект не открыт';
+      const current = byId('m2aCurrentProject');
+      if (current) current.textContent = 'Проект не открыт';
+    }
+    updateHistoryActions();
+  };
+
+  const stateSample = document.querySelector('.m2a-state-sample');
+  if (stateSample) {
+    stateSample.innerHTML = [
+      ['pass', 'PASS'],
+      ['warning', 'WARNING'],
+      ['error', 'ERROR'],
+      ['busy', 'BUSY'],
+      ['blocked', 'BLOCKED'],
+      ['disabled', 'DISABLED'],
+    ].map(([kind, label]) => `<span class="${kind}" data-state-sample="${kind}">${label}</span>`).join('');
+  }
+
+  renderProject();
+})();
