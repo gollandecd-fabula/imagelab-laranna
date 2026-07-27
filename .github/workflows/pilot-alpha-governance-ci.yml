@@ -1,0 +1,76 @@
+name: ImageLab Pilot Alpha Governance Guard
+
+on:
+  pull_request:
+    branches: [redteam/imagelab-complete-audit-20260725-v2]
+  push:
+    branches: [pilot/controlled-vertical-alpha-v1-3-1]
+
+permissions:
+  contents: read
+
+jobs:
+  governance:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+        with:
+          fetch-depth: 0
+      - name: Require governance artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          for path in \
+            recovery/source/docs/IMAGELAB_EXECUTION_SPEC_V1_3_1_APPROVED.md \
+            recovery/source/docs/PILOT_DELTA_RTM_V1_3_1_APPROVED.md \
+            recovery/source/docs/PILOT_CHANGE_REGISTER_V1_3_1_APPROVED.md \
+            recovery/source/docs/PILOT_BASELINE_MANIFEST_V1_3_1.json \
+            .github/workflows/pilot-alpha-governance-ci.yml
+          do
+            test -s "$path" || { echo "::error::missing $path"; exit 1; }
+          done
+      - name: Require exact baseline ancestry
+        shell: bash
+        run: |
+          set -euo pipefail
+          baseline=410841404d3afc2788b8a01d2166699beb1cfc27
+          git merge-base --is-ancestor "$baseline" HEAD || {
+            echo "::error::not descended from exact baseline $baseline"
+            exit 1
+          }
+      - name: Block prohibited surfaces
+        shell: bash
+        run: |
+          set -euo pipefail
+          baseline=410841404d3afc2788b8a01d2166699beb1cfc27
+          changed="$(git diff --name-only "$baseline"...HEAD)"
+          prohibited='(^|/)(installer|installers|release|releases|genesis|marketplace|billing|kubernetes|k8s|terraform|temporal|oidc|saas)(/|$)|(^|/)(Dockerfile|docker-compose\.ya?ml)$'
+          if printf '%s\n' "$changed" | grep -Eiq "$prohibited"; then
+            printf '%s\n' "$changed"
+            echo "::error::Pilot Alpha touched a prohibited surface"
+            exit 1
+          fi
+      - name: Block prohibited completion claims
+        shell: bash
+        run: |
+          set -euo pipefail
+          pattern='M2A_COMPLETE|M2B_COMPLETE|PRODUCTION_READY|RELEASE_AUTHORIZED|GENESIS_RELEASE_AUTHORIZED'
+          if grep -RInE "$pattern" recovery/source/app recovery/source/tests .github/workflows; then
+            echo "::error::prohibited completion claim found"
+            exit 1
+          fi
+      - name: Validate baseline manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          data = json.loads(Path("recovery/source/docs/PILOT_BASELINE_MANIFEST_V1_3_1.json").read_text("utf-8"))
+          assert data["exact_baseline_sha"] == "410841404d3afc2788b8a01d2166699beb1cfc27"
+          assert data["rollback_sha"] == data["exact_baseline_sha"]
+          assert data["release_status"] == "RELEASE_BLOCKED"
+          assert data["claims"]["pilot_candidate"] is None
+          assert data["claims"]["release_authorized"] is False
+          print("pilot baseline manifest: PASS")
+          PY

@@ -1,0 +1,27 @@
+{
+  "schema": "imagelab.pilot.baseline.v1",
+  "repository": "gollandecd-fabula/imagelab-laranna",
+  "parent_pr": 11,
+  "parent_branch": "redteam/imagelab-complete-audit-20260725-v2",
+  "exact_baseline_sha": "410841404d3afc2788b8a01d2166699beb1cfc27",
+  "rollback_sha": "410841404d3afc2788b8a01d2166699beb1cfc27",
+  "approved_m1_sha": "35dd66bca9b31f2e9c098063a5382cd4f1c09cd6",
+  "base_branch": "bootstrap/zero-trust-gate",
+  "base_sha": "12208d708f3870fc2323ad351b3a2abe14fa672a",
+  "approved_spec": "ImageLab EXECUTION SPEC v1.3.1",
+  "approved_rtm": "PILOT_DELTA_RTM v1.3.1",
+  "recorded_at": "2026-07-27",
+  "release_status": "RELEASE_BLOCKED",
+  "milestones": {
+    "M0": "PASS",
+    "M1": "PASS",
+    "M2A": "IN_PROGRESS",
+    "M2B_FULL": "NOT_STARTED",
+    "M3_M7": "NOT_STARTED"
+  },
+  "claims": {
+    "pilot_alpha": "NOT_STARTED",
+    "pilot_candidate": null,
+    "release_authorized": false
+  }
+}
