@@ -128,14 +128,7 @@ jobs:
       - name: Compile and validate JavaScript
         working-directory: recovery/source
         run: |
-          python -m compileall -q \
-            app/main.py app/services/repair_service.py \
-            tests/pilot_fixtures_v1.py tests/pilot_live_runtime.py \
-            tests/test_pilot_fixtures_v1.py \
-            tests/test_pilot_alpha_no_runtime_training.py \
-            tests/test_pilot_alpha_live_backend.py \
-            tests/test_pilot_alpha_live_e2e.py \
-            tests/test_pilot_alpha_visual_reachability.py
+          python -m compileall -q app/main.py app/services/repair_service.py tests/pilot_fixtures_v1.py tests/pilot_live_runtime.py tests/test_pilot_fixtures_v1.py tests/test_pilot_alpha_no_runtime_training.py tests/test_pilot_alpha_live_backend.py tests/test_pilot_alpha_live_e2e.py tests/test_pilot_alpha_visual_reachability.py
           node --check app/static/app.js
           node --check app/static/m1-hardening.js
           cat app/static/m2a-ui-parts/*.js.part > /tmp/m2a-ui.js
@@ -143,38 +136,33 @@ jobs:
 
       - name: Run Pilot fixture, policy and live-backend contracts
         working-directory: recovery/source
-        run: |
-          python -m pytest -vv --tb=short \
-            tests/test_pilot_fixtures_v1.py \
-            tests/test_pilot_alpha_no_runtime_training.py \
-            tests/test_pilot_alpha_live_backend.py
+        run: python -m pytest -vv --tb=short tests/test_pilot_fixtures_v1.py tests/test_pilot_alpha_no_runtime_training.py tests/test_pilot_alpha_live_backend.py
 
-      - name: Run real-browser Pilot and reachability contracts
+      - name: Run LIVE-E2E-01 against real FastAPI
         working-directory: recovery/source
         env:
           PILOT_ALPHA_ARTIFACT_DIR: artifacts/pilot-alpha-transport
-          M2A_ARTIFACT_DIR: artifacts/m2a-visual-transport
         run: |
           test -z "${IMAGELAB_LOCAL_BROWSER_SKIP:-}"
-          python -m pytest -vv --tb=short \
-            tests/test_pilot_alpha_live_e2e.py \
-            tests/test_pilot_alpha_visual_reachability.py \
-            tests/test_browser_m1.py
+          python -m pytest -vv --tb=short tests/test_pilot_alpha_live_e2e.py
+
+      - name: Run five-width visual reachability
+        working-directory: recovery/source
+        env:
+          M2A_ARTIFACT_DIR: artifacts/m2a-visual-transport
+        run: python -m pytest -vv --tb=short tests/test_pilot_alpha_visual_reachability.py
+
+      - name: Run legacy M1 browser regression
+        working-directory: recovery/source
+        run: python -m pytest -vv --tb=short tests/test_browser_m1.py
 
       - name: Run touched M1 and preservation regressions
         working-directory: recovery/source
-        run: |
-          python -m pytest -vv --tb=short \
-            tests/test_m1_ui.py \
-            tests/test_l5_iz017_regression.py \
-            tests/test_slu_m2_m5.py
+        run: python -m pytest -vv --tb=short tests/test_m1_ui.py tests/test_l5_iz017_regression.py tests/test_slu_m2_m5.py
 
       - name: Run adversarial and contour regressions
         working-directory: recovery/source
-        run: |
-          python -m pytest -vv --tb=short \
-            tests/test_redteam_adversarial.py \
-            tests/test_ai_contours.py
+        run: python -m pytest -vv --tb=short tests/test_redteam_adversarial.py tests/test_ai_contours.py
 
       - name: Create exactly one result commit and branch
         id: result
@@ -190,12 +178,9 @@ jobs:
           test "$(git diff-tree --no-commit-id --name-only -r HEAD | wc -l)" -eq 19
           git push origin "HEAD:refs/heads/${RESULT_BRANCH}"
           echo "sha=${RESULT_SHA}" >> "${GITHUB_OUTPUT}"
-          echo "Created ${RESULT_BRANCH} at ${RESULT_SHA}"
 
       - name: Record pre-candidate result on Pilot PR
         env:
           GH_TOKEN: ${{ github.token }}
           RESULT_SHA: ${{ steps.result.outputs.sha }}
-        run: |
-          gh api "repos/${GITHUB_REPOSITORY}/issues/12/comments" \
-            -f body="Batch 1 transport completed fail-closed. Pre-candidate result branch: \`${RESULT_BRANCH}\`; result SHA: \`${RESULT_SHA}\`; parent: \`${GOV_SHA}\`. Pilot branch has not been moved by this workflow."
+        run: gh api "repos/${GITHUB_REPOSITORY}/issues/12/comments" -f body="Batch 1 transport completed fail-closed. Pre-candidate result branch: \`${RESULT_BRANCH}\`; result SHA: \`${RESULT_SHA}\`; parent: \`${GOV_SHA}\`. Pilot branch has not been moved by this workflow."
