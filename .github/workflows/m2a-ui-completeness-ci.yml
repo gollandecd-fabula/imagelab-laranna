@@ -2,14 +2,14 @@ name: ImageLab M2A UI Completeness CI
 
 on:
   pull_request:
-    branches:
-      - bootstrap/zero-trust-gate
+    branches: [bootstrap/zero-trust-gate]
     paths:
       - recovery/source/app/entry.py
       - recovery/source/app/m2a_api.py
       - recovery/source/app/models.py
       - recovery/source/app/services/m2a_processing.py
       - recovery/source/app/services/__init__.py
+      - recovery/source/app/static/app.js
       - recovery/source/app/static/m2a-ui.css
       - recovery/source/app/static/m2a-completeness.css
       - recovery/source/app/static/m2a-ui-parts/**
@@ -49,27 +49,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          allowed='^(\.github/workflows/m2a-ui-completeness-ci\.yml|recovery/source/docs/M2A_EXECUTION_RTM_V1_2\.md|recovery/source/app/(entry|m2a_api|models)\.py|recovery/source/app/services/(__init__|m2a_processing)\.py|recovery/source/app/static/(app\.js|m2a-ui\.css|m2a-completeness\.css)|recovery/source/app/static/m2a-ui-parts/.*|recovery/source/tests/test_(m2a_ui|geometry_m2a|browser_m2a|m2a_workspace|browser_m2a_matrix)\.py)$'
           git diff --name-only "$M1_BASELINE_SHA"...HEAD > /tmp/m2a-files.txt
           cat /tmp/m2a-files.txt
           while IFS= read -r path; do
-            case "$path" in
-              .github/workflows/m2a-ui-completeness-ci.yml|
-              recovery/source/docs/M2A_EXECUTION_RTM_V1_2.md|
-              recovery/source/app/entry.py|
-              recovery/source/app/m2a_api.py|
-              recovery/source/app/models.py|
-              recovery/source/app/services/__init__.py|
-              recovery/source/app/services/m2a_processing.py|
-              recovery/source/app/static/m2a-ui.css|
-              recovery/source/app/static/m2a-completeness.css|
-              recovery/source/app/static/m2a-ui-parts/*|
-              recovery/source/tests/test_m2a_ui.py|
-              recovery/source/tests/test_geometry_m2a.py|
-              recovery/source/tests/test_browser_m2a.py|
-              recovery/source/tests/test_m2a_workspace.py|
-              recovery/source/tests/test_browser_m2a_matrix.py) ;;
-              *) echo "Out-of-scope M2A change: $path"; exit 1 ;;
-            esac
+            [[ "$path" =~ $allowed ]] || { echo "Out-of-scope M2A change: $path"; exit 1; }
           done < /tmp/m2a-files.txt
       - name: Enforce prohibited surfaces and claims
         shell: bash
@@ -78,7 +62,7 @@ jobs:
           ! grep -RniE 'text[- ]to[- ]image|blank[- ]canvas|M2A_COMPLETE|GENESIS_RELEASE_AUTHORIZED' \
             recovery/source/app/m2a_api.py recovery/source/app/static/m2a-ui-parts recovery/source/docs/M2A_EXECUTION_RTM_V1_2.md
           grep -q 'M2B NOT STARTED' recovery/source/app/static/m2a-ui-parts/07-scope-lock.js.part
-          ! grep -nE 'width_mm["'"']?[[:space:]]*:[[:space:]]*300.*height_mm["'"']?[[:space:]]*:[[:space:]]*400' recovery/source/app/static/app.js
+          ! grep -nE 'width_mm[^,]*:[[:space:]]*300[^\n]*height_mm[^,]*:[[:space:]]*400' recovery/source/app/static/app.js
       - name: Prove release chain is unchanged from M1
         shell: bash
         run: |
@@ -95,8 +79,7 @@ jobs:
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
-        with:
-          python-version: '3.13.14'
+        with: {python-version: '3.13.14'}
       - name: Install exact dependencies
         run: |
           python -m pip install -q --requirement requirements.txt
@@ -133,37 +116,29 @@ jobs:
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
-        with:
-          python-version: '3.13.14'
+        with: {python-version: '3.13.14'}
       - name: Install exact browser dependencies
         run: |
           python -m pip install -q --requirement requirements.txt
           python -m pip install -q pytest==8.4.2 httpx==0.28.1 playwright==1.60.0
           python -m playwright install --with-deps chromium
       - name: Run real-browser contracts and build screenshots
-        env:
-          M2A_ARTIFACT_DIR: artifacts/m2a-visual
+        env: {M2A_ARTIFACT_DIR: artifacts/m2a-visual}
         run: python -m pytest tests/test_browser_m1.py tests/test_browser_m2a.py tests/test_browser_m2a_matrix.py -vv --tb=short
       - name: Validate required visual matrix
         run: |
           python - <<'PY'
           from pathlib import Path
           from PIL import Image
-          root = Path('artifacts/m2a-visual')
-          required = [800, 1024, 1280, 1440, 1920]
-          failures = []
-          for width in required:
-              path = root / f'm2a-{width}.png'
-              if not path.is_file():
-                  failures.append(f'missing {path.name}')
-                  continue
+          root=Path('artifacts/m2a-visual')
+          failures=[]
+          for width in (800,1024,1280,1440,1920):
+              path=root/f'm2a-{width}.png'
+              if not path.is_file(): failures.append(f'missing {path.name}'); continue
               with Image.open(path) as image:
-                  if image.width != width:
-                      failures.append(f'{path.name}: width {image.width}')
-                  if image.height < 700:
-                      failures.append(f'{path.name}: height {image.height}')
-          if failures:
-              raise SystemExit('\n'.join(failures))
+                  if image.width != width: failures.append(f'{path.name}: width {image.width}')
+                  if image.height < 700: failures.append(f'{path.name}: height {image.height}')
+          if failures: raise SystemExit('\n'.join(failures))
           PY
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         if: always()
