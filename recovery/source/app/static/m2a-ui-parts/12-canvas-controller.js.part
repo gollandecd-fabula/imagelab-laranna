@@ -1,0 +1,151 @@
+(() => {
+  'use strict';
+
+  const M = window.imagelabM2A || (window.imagelabM2A = {});
+  const byId = id => document.getElementById(id);
+  const numberValue = (id, fallback = 0) => {
+    const value = Number(byId(id)?.value);
+    return Number.isFinite(value) ? value : fallback;
+  };
+  const optionalValue = id => {
+    const raw = byId(id)?.value?.trim() || '';
+    return raw === '' ? '' : Number(raw);
+  };
+
+  function installCanvasControls() {
+    const margins = document.querySelector('[data-pane="geometry"] .m2a-canvas-grid');
+    if (!margins || byId('m2aCanvasWidth')) return;
+    const title = margins.previousElementSibling;
+    const target = document.createElement('div');
+    target.className = 'm2a-canvas-target';
+    target.innerHTML = `
+      <strong class="field-group-title">Размер холста, мм</strong>
+      <div class="m2a-canvas-target-grid">
+        <label>Ширина<input id="m2aCanvasWidth" type="number" min="0.1" max="4000" step="0.01" placeholder="авто"></label>
+        <label>Высота<input id="m2aCanvasHeight" type="number" min="0.1" max="4000" step="0.01" placeholder="авто"></label>
+      </div>
+      <label>Anchor<select id="m2aCanvasAnchor">
+        <option value="top-left">Сверху слева</option><option value="top">Сверху</option><option value="top-right">Сверху справа</option>
+        <option value="left">Слева</option><option value="center" selected>По центру</option><option value="right">Справа</option>
+        <option value="bottom-left">Снизу слева</option><option value="bottom">Снизу</option><option value="bottom-right">Снизу справа</option>
+      </select></label>`;
+    title?.before(target);
+  }
+
+  function validateCanvas(canvas, ppi) {
+    const widthPresent = canvas.width_mm !== '';
+    const heightPresent = canvas.height_mm !== '';
+    if (widthPresent !== heightPresent) throw new Error('Ширина и высота холста должны быть указаны вместе');
+    if (widthPresent) {
+      if (!Number.isFinite(canvas.width_mm) || canvas.width_mm <= 0 || canvas.width_mm > 4000) throw new Error('Ширина холста должна быть от 0,1 до 4000 мм');
+      if (!Number.isFinite(canvas.height_mm) || canvas.height_mm <= 0 || canvas.height_mm > 4000) throw new Error('Высота холста должна быть от 0,1 до 4000 мм');
+      const pixels = Math.round(canvas.width_mm / 25.4 * ppi) * Math.round(canvas.height_mm / 25.4 * ppi);
+      if (pixels > 40_000_000) throw new Error('Холст превышает безопасный лимит памяти');
+    }
+  }
+
+  M.buildGeometryParams = function() {
+    const ppi = numberValue('geometryPpi', 300);
+    const canvas = {
+      width_mm: optionalValue('m2aCanvasWidth'),
+      height_mm: optionalValue('m2aCanvasHeight'),
+      anchor: byId('m2aCanvasAnchor')?.value || 'center',
+      top_mm: numberValue('m2aCanvasTop'),
+      bottom_mm: numberValue('m2aCanvasBottom'),
+      left_mm: numberValue('m2aCanvasLeft'),
+      right_mm: numberValue('m2aCanvasRight'),
+    };
+    validateCanvas(canvas, ppi);
+    const params = {
+      width_mm: byId('widthMm')?.value || '',
+      height_mm: byId('heightMm')?.value || '',
+      ppi,
+      preserve_aspect: M.linked !== false,
+      leading_side: M.leading || byId('m2aLeading')?.value || 'auto',
+      resample: M.resample !== false,
+      canvas,
+      rotate: numberValue('rotateAngle'),
+      crop: {
+        x: numberValue('cropX'),
+        y: numberValue('cropY'),
+        width: numberValue('cropWidth', 100),
+        height: numberValue('cropHeight', 100),
+      },
+      ai_auto_crop: Boolean(byId('geometryAiCrop')?.checked),
+    };
+    if (byId('usePerspective')?.checked) params.perspective = pointValues('p');
+    return params;
+  };
+  window.geometryParams = M.buildGeometryParams;
+
+  function extendedSizeValue() {
+    return {
+      linked: M.linked !== false,
+      leading: M.leading || 'auto',
+      resample: M.resample !== false,
+      width_mm: byId('widthMm')?.value || '',
+      height_mm: byId('heightMm')?.value || '',
+      improve_width_mm: byId('improveWidthMm')?.value || '',
+      improve_height_mm: byId('improveHeightMm')?.value || '',
+      ppi: numberValue('geometryPpi', 300),
+      improve_ppi: numberValue('improvePpi', 300),
+      canvas: {
+        width_mm: byId('m2aCanvasWidth')?.value || '',
+        height_mm: byId('m2aCanvasHeight')?.value || '',
+        anchor: byId('m2aCanvasAnchor')?.value || 'center',
+        top_mm: numberValue('m2aCanvasTop'),
+        bottom_mm: numberValue('m2aCanvasBottom'),
+        left_mm: numberValue('m2aCanvasLeft'),
+        right_mm: numberValue('m2aCanvasRight'),
+      },
+    };
+  }
+  M.sizeControllerValue = extendedSizeValue;
+
+  function restoreCanvas() {
+    const value = state.project?.workspace?.size_controller?.canvas || {};
+    const values = {
+      m2aCanvasWidth: value.width_mm,
+      m2aCanvasHeight: value.height_mm,
+      m2aCanvasAnchor: value.anchor || 'center',
+    };
+    for (const [id, item] of Object.entries(values)) {
+      const node = byId(id);
+      if (node && item !== undefined && item !== null) node.value = item;
+    }
+  }
+
+  let saveTimer;
+  function scheduleExtendedSave() {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => M.workspacePut?.('size_controller', extendedSizeValue()).catch(error => toast(error.message, true)), 450);
+  }
+
+  function renderRequestedActual() {
+    const node = byId('m2aRequestedActual');
+    if (!node) return;
+    const asset = selectedAsset();
+    if (!asset || asset.operation !== 'geometry') return;
+    const p = asset.parameters || {};
+    const requestedSize = `${p.width_mm || '—'} × ${p.height_mm || '—'} мм · ${p.ppi || '—'} PPI`;
+    const resolvedSize = `${p.resolved_width_mm || '—'} × ${p.resolved_height_mm || '—'} мм · ${asset.width_px || '—'} × ${asset.height_px || '—'} px`;
+    const requestedCanvas = p.canvas?.width_mm && p.canvas?.height_mm ? `${p.canvas.width_mm} × ${p.canvas.height_mm} мм · ${p.canvas.anchor || 'center'}` : 'авто по отступам';
+    const resolvedCanvas = p.resolved_canvas_width_mm && p.resolved_canvas_height_mm ? `${p.resolved_canvas_width_mm} × ${p.resolved_canvas_height_mm} мм · ${p.canvas_target_pixels?.width || asset.width_px} × ${p.canvas_target_pixels?.height || asset.height_px} px` : `${asset.width_px || '—'} × ${asset.height_px || '—'} px`;
+    node.innerHTML = `<table class="m2a-requested-table"><thead><tr><th></th><th>Запрошено</th><th>Получено</th></tr></thead><tbody><tr><th>Изображение</th><td>${requestedSize}</td><td>${resolvedSize}</td></tr><tr><th>Холст</th><td>${requestedCanvas}</td><td>${resolvedCanvas}</td></tr></tbody></table>`;
+  }
+
+  installCanvasControls();
+  for (const id of ['m2aCanvasWidth', 'm2aCanvasHeight', 'm2aCanvasAnchor']) {
+    byId(id)?.addEventListener('input', scheduleExtendedSave);
+    byId(id)?.addEventListener('change', scheduleExtendedSave);
+  }
+  restoreCanvas();
+
+  const previousProject = renderProject;
+  renderProject = function() {
+    previousProject();
+    restoreCanvas();
+    renderRequestedActual();
+  };
+  renderProject();
+})();
