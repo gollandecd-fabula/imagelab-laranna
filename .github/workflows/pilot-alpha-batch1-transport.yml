@@ -141,7 +141,15 @@ jobs:
           cat app/static/m2a-ui-parts/*.js.part > /tmp/m2a-ui.js
           node --check /tmp/m2a-ui.js
 
-      - name: Run Batch 1 contracts and touched regressions
+      - name: Run Pilot fixture, policy and live-backend contracts
+        working-directory: recovery/source
+        run: |
+          python -m pytest -vv --tb=short \
+            tests/test_pilot_fixtures_v1.py \
+            tests/test_pilot_alpha_no_runtime_training.py \
+            tests/test_pilot_alpha_live_backend.py
+
+      - name: Run real-browser Pilot and reachability contracts
         working-directory: recovery/source
         env:
           PILOT_ALPHA_ARTIFACT_DIR: artifacts/pilot-alpha-transport
@@ -149,15 +157,22 @@ jobs:
         run: |
           test -z "${IMAGELAB_LOCAL_BROWSER_SKIP:-}"
           python -m pytest -vv --tb=short \
-            tests/test_pilot_fixtures_v1.py \
-            tests/test_pilot_alpha_no_runtime_training.py \
-            tests/test_pilot_alpha_live_backend.py \
             tests/test_pilot_alpha_live_e2e.py \
             tests/test_pilot_alpha_visual_reachability.py \
+            tests/test_browser_m1.py
+
+      - name: Run touched M1 and preservation regressions
+        working-directory: recovery/source
+        run: |
+          python -m pytest -vv --tb=short \
             tests/test_m1_ui.py \
-            tests/test_browser_m1.py \
             tests/test_l5_iz017_regression.py \
-            tests/test_slu_m2_m5.py \
+            tests/test_slu_m2_m5.py
+
+      - name: Run adversarial and contour regressions
+        working-directory: recovery/source
+        run: |
+          python -m pytest -vv --tb=short \
             tests/test_redteam_adversarial.py \
             tests/test_ai_contours.py
 
