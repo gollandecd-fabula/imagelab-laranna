@@ -1,0 +1,527 @@
+name: ImageLab Exact Head fc57379 Verification
+
+on:
+  push:
+    branches:
+      - redteam/imagelab-complete-audit-20260725-v2
+    paths:
+      - .github/workflows/exact-head-fc57379-verification.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: imagelab-exact-head-fc57379
+  cancel-in-progress: false
+
+env:
+  TARGET_SHA: fc57379bbef5bfb1dbef08fca91f786e979b3d2e
+  PYTHONUTF8: '1'
+  PIP_DISABLE_PIP_VERSION_CHECK: '1'
+
+jobs:
+  evidence_python:
+    name: Exact SHA — Python release-gate contracts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    outputs:
+      checked_sha: ${{ steps.identity.outputs.sha }}
+    defaults:
+      run:
+        working-directory: recovery/source
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+        with:
+          ref: ${{ env.TARGET_SHA }}
+          fetch-depth: 1
+      - id: identity
+        name: Prove exact checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(git -C ../.. rev-parse HEAD)"
+          test "$actual" = "$TARGET_SHA"
+          echo "sha=$actual" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.13.14'
+      - name: Install exact dependencies
+        run: |
+          python -m pip install -q --requirement requirements.txt
+          python -m pip install -q pytest==8.4.2 httpx==0.28.1
+      - name: Compile changed Python contracts
+        run: >-
+          python -m compileall -q
+          bootstrap.py
+          app/entry.py
+          app/models.py
+          app/services/image_processing.py
+          app/services/m2a_processing.py
+          app/services/__init__.py
+          app/services/file_inspector.py
+          app/services/project_store.py
+          release_gate/fetch_pinned_json.py
+          release_gate/finalize_gate.py
+          release_gate/finalize_unit_matrix.py
+          tests/test_m1_ui.py
+          tests/test_m2a_ui.py
+          tests/test_geometry_m2a.py
+          tests/test_project_lookup_resilience.py
+          tests/test_project_store_concurrency.py
+          tests/test_upload_surface_hardening.py
+          tests/test_windows_packaging_config.py
+          tests/test_zero_trust_release_gate.py
+      - name: Validate JavaScript syntax
+        run: |
+          node --check app/static/app.js
+          node --check app/static/m1-hardening.js
+          cat app/static/m2a-ui-parts/*.js.part > /tmp/m2a-ui.js
+          node --check /tmp/m2a-ui.js
+      - name: Run focused hardening tests
+        run: >-
+          python -m pytest
+          tests/test_m1_ui.py
+          tests/test_m2a_ui.py
+          tests/test_geometry_m2a.py
+          tests/test_windows_packaging_config.py
+          tests/test_zero_trust_release_gate.py
+          tests/test_project_store_concurrency.py
+          tests/test_project_lookup_resilience.py
+          tests/test_upload_surface_hardening.py
+          -vv --tb=short
+      - name: Run complete source test suite
+        run: |
+          set +e
+          python -m pytest -q > exact-full-suite.log 2>&1
+          code=$?
+          tail -n 160 exact-full-suite.log
+          exit $code
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        if: always()
+        with:
+          name: exact-fc57379-evidence-python
+          path: recovery/source/exact-full-suite.log
+          retention-days: 30
+          if-no-files-found: warn
+
+  evidence_powershell:
+    name: Exact SHA — Windows PowerShell parser contract
+    runs-on: windows-2025
+    timeout-minutes: 10
+    outputs:
+      checked_sha: ${{ steps.identity.outputs.sha }}
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+        with:
+          ref: ${{ env.TARGET_SHA }}
+          fetch-depth: 1
+      - id: identity
+        name: Prove exact checkout
+        shell: pwsh
+        run: |
+          $actual = (git rev-parse HEAD).Trim()
+          if ($actual -ne $env:TARGET_SHA) { throw "checkout mismatch: $actual" }
+          "sha=$actual" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+      - name: Parse update and rollback gate
+        shell: pwsh
+        run: |
+          $path = Join-Path $PWD 'recovery/source/release_gate/run_update_rollback_gate.ps1'
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile($path, [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            exit 1
+          }
+
+  evidence_installer:
+    name: Exact SHA — Windows installer archive policy
+    runs-on: windows-2025
+    timeout-minutes: 15
+    outputs:
+      checked_sha: ${{ steps.identity.outputs.sha }}
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+        with:
+          ref: ${{ env.TARGET_SHA }}
+          fetch-depth: 1
+      - id: identity
+        name: Prove exact checkout
+        shell: pwsh
+        run: |
+          $actual = (git rev-parse HEAD).Trim()
+          if ($actual -ne $env:TARGET_SHA) { throw "checkout mismatch: $actual" }
+          "sha=$actual" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with:
+          go-version: '1.24.5'
+          cache: false
+      - name: Run installer ZIP admission tests on Windows
+        shell: pwsh
+        run: |
+          $installer = Join-Path $PWD 'recovery/source/windows_installer/installer'
+          Push-Location $installer
+          try {
+            Add-Type -AssemblyName System.IO.Compression
+            $stream = [System.IO.File]::Create((Join-Path $installer 'payload.zip'))
+            try {
+              $archive = [System.IO.Compression.ZipArchive]::new($stream, [System.IO.Compression.ZipArchiveMode]::Create, $false)
+              $archive.Dispose()
+            } finally {
+              $stream.Dispose()
+            }
+            $env:GO111MODULE = 'off'
+            go test -v .
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          } finally {
+            Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $installer 'payload.zip')
+            Pop-Location
+          }
+
+  evidence_browser:
+    name: Exact SHA — Browser UI M1/M2A contracts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    outputs:
+      checked_sha: ${{ steps.identity.outputs.sha }}
+    defaults:
+      run:
+        working-directory: recovery/source
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+        with:
+          ref: ${{ env.TARGET_SHA }}
+          fetch-depth: 1
+      - id: identity
+        name: Prove exact checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(git -C ../.. rev-parse HEAD)"
+          test "$actual" = "$TARGET_SHA"
+          echo "sha=$actual" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.13.14'
+      - name: Install exact UI test dependencies
+        run: |
+          python -m pip install -q --requirement requirements.txt
+          python -m pip install -q pytest==8.4.2 httpx==0.28.1 playwright==1.60.0
+          python -m playwright install --with-deps chromium
+      - name: Run real-browser M1 and M2A contracts
+        run: python -m pytest tests/test_browser_m1.py tests/test_browser_m2a.py -vv --tb=short
+
+  evidence_lifecycle:
+    name: Exact SHA — Windows launcher and uninstaller contracts
+    runs-on: windows-2025
+    timeout-minutes: 15
+    outputs:
+      checked_sha: ${{ steps.identity.outputs.sha }}
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+        with:
+          ref: ${{ env.TARGET_SHA }}
+          fetch-depth: 1
+      - id: identity
+        name: Prove exact checkout
+        shell: pwsh
+        run: |
+          $actual = (git rev-parse HEAD).Trim()
+          if ($actual -ne $env:TARGET_SHA) { throw "checkout mismatch: $actual" }
+          "sha=$actual" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with:
+          go-version: '1.24.5'
+          cache: false
+      - name: Run launcher process cleanup tests
+        shell: pwsh
+        run: |
+          $env:GO111MODULE = 'off'
+          Push-Location 'recovery/source/windows_installer/launcher'
+          try { go test -v .; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE } } finally { Pop-Location }
+      - name: Run uninstaller ownership and quoting tests
+        shell: pwsh
+        run: |
+          $env:GO111MODULE = 'off'
+          Push-Location 'recovery/source/windows_installer/uninstaller'
+          try { go test -v .; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE } } finally { Pop-Location }
+
+  governance:
+    name: Exact SHA — Workflow Governance CI
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    outputs:
+      checked_sha: ${{ steps.identity.outputs.sha }}
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+        with:
+          ref: ${{ env.TARGET_SHA }}
+          fetch-depth: 1
+      - id: identity
+        name: Prove exact checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(git rev-parse HEAD)"
+          test "$actual" = "$TARGET_SHA"
+          echo "sha=$actual" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.13.14'
+      - name: Install exact audit dependencies
+        run: python -m pip install pytest==8.4.2 PyYAML==6.0.2
+      - name: Run workflow governance contracts
+        run: python -m pytest audit_tests/test_workflow_governance.py -vv --tb=short
+
+  dependency:
+    name: Exact SHA — Dependency Security Audit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    outputs:
+      checked_sha: ${{ steps.identity.outputs.sha }}
+    defaults:
+      run:
+        working-directory: recovery/source
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+        with:
+          ref: ${{ env.TARGET_SHA }}
+          fetch-depth: 1
+      - id: identity
+        name: Prove exact checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(git -C ../.. rev-parse HEAD)"
+          test "$actual" = "$TARGET_SHA"
+          echo "sha=$actual" >> "$GITHUB_OUTPUT"
+      - name: Require exact requirements pins
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          failures = []
+          for number, raw in enumerate(Path('requirements.txt').read_text('utf-8').splitlines(), 1):
+              line = raw.strip()
+              if not line or line.startswith('#'):
+                  continue
+              if '==' not in line or any(token in line for token in ('>=', '<=', '~=', '!=', ' @ ')):
+                  failures.append(f'line {number}: {line}')
+          if failures:
+              raise SystemExit('Unpinned requirements:\n' + '\n'.join(failures))
+          PY
+      - name: Install exact audit tool
+        run: python -m pip install pip-audit==2.10.1
+      - name: Audit pinned dependency set
+        run: python -m pip_audit --no-deps --requirement requirements.txt --format json --output exact-dependency-audit.json
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        if: always()
+        with:
+          name: exact-fc57379-dependency-audit
+          path: recovery/source/exact-dependency-audit.json
+          retention-days: 90
+          if-no-files-found: error
+
+  source_snapshot:
+    name: Exact SHA — Full Audit Source Snapshot
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      checked_sha: ${{ steps.identity.outputs.sha }}
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+        with:
+          ref: ${{ env.TARGET_SHA }}
+          fetch-depth: 1
+      - id: identity
+        name: Prove exact checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(git rev-parse HEAD)"
+          test "$actual" = "$TARGET_SHA"
+          echo "sha=$actual" >> "$GITHUB_OUTPUT"
+      - name: Build deterministic source snapshot
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib, json, os, zipfile, subprocess
+          root = Path('.').resolve()
+          checked = subprocess.check_output(['git','rev-parse','HEAD'], text=True).strip()
+          target = os.environ['TARGET_SHA']
+          if checked != target:
+              raise SystemExit(f'checkout mismatch: {checked}')
+          output = root / 'imagelab-exact-head-source.zip'
+          included_roots = [root / 'recovery' / 'source', root / 'bootstrap', root / '.github' / 'workflows']
+          individual = [root / 'AGENTS.md']
+          forbidden_parts = {'.git', '__pycache__', '.pytest_cache', 'data', 'output', 'build', 'dist'}
+          forbidden_names = {'.env', 'feedback.json', 'audit.json', 'launcher.log'}
+          files = []
+          for source_root in included_roots:
+              if source_root.exists():
+                  files.extend(path for path in source_root.rglob('*') if path.is_file())
+          files.extend(path for path in individual if path.is_file())
+          selected = []
+          for path in sorted(set(files)):
+              relative = path.relative_to(root)
+              if forbidden_parts.intersection(relative.parts) or path.name in forbidden_names:
+                  continue
+              selected.append((path, relative.as_posix()))
+          with zipfile.ZipFile(output, 'w', zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
+              for path, relative in selected:
+                  info = zipfile.ZipInfo(relative, date_time=(2026, 1, 1, 0, 0, 0))
+                  info.compress_type = zipfile.ZIP_DEFLATED
+                  info.external_attr = 0o600 << 16
+                  archive.writestr(info, path.read_bytes())
+          manifest = {
+              'schema': 2,
+              'status': 'PASS',
+              'requested_sha': target,
+              'checked_out_sha': checked,
+              'file_count': len(selected),
+              'zip_sha256': hashlib.sha256(output.read_bytes()).hexdigest(),
+              'privacy_exclusions': sorted(forbidden_parts | forbidden_names),
+          }
+          Path('imagelab-exact-head-source.json').write_text(json.dumps(manifest, indent=2), 'utf-8')
+          PY
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        with:
+          name: exact-fc57379-source-snapshot
+          path: |
+            imagelab-exact-head-source.zip
+            imagelab-exact-head-source.json
+          retention-days: 30
+          if-no-files-found: error
+
+  bootstrap:
+    name: Exact SHA — Bootstrap Verifier Contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      checked_sha: ${{ steps.identity.outputs.sha }}
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+        with:
+          ref: ${{ env.TARGET_SHA }}
+          fetch-depth: 1
+      - id: identity
+        name: Prove exact checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(git rev-parse HEAD)"
+          test "$actual" = "$TARGET_SHA"
+          echo "sha=$actual" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.13.14'
+      - name: Run exact verifier contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p exact-bootstrap-evidence
+          python -m unittest bootstrap/test_verify_source_bundle.py -v 2>&1 | tee exact-bootstrap-evidence/unittest.log
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib, importlib.util, json, os, subprocess, unittest
+          checked = subprocess.check_output(['git','rev-parse','HEAD'], text=True).strip()
+          if checked != os.environ['TARGET_SHA']:
+              raise SystemExit('checkout mismatch')
+          module_path = Path('bootstrap/test_verify_source_bundle.py')
+          spec = importlib.util.spec_from_file_location('bootstrap_verifier_tests', module_path)
+          if spec is None or spec.loader is None:
+              raise SystemExit('unable to load verifier tests')
+          module = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+          test_count = unittest.defaultTestLoader.loadTestsFromModule(module).countTestCases()
+          if test_count < 8:
+              raise SystemExit(f'verifier coverage unexpectedly low: {test_count}')
+          log = Path('exact-bootstrap-evidence/unittest.log')
+          payload = {
+              'schema': 3,
+              'status': 'PASS',
+              'requested_sha': os.environ['TARGET_SHA'],
+              'checked_out_sha': checked,
+              'test_file': module_path.as_posix(),
+              'test_count': test_count,
+              'python': '3.13.14',
+              'log_sha256': hashlib.sha256(log.read_bytes()).hexdigest(),
+          }
+          Path('exact-bootstrap-evidence/verdict.json').write_text(json.dumps(payload, sort_keys=True, indent=2) + '\n', 'utf-8')
+          PY
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        if: always()
+        with:
+          name: exact-fc57379-bootstrap-verifier
+          path: exact-bootstrap-evidence/
+          retention-days: 30
+          if-no-files-found: error
+
+  exact_verdict:
+    name: Exact SHA — Aggregate mandatory verdict
+    if: always()
+    runs-on: ubuntu-24.04
+    needs:
+      - evidence_python
+      - evidence_powershell
+      - evidence_installer
+      - evidence_browser
+      - evidence_lifecycle
+      - governance
+      - dependency
+      - source_snapshot
+      - bootstrap
+    steps:
+      - name: Write machine-verifiable exact-head verdict
+        env:
+          R_EVIDENCE_PYTHON: ${{ needs.evidence_python.result }}
+          R_EVIDENCE_POWERSHELL: ${{ needs.evidence_powershell.result }}
+          R_EVIDENCE_INSTALLER: ${{ needs.evidence_installer.result }}
+          R_EVIDENCE_BROWSER: ${{ needs.evidence_browser.result }}
+          R_EVIDENCE_LIFECYCLE: ${{ needs.evidence_lifecycle.result }}
+          R_GOVERNANCE: ${{ needs.governance.result }}
+          R_DEPENDENCY: ${{ needs.dependency.result }}
+          R_SOURCE_SNAPSHOT: ${{ needs.source_snapshot.result }}
+          R_BOOTSTRAP: ${{ needs.bootstrap.result }}
+          S_EVIDENCE_PYTHON: ${{ needs.evidence_python.outputs.checked_sha }}
+          S_EVIDENCE_POWERSHELL: ${{ needs.evidence_powershell.outputs.checked_sha }}
+          S_EVIDENCE_INSTALLER: ${{ needs.evidence_installer.outputs.checked_sha }}
+          S_EVIDENCE_BROWSER: ${{ needs.evidence_browser.outputs.checked_sha }}
+          S_EVIDENCE_LIFECYCLE: ${{ needs.evidence_lifecycle.outputs.checked_sha }}
+          S_GOVERNANCE: ${{ needs.governance.outputs.checked_sha }}
+          S_DEPENDENCY: ${{ needs.dependency.outputs.checked_sha }}
+          S_SOURCE_SNAPSHOT: ${{ needs.source_snapshot.outputs.checked_sha }}
+          S_BOOTSTRAP: ${{ needs.bootstrap.outputs.checked_sha }}
+        run: |
+          python - <<'PY'
+          import json, os
+          target = os.environ['TARGET_SHA']
+          names = [
+              'EVIDENCE_PYTHON','EVIDENCE_POWERSHELL','EVIDENCE_INSTALLER','EVIDENCE_BROWSER',
+              'EVIDENCE_LIFECYCLE','GOVERNANCE','DEPENDENCY','SOURCE_SNAPSHOT','BOOTSTRAP'
+          ]
+          checks = {}
+          for name in names:
+              result = os.environ[f'R_{name}']
+              sha = os.environ.get(f'S_{name}', '')
+              checks[name.lower()] = {'result': result, 'checked_out_sha': sha}
+          passed = all(v['result'] == 'success' and v['checked_out_sha'] == target for v in checks.values())
+          verdict = {
+              'schema': 1,
+              'status': 'EXACT_HEAD_PASS' if passed else 'EXACT_HEAD_BLOCKED',
+              'requested_sha': target,
+              'factually_tested_sha': target if passed else None,
+              'checks': checks,
+          }
+          with open('exact-head-verdict.json','w',encoding='utf-8') as handle:
+              json.dump(verdict, handle, ensure_ascii=False, indent=2, sort_keys=True)
+          print(json.dumps(verdict, indent=2, sort_keys=True))
+          if not passed:
+              raise SystemExit(1)
+          PY
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        if: always()
+        with:
+          name: ImageLab-exact-head-fc57379-verdict
+          path: exact-head-verdict.json
+          retention-days: 90
+          if-no-files-found: error
