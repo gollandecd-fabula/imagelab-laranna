@@ -6,7 +6,15 @@ from starlette.responses import HTMLResponse, Response
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from app.config import settings
-from app.main import app as core_app
+from app.main import app as core_app, store
+from app.m2a_api import register_m2a_routes
+
+
+# app.main exports the request-size wrapper; its ``app`` attribute is the
+# configured FastAPI instance. Register M2A routes on that instance so the
+# existing host/origin/body-limit security chain remains authoritative.
+register_m2a_routes(getattr(core_app, "app", core_app), store)
+
 
 class UIHardeningEntry:
     """Serve the audited UI shell while delegating API/static requests unchanged."""
@@ -30,12 +38,15 @@ class UIHardeningEntry:
             html = self.index_path.read_text("utf-8")
             html = html.replace(
                 "</head>",
-                '<link rel="stylesheet" href="/static/m1-hardening.css?v=m1"><link rel="stylesheet" href="/static/m2a-ui.css?v=m2a"></head>',
+                '<link rel="stylesheet" href="/static/m1-hardening.css?v=m1">'
+                '<link rel="stylesheet" href="/static/m2a-ui.css?v=m2a">'
+                '<link rel="stylesheet" href="/static/m2a-completeness.css?v=m2a"></head>',
                 1,
             )
             html = html.replace(
                 "</body>",
-                '<script src="/static/m1-hardening.js?v=m1"></script><script src="/static/m2a-ui.js?v=m2a"></script></body>',
+                '<script src="/static/m1-hardening.js?v=m1"></script>'
+                '<script src="/static/m2a-ui.js?v=m2a"></script></body>',
                 1,
             )
             response = HTMLResponse(
