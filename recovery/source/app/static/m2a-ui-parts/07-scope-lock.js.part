@@ -1,0 +1,124 @@
+(() => {
+  'use strict';
+
+  const byId = id => document.getElementById(id);
+  const topbar = document.querySelector('.topbar');
+  if (topbar && !byId('m2aReleaseChip')) {
+    const chip = document.createElement('div');
+    chip.id = 'm2aReleaseChip';
+    chip.className = 'm2a-release-chip';
+    chip.textContent = 'M2A IN PROGRESS · RELEASE BLOCKED';
+    chip.title = 'M2B–M7 не начаты. Production-ready и релиз запрещены.';
+    topbar.querySelector('.top-spacer')?.before(chip);
+  }
+
+  function addScopeBanner(module, mode = 'blocked') {
+    const pane = document.querySelector(`[data-pane="${module}"]`);
+    if (!pane || pane.querySelector('.m2a-scope-banner')) return;
+    const banner = document.createElement('div');
+    banner.className = `m2a-scope-banner${mode === 'partial' ? ' partial' : ''}`;
+    banner.innerHTML = mode === 'partial'
+      ? '<strong>M2B VALIDATION NOT STARTED</strong><span>Базовый код доступен только как непроверенный рабочий режим. Production-ready и QA PASS запрещены.</span>'
+      : '<strong>M2B NOT STARTED · BLOCKED</strong><span>Раздел показан для полноты навигации M2A. Производственное действие будет разрешено только на M2B после отдельной команды и релевантных тестов.</span>';
+    pane.prepend(banner);
+  }
+
+  ['background', 'color', 'palette', 'dtf', 'masters', 'logo', 'cardlab'].forEach(module => addScopeBanner(module));
+  ['halftone', 'vector', 'export'].forEach(module => addScopeBanner(module, 'partial'));
+
+  const blockedActions = [
+    'm2aApplyBackground', 'm2aApplyColor', 'm2aAnalyzePalette', 'm2aLockPalette',
+    'm2aDtfQa', 'm2aDtfMaster', 'm2aCleanMaster', 'm2aCardMaster',
+    'm2aMasterDtf', 'm2aPrepareLogo', 'm2aCardLabLink',
+    'masterCleanButton', 'masterCardButton', 'masterDtfButton', 'logoPrepareButton', 'cardlabButton',
+  ];
+  blockedActions.forEach(id => {
+    const node = byId(id);
+    if (!node) return;
+    node.classList.add('m2a-m2b-action');
+    node.setAttribute('aria-disabled', 'true');
+    node.title = 'M2B NOT STARTED';
+    if ('disabled' in node) node.disabled = true;
+    node.removeAttribute('href');
+    node.onclick = event => {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (typeof toast === 'function') toast('Действие заблокировано: M2B ещё не разрешён', true);
+    };
+  });
+
+  ['m2aCardWidth', 'm2aCardHeight'].forEach(id => {
+    const node = byId(id);
+    if (!node) return;
+    node.value = '';
+    node.placeholder = 'Выбирается профилем M2B';
+    node.disabled = true;
+  });
+  const dtfStatus = byId('m2aDtfStatus');
+  if (dtfStatus) {
+    dtfStatus.className = 'm2a-status blocked';
+    dtfStatus.innerHTML = '<strong>BLOCKED</strong><span>DTF Preflight относится к M2B и не может быть заменён общим QA.</span>';
+  }
+
+  const topMode = byId('globalOperationMode');
+  if (topMode) {
+    const forbidden = [...topMode.options].find(option => option.value === 'autoparams');
+    if (forbidden) forbidden.textContent = 'Автопараметры AI (не однокнопочный маршрут)';
+  }
+
+  if (topbar && !byId('m2aPreparePrint')) {
+    const button = document.createElement('button');
+    button.id = 'm2aPreparePrint';
+    button.className = 'secondary-button compact';
+    button.type = 'button';
+    button.textContent = 'Подготовить принт';
+    button.title = 'Показать маршрут до запуска';
+    topbar.querySelector('#downloadButton')?.before(button);
+  }
+
+  if (!byId('m2aAutopilotDialog')) {
+    const dialog = document.createElement('div');
+    dialog.id = 'm2aAutopilotDialog';
+    dialog.className = 'm2a-autopilot-dialog';
+    dialog.setAttribute('role', 'dialog');
+    dialog.setAttribute('aria-modal', 'true');
+    dialog.setAttribute('aria-labelledby', 'm2aAutopilotTitle');
+    dialog.innerHTML = `
+      <section class="m2a-autopilot-card">
+        <header><div><h2 id="m2aAutopilotTitle">Подготовить принт</h2><p>Маршрут показан до запуска. Исполнение AI-этапов относится к M4 и сейчас заблокировано.</p></div><button class="icon-button" id="m2aAutopilotClose" type="button" aria-label="Закрыть">×</button></header>
+        <div class="m2a-stage-list">
+          <label><input type="checkbox" checked disabled><strong>1</strong><span>Загрузка и анализ</span><em>обязательно</em></label>
+          <label><input type="checkbox" checked><strong>2</strong><span>Выделение и фон</span><em>необязательно</em></label>
+          <label><input type="checkbox" checked><strong>3</strong><span>Извлечение и очистка</span><em>необязательно</em></label>
+          <label><input type="checkbox" checked><strong>4</strong><span>Размер и холст</span><em>необязательно</em></label>
+          <label><input type="checkbox" checked><strong>5</strong><span>Полутон или вектор</span><em>M2B</em></label>
+          <label><input id="m2aMandatoryQa" type="checkbox" checked disabled><strong>6</strong><span>Обязательный QA</span><em>нельзя отключить</em></label>
+          <label><input type="checkbox" checked disabled><strong>7</strong><span>Экспорт после QA PASS</span><em>обязательно</em></label>
+        </div>
+        <div class="m2a-autopilot-progress" aria-label="Поля прогресса маршрута">
+          <div><span>Прогресс</span><strong id="m2aAutoPercent">0%</strong></div>
+          <div><span>Этап</span><strong id="m2aAutoStage">план</strong></div>
+          <div><span>Engine</span><strong id="m2aAutoEngine">не запущен</strong></div>
+          <div><span>Время</span><strong id="m2aAutoElapsed">0 с</strong></div>
+        </div>
+        <div class="m2a-status blocked"><strong>M4 NOT STARTED</strong><span>Запуск маршрута и cancel-контракт будут подключены на M4. На M2A подтверждается только обнаруживаемый план и обязательный QA.</span></div>
+        <div class="m2a-autopilot-actions"><button class="secondary-button" id="m2aAutoCancel" type="button" disabled>Отменить</button><button class="primary-button" id="m2aAutoStart" type="button" disabled>Запуск заблокирован до M4</button></div>
+      </section>`;
+    document.body.append(dialog);
+  }
+
+  const open = () => {
+    const dialog = byId('m2aAutopilotDialog');
+    dialog?.classList.add('open');
+    byId('m2aAutopilotClose')?.focus();
+  };
+  const close = () => {
+    const dialog = byId('m2aAutopilotDialog');
+    dialog?.classList.remove('open');
+    byId('m2aPreparePrint')?.focus();
+  };
+  byId('m2aPreparePrint')?.addEventListener('click', open);
+  byId('m2aAutopilotClose')?.addEventListener('click', close);
+  byId('m2aAutopilotDialog')?.addEventListener('click', event => { if (event.target === event.currentTarget) close(); });
+  document.addEventListener('keydown', event => { if (event.key === 'Escape' && byId('m2aAutopilotDialog')?.classList.contains('open')) close(); });
+})();
