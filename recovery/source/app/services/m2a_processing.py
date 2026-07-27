@@ -10,6 +10,24 @@ from app.models import AssetRecord
 from app.services import image_processing as legacy
 
 _legacy_process_image = legacy.process_image
+_CANVAS_ANCHORS = {
+    "top-left": (0.0, 0.0),
+    "top": (0.5, 0.0),
+    "top-right": (1.0, 0.0),
+    "left": (0.0, 0.5),
+    "center": (0.5, 0.5),
+    "right": (1.0, 0.5),
+    "bottom-left": (0.0, 1.0),
+    "bottom": (0.5, 1.0),
+    "bottom-right": (1.0, 1.0),
+}
+
+
+def _optional_mm(payload: dict[str, Any], key: str, *, maximum: float = 4000) -> float | None:
+    value = payload.get(key)
+    if value is None or value == "":
+        return None
+    return legacy._number({"value": value}, "value", 1, 0.1, maximum)
 
 
 def geometry_m2a(image: Image.Image, ppi: float, params: dict[str, Any]) -> tuple[Image.Image, float]:
@@ -21,8 +39,10 @@ def geometry_m2a(image: Image.Image, ppi: float, params: dict[str, Any]) -> tupl
         width = legacy._number(crop, "width", 100, 0.1, 100)
         height = legacy._number(crop, "height", 100, 0.1, 100)
         box = (
-            int(round(out.width * x / 100)), int(round(out.height * y / 100)),
-            int(round(out.width * min(100, x + width) / 100)), int(round(out.height * min(100, y + height) / 100)),
+            int(round(out.width * x / 100)),
+            int(round(out.height * y / 100)),
+            int(round(out.width * min(100, x + width) / 100)),
+            int(round(out.height * min(100, y + height) / 100)),
         )
         if box[2] <= box[0] or box[3] <= box[1]:
             raise legacy.ProcessingError("Область кадрирования имеет нулевой размер")
@@ -31,7 +51,12 @@ def geometry_m2a(image: Image.Image, ppi: float, params: dict[str, Any]) -> tupl
         out = legacy._perspective(out, params.get("perspective"))
     angle = legacy._number(params, "rotate", 0, -360, 360)
     if abs(angle) > 1e-6:
-        out = out.rotate(-angle, resample=Image.Resampling.BICUBIC, expand=legacy._bool(params, "expand", True), fillcolor=(0, 0, 0, 0))
+        out = out.rotate(
+            -angle,
+            resample=Image.Resampling.BICUBIC,
+            expand=legacy._bool(params, "expand", True),
+            fillcolor=(0, 0, 0, 0),
+        )
     if legacy._bool(params, "flip_horizontal", False):
         out = ImageOps.mirror(out)
     if legacy._bool(params, "flip_vertical", False):
@@ -95,25 +120,52 @@ def geometry_m2a(image: Image.Image, ppi: float, params: dict[str, Any]) -> tupl
         bottom_mm = legacy._number(canvas, "bottom_mm", 0, 0, 500)
         left_mm = legacy._number(canvas, "left_mm", 0, 0, 500)
         right_mm = legacy._number(canvas, "right_mm", 0, 0, 500)
+        canvas_width_mm = _optional_mm(canvas, "width_mm")
+        canvas_height_mm = _optional_mm(canvas, "height_mm")
+        if (canvas_width_mm is None) != (canvas_height_mm is None):
+            raise legacy.ProcessingError("Ширина и высота холста должны быть указаны вместе")
+        anchor = str(canvas.get("anchor", "center")).strip().lower()
+        if anchor not in _CANVAS_ANCHORS:
+            raise legacy.ProcessingError("Неизвестная точка привязки холста")
+
         pads = {
             "top": int(round(top_mm / 25.4 * target_ppi)),
             "bottom": int(round(bottom_mm / 25.4 * target_ppi)),
             "left": int(round(left_mm / 25.4 * target_ppi)),
             "right": int(round(right_mm / 25.4 * target_ppi)),
         }
-        target_width = out.width + pads["left"] + pads["right"]
-        target_height = out.height + pads["top"] + pads["bottom"]
+        minimum_width = out.width + pads["left"] + pads["right"]
+        minimum_height = out.height + pads["top"] + pads["bottom"]
+        target_width = minimum_width
+        target_height = minimum_height
+        if canvas_width_mm is not None and canvas_height_mm is not None:
+            target_width = max(1, int(round(canvas_width_mm / 25.4 * target_ppi)))
+            target_height = max(1, int(round(canvas_height_mm / 25.4 * target_ppi)))
+            if target_width < minimum_width or target_height < minimum_height:
+                raise legacy.ProcessingError("Размер холста меньше изображения с заданными отступами")
+
         legacy._check_output_size(target_width, target_height)
-        if any(pads.values()):
+        extra_width = target_width - minimum_width
+        extra_height = target_height - minimum_height
+        x_factor, y_factor = _CANVAS_ANCHORS[anchor]
+        offset_x = pads["left"] + int(round(extra_width * x_factor))
+        offset_y = pads["top"] + int(round(extra_height * y_factor))
+
+        if target_width != out.width or target_height != out.height or offset_x or offset_y:
             expanded = Image.new("RGBA", (target_width, target_height), (0, 0, 0, 0))
-            expanded.paste(out, (pads["left"], pads["top"]), out)
+            expanded.paste(out, (offset_x, offset_y), out)
             out = expanded
             params["canvas_applied"] = True
         else:
             params["canvas_applied"] = False
-        params["canvas_pixels"] = pads
-    return out, target_ppi
 
+        params["canvas_pixels"] = pads
+        params["canvas_anchor"] = anchor
+        params["canvas_target_pixels"] = {"width": target_width, "height": target_height}
+        params["canvas_placement_pixels"] = {"x": offset_x, "y": offset_y}
+        params["resolved_canvas_width_mm"] = round(target_width / target_ppi * 25.4, 4)
+        params["resolved_canvas_height_mm"] = round(target_height / target_ppi * 25.4, 4)
+    return out, target_ppi
 
 
 def process_image(asset: AssetRecord, operation: str, params: dict[str, Any]) -> AssetRecord:
