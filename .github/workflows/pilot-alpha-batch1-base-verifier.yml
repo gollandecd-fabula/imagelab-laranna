@@ -1,0 +1,187 @@
+name: ImageLab Pilot Alpha Batch 1 Base Verifier
+
+on:
+  pull_request:
+    branches: [transport/pilot-alpha-batch1-squash-base]
+    types: [opened, synchronize, reopened]
+    paths:
+      - transport/pilot-alpha-batch1/**
+      - .github/workflows/pilot-alpha-batch1-transport.yml
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: imagelab-pilot-alpha-batch1-base-verifier
+  cancel-in-progress: false
+
+env:
+  GOV_SHA: 86a757809f366bd77d6b33288f21a453c04fcdd0
+  RESULT_BRANCH: transport/pilot-alpha-batch1-result
+  COMBINED_B64_SHA256: 15bdb174e78fb952adcf5f205becfffa0bbebcf9c72390ce17ead6547e4f904d
+  GZIP_SHA256: 0f6fc56f561374d50c86fc0898e94b345018da360cd96ac567b2af569b6fec61
+  PATCH_SHA256: 4362daa98b2149aa17e1de65785a9b5b575b8e1c96cee202cfc09df34419abad
+  PYTHONUTF8: '1'
+  PIP_DISABLE_PIP_VERSION_CHECK: '1'
+
+jobs:
+  verify-and-create-result:
+    name: Verify exact patch and create one result commit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+        with:
+          fetch-depth: 0
+
+      - name: Require exact transport topology
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${GITHUB_EVENT_NAME}" = "pull_request"
+          test "${GITHUB_HEAD_REF}" = "transport/pilot-alpha-batch1-files"
+          test "${GITHUB_BASE_REF}" = "transport/pilot-alpha-batch1-squash-base"
+          git cat-file -e "${GOV_SHA}^{commit}"
+          if git ls-remote --exit-code --heads origin "refs/heads/${RESULT_BRANCH}" >/dev/null 2>&1; then
+            echo "Result branch already exists: ${RESULT_BRANCH}"
+            exit 1
+          fi
+
+      - name: Verify all eight transport chunks
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/chunks.sha256 <<'EOF'
+          1809214df434b5f8d637e2f7c8e6ce5cff1906baa70cac7d4eed4506b093a59e  transport/pilot-alpha-batch1/chunk-00.b64
+          da165d516c4b00372b3cb205b6e4a50a80431f8e18fad45061354342de2628cb  transport/pilot-alpha-batch1/chunk-01.b64
+          231ca2729681176669f73583779ad21e00d9288734f673f1e8c0744f1873784c  transport/pilot-alpha-batch1/chunk-02.b64
+          8e1e42a5073710477b710d44c45af4031648a1222598e81ca951bc9c8ab8e25e  transport/pilot-alpha-batch1/chunk-03.b64
+          6764c115dd23b8e619b63a8c5b35fc1a770dfddc534f0cfbe80f8c935f353e25  transport/pilot-alpha-batch1/chunk-04.b64
+          84f6be151b1bb514944ba0a681bdbebcc9a8d15bd36a904785ecf6ed2456a16f  transport/pilot-alpha-batch1/chunk-05.b64
+          b2ee371804d4642d1689371877cade845b4c5405b61c24f6d92061f4aeb79f02  transport/pilot-alpha-batch1/chunk-06.b64
+          fbbf65bfc4e6c57ee5b145c246265d0b295500c40bca2330f4efdcc6c4583afa  transport/pilot-alpha-batch1/chunk-07.b64
+          EOF
+          sha256sum -c /tmp/chunks.sha256
+          test "$(find transport/pilot-alpha-batch1 -maxdepth 1 -type f -name 'chunk-*.b64' | wc -l)" -eq 8
+
+      - name: Reconstruct and verify exact raw patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat transport/pilot-alpha-batch1/chunk-0{0,1,2,3,4,5,6,7}.b64 > /tmp/pilot-alpha-batch1.patch.gz.b64
+          echo "${COMBINED_B64_SHA256}  /tmp/pilot-alpha-batch1.patch.gz.b64" | sha256sum -c -
+          base64 --decode /tmp/pilot-alpha-batch1.patch.gz.b64 > /tmp/pilot-alpha-batch1.patch.gz
+          echo "${GZIP_SHA256}  /tmp/pilot-alpha-batch1.patch.gz" | sha256sum -c -
+          gzip --test /tmp/pilot-alpha-batch1.patch.gz
+          gzip --decompress --stdout /tmp/pilot-alpha-batch1.patch.gz > /tmp/pilot-alpha-batch1.patch
+          echo "${PATCH_SHA256}  /tmp/pilot-alpha-batch1.patch" | sha256sum -c -
+
+      - name: Apply to exact governance parent and enforce path boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          git checkout --detach "${GOV_SHA}"
+          test "$(git rev-parse HEAD)" = "${GOV_SHA}"
+          git apply --check /tmp/pilot-alpha-batch1.patch
+          git apply --index /tmp/pilot-alpha-batch1.patch
+          cat > /tmp/expected-paths.txt <<'EOF'
+          .github/workflows/pilot-alpha-batch1-ci.yml
+          recovery/source/app/main.py
+          recovery/source/app/services/repair_service.py
+          recovery/source/app/static/app.js
+          recovery/source/app/static/index.html
+          recovery/source/app/static/m1-hardening.js
+          recovery/source/app/static/m2a-completeness.css
+          recovery/source/tests/pilot_fixtures_v1.py
+          recovery/source/tests/pilot_fixtures_v1_manifest.json
+          recovery/source/tests/pilot_live_runtime.py
+          recovery/source/tests/test_browser_m1.py
+          recovery/source/tests/test_l5_iz017_regression.py
+          recovery/source/tests/test_m1_ui.py
+          recovery/source/tests/test_pilot_alpha_live_backend.py
+          recovery/source/tests/test_pilot_alpha_live_e2e.py
+          recovery/source/tests/test_pilot_alpha_no_runtime_training.py
+          recovery/source/tests/test_pilot_alpha_visual_reachability.py
+          recovery/source/tests/test_pilot_fixtures_v1.py
+          recovery/source/tests/test_slu_m2_m5.py
+          EOF
+          git diff --cached --name-only | sort > /tmp/actual-paths.txt
+          sort -o /tmp/expected-paths.txt /tmp/expected-paths.txt
+          diff -u /tmp/expected-paths.txt /tmp/actual-paths.txt
+          test "$(wc -l < /tmp/actual-paths.txt)" -eq 19
+          if grep -E '(^|/)(release_gate|windows_installer)/|zero-trust-(release|genesis)|model_manager|kserve|kubernetes|billing|tenant' /tmp/actual-paths.txt; then
+            echo 'Prohibited later-stage or release surface in Batch 1 patch'
+            exit 1
+          fi
+
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.13.14'
+
+      - name: Install exact test dependencies
+        working-directory: recovery/source
+        run: |
+          python -m pip install -q --requirement requirements.txt
+          python -m pip install -q pytest==8.4.2 httpx==0.28.1 playwright==1.60.0
+          python -m playwright install --with-deps chromium
+
+      - name: Compile and validate JavaScript
+        working-directory: recovery/source
+        run: |
+          python -m compileall -q app/main.py app/services/repair_service.py tests/pilot_fixtures_v1.py tests/pilot_live_runtime.py tests/test_pilot_fixtures_v1.py tests/test_pilot_alpha_no_runtime_training.py tests/test_pilot_alpha_live_backend.py tests/test_pilot_alpha_live_e2e.py tests/test_pilot_alpha_visual_reachability.py
+          node --check app/static/app.js
+          node --check app/static/m1-hardening.js
+          cat app/static/m2a-ui-parts/*.js.part > /tmp/m2a-ui.js
+          node --check /tmp/m2a-ui.js
+
+      - name: Run fixture, policy and live-backend contracts
+        working-directory: recovery/source
+        run: python -m pytest -vv --tb=short tests/test_pilot_fixtures_v1.py tests/test_pilot_alpha_no_runtime_training.py tests/test_pilot_alpha_live_backend.py
+
+      - name: Run LIVE-E2E-01 against real FastAPI
+        working-directory: recovery/source
+        env:
+          PILOT_ALPHA_ARTIFACT_DIR: artifacts/pilot-alpha-base-verifier
+        run: |
+          test -z "${IMAGELAB_LOCAL_BROWSER_SKIP:-}"
+          python -m pytest -vv --tb=short tests/test_pilot_alpha_live_e2e.py
+
+      - name: Run five-width visual reachability
+        working-directory: recovery/source
+        env:
+          M2A_ARTIFACT_DIR: artifacts/m2a-visual-base-verifier
+        run: python -m pytest -vv --tb=short tests/test_pilot_alpha_visual_reachability.py
+
+      - name: Run legacy M1 browser regression
+        working-directory: recovery/source
+        run: python -m pytest -vv --tb=short tests/test_browser_m1.py
+
+      - name: Run touched M1 and preservation regressions
+        working-directory: recovery/source
+        run: python -m pytest -vv --tb=short tests/test_m1_ui.py tests/test_l5_iz017_regression.py tests/test_slu_m2_m5.py
+
+      - name: Run adversarial and contour regressions
+        working-directory: recovery/source
+        run: python -m pytest -vv --tb=short tests/test_redteam_adversarial.py tests/test_ai_contours.py
+
+      - name: Create exactly one result commit and branch
+        id: result
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${GOV_SHA}"
+          git config user.name 'ImageLab Pilot Transport'
+          git config user.email 'pilot-transport@users.noreply.github.com'
+          git commit -m 'pilot(alpha): Batch 1 foundations and policy locks'
+          RESULT_SHA="$(git rev-parse HEAD)"
+          test "$(git rev-parse HEAD^)" = "${GOV_SHA}"
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD | wc -l)" -eq 19
+          git push origin "HEAD:refs/heads/${RESULT_BRANCH}"
+          echo "sha=${RESULT_SHA}" >> "${GITHUB_OUTPUT}"
+
+      - name: Record pre-candidate result on Pilot PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RESULT_SHA: ${{ steps.result.outputs.sha }}
+        run: gh api "repos/${GITHUB_REPOSITORY}/issues/12/comments" -f body="Batch 1 base-verifier completed fail-closed. Pre-candidate result branch: \`${RESULT_BRANCH}\`; result SHA: \`${RESULT_SHA}\`; parent: \`${GOV_SHA}\`. Pilot branch has not been moved by this workflow."
