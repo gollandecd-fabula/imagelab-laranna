@@ -1,0 +1,144 @@
+name: ImageLab Exact Head fc57379 Observer
+
+on:
+  pull_request:
+    branches:
+      - bootstrap/zero-trust-gate
+    paths:
+      - .github/workflows/exact-head-fc57379-observer.yml
+      - .github/workflows/exact-head-fc57379-verification.yml
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: imagelab-exact-head-fc57379-observer-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  TARGET_SHA: fc57379bbef5bfb1dbef08fca91f786e979b3d2e
+  CONTROL_SHA: bd86584e0d0ae319a75c79e0c2969179f98830db
+  WORKFLOW_FILE: exact-head-fc57379-verification.yml
+
+jobs:
+  validate-exact-run:
+    name: Validate exact-head push-run and artifact
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - name: Locate exact verifier push-run
+        id: locate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          run_id="$(gh api --paginate \
+            "repos/$GITHUB_REPOSITORY/actions/workflows/$WORKFLOW_FILE/runs?event=push&branch=redteam%2Fimagelab-complete-audit-20260725-v2&per_page=100" \
+            --jq ".workflow_runs[] | select(.head_sha == \"$CONTROL_SHA\") | .id" | head -n 1)"
+          test -n "$run_id"
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id" > exact-run-metadata-before.json
+      - name: Wait for exact verifier conclusion
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ steps.locate.outputs.run_id }}
+        run: |
+          set -euo pipefail
+          gh run watch "$RUN_ID" --repo "$GITHUB_REPOSITORY" --exit-status
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID" > exact-run-metadata-after.json
+      - name: Download exact-head verdict artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ steps.locate.outputs.run_id }}
+        run: |
+          set -euo pipefail
+          mkdir -p exact-verdict
+          gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name ImageLab-exact-head-fc57379-verdict \
+            --dir exact-verdict
+          test -f exact-verdict/exact-head-verdict.json
+      - name: Validate factually tested SHA and all mandatory checks
+        env:
+          RUN_ID: ${{ steps.locate.outputs.run_id }}
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib, json, os
+
+          target = os.environ['TARGET_SHA']
+          control = os.environ['CONTROL_SHA']
+          before = json.loads(Path('exact-run-metadata-before.json').read_text('utf-8'))
+          after = json.loads(Path('exact-run-metadata-after.json').read_text('utf-8'))
+          verdict_path = Path('exact-verdict/exact-head-verdict.json')
+          verdict = json.loads(verdict_path.read_text('utf-8'))
+
+          failures = []
+          if str(after.get('head_sha') or '').lower() != control:
+              failures.append('control_head_sha')
+          if after.get('event') != 'push':
+              failures.append('event')
+          if after.get('conclusion') != 'success':
+              failures.append('workflow_conclusion')
+          if verdict.get('status') != 'EXACT_HEAD_PASS':
+              failures.append('verdict_status')
+          if verdict.get('requested_sha') != target:
+              failures.append('requested_sha')
+          if verdict.get('factually_tested_sha') != target:
+              failures.append('factually_tested_sha')
+
+          checks = verdict.get('checks')
+          expected = {
+              'evidence_python',
+              'evidence_powershell',
+              'evidence_installer',
+              'evidence_browser',
+              'evidence_lifecycle',
+              'governance',
+              'dependency',
+              'source_snapshot',
+              'bootstrap',
+          }
+          if not isinstance(checks, dict) or set(checks) != expected:
+              failures.append('check_set')
+          else:
+              for name in sorted(expected):
+                  item = checks.get(name)
+                  if not isinstance(item, dict):
+                      failures.append(f'{name}:shape')
+                      continue
+                  if item.get('result') != 'success':
+                      failures.append(f'{name}:result')
+                  if item.get('checked_out_sha') != target:
+                      failures.append(f'{name}:checked_out_sha')
+
+          observer = {
+              'schema': 1,
+              'status': 'PASS' if not failures else 'FAIL',
+              'run_id': int(os.environ['RUN_ID']),
+              'control_sha': control,
+              'requested_sha': target,
+              'factually_tested_sha': verdict.get('factually_tested_sha'),
+              'verdict_sha256': hashlib.sha256(verdict_path.read_bytes()).hexdigest(),
+              'failed_conditions': failures,
+              'checks': checks,
+          }
+          Path('exact-head-observer-verdict.json').write_text(
+              json.dumps(observer, ensure_ascii=False, indent=2, sort_keys=True) + '\n',
+              'utf-8',
+          )
+          print(json.dumps(observer, indent=2, sort_keys=True))
+          if failures:
+              raise SystemExit(1)
+          PY
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        if: always()
+        with:
+          name: ImageLab-exact-head-fc57379-observer
+          path: |
+            exact-head-observer-verdict.json
+            exact-run-metadata-before.json
+            exact-run-metadata-after.json
+            exact-verdict/exact-head-verdict.json
+          retention-days: 90
+          if-no-files-found: error
