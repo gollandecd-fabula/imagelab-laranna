@@ -1,0 +1,56 @@
+(() => {
+  'use strict';
+  const byId = id => document.getElementById(id);
+  const M = window.imagelabM2A || (window.imagelabM2A = {});
+  const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+
+  function positionPerspectiveHandles() {
+    const prefix = state.module === 'extract' ? 'ep' : 'p';
+    for (const name of ['TL', 'TR', 'BR', 'BL']) {
+      const handle = byId(`m2aPerspective${name}`);
+      const x = Number(byId(`${prefix}${name}x`)?.value ?? 0);
+      const y = Number(byId(`${prefix}${name}y`)?.value ?? 0);
+      if (!handle) continue;
+      handle.style.left = `${clamp(x, 2, 98)}%`;
+      handle.style.top = `${clamp(y, 2, 98)}%`;
+    }
+  }
+
+  function addPerspectiveControl(module, sourceId, label) {
+    const pane = document.querySelector(`[data-pane="${module}"]`);
+    const source = byId(sourceId);
+    if (!pane || !source || source.dataset.m2aDirect === '1') return;
+    const anchor = pane.querySelector('.m2a-preview-only') || (module === 'geometry' ? byId('applyGeometry') : byId('applyExtractPrint'));
+    const row = document.createElement('label');
+    row.className = 'check-row m2a-direct-perspective';
+    row.append(source, document.createTextNode(` ${label}`));
+    anchor?.before(row);
+    source.dataset.m2aDirect = '1';
+    source.style.width = '16px';
+    source.style.height = '16px';
+    source.style.minWidth = '16px';
+    source.addEventListener('change', () => requestAnimationFrame(positionPerspectiveHandles));
+  }
+
+  addPerspectiveControl('geometry', 'usePerspective', 'Перспектива: 4 точки');
+  addPerspectiveControl('extract', 'extractPerspectiveEnabled', 'Перспектива: 4 точки');
+
+  const preview = byId('previewStage');
+  if (preview) new MutationObserver(() => requestAnimationFrame(positionPerspectiveHandles)).observe(preview, {childList: true, subtree: true});
+
+  const priorActivate = activateModule;
+  activateModule = function(module) {
+    priorActivate(module);
+    renderProject();
+    requestAnimationFrame(positionPerspectiveHandles);
+  };
+
+  const baseApi = api;
+  api = async function(url, options = {}) {
+    const result = await baseApi(url, options);
+    if (M.batch?.running && /\/api\/projects\/[^/]+\/process(?:\?|$)/.test(String(url))) {
+      await new Promise(resolve => setTimeout(resolve, 75));
+    }
+    return result;
+  };
+})();
