@@ -9,7 +9,6 @@ on:
       - recovery/source/app/models.py
       - recovery/source/app/services/m2a_processing.py
       - recovery/source/app/services/__init__.py
-      - recovery/source/app/static/app.js
       - recovery/source/app/static/m2a-ui.css
       - recovery/source/app/static/m2a-completeness.css
       - recovery/source/app/static/m2a-ui-parts/**
@@ -49,7 +48,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          allowed='^(\.github/workflows/m2a-ui-completeness-ci\.yml|recovery/source/docs/M2A_EXECUTION_RTM_V1_2\.md|recovery/source/app/(entry|m2a_api|models)\.py|recovery/source/app/services/(__init__|m2a_processing)\.py|recovery/source/app/static/(app\.js|m2a-ui\.css|m2a-completeness\.css)|recovery/source/app/static/m2a-ui-parts/.*|recovery/source/tests/test_(m2a_ui|geometry_m2a|browser_m2a|m2a_workspace|browser_m2a_matrix)\.py)$'
+          allowed='^(\.github/workflows/m2a-ui-completeness-ci\.yml|recovery/source/docs/M2A_EXECUTION_RTM_V1_2\.md|recovery/source/app/(entry|m2a_api|models)\.py|recovery/source/app/services/(__init__|m2a_processing)\.py|recovery/source/app/static/(m2a-ui\.css|m2a-completeness\.css)|recovery/source/app/static/m2a-ui-parts/.*|recovery/source/tests/test_(m2a_ui|geometry_m2a|browser_m2a|m2a_workspace|browser_m2a_matrix)\.py)$'
           git diff --name-only "$M1_BASELINE_SHA"...HEAD > /tmp/m2a-files.txt
           cat /tmp/m2a-files.txt
           while IFS= read -r path; do
@@ -62,7 +61,8 @@ jobs:
           ! grep -RniE 'text[- ]to[- ]image|blank[- ]canvas|M2A_COMPLETE|GENESIS_RELEASE_AUTHORIZED' \
             recovery/source/app/m2a_api.py recovery/source/app/static/m2a-ui-parts recovery/source/docs/M2A_EXECUTION_RTM_V1_2.md
           grep -q 'M2B NOT STARTED' recovery/source/app/static/m2a-ui-parts/07-scope-lock.js.part
-          ! grep -nE 'width_mm[^,]*:[[:space:]]*300[^\n]*height_mm[^,]*:[[:space:]]*400' recovery/source/app/static/app.js
+          grep -q "'masterCardButton'" recovery/source/app/static/m2a-ui-parts/07-scope-lock.js.part
+          grep -q "node.value = ''" recovery/source/app/static/m2a-ui-parts/07-scope-lock.js.part
       - name: Prove release chain is unchanged from M1
         shell: bash
         run: |
