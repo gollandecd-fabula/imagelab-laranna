@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "status": "EXACT_HEAD_PASS",
+  "requested_sha": "fc57379bbef5bfb1dbef08fca91f786e979b3d2e",
+  "factually_tested_sha": "fc57379bbef5bfb1dbef08fca91f786e979b3d2e",
+  "exact_verification": {
+    "workflow": "ImageLab Exact Head fc57379 Verification",
+    "run_id": 30237906462,
+    "event": "push",
+    "control_sha": "bd86584e0d0ae319a75c79e0c2969179f98830db",
+    "conclusion": "success",
+    "verdict_sha256": "6090fa4181c5d723473594eaf604921d9ff9a7f25e6a7840045fb5c6f46f9592"
+  },
+  "independent_observer": {
+    "workflow": "ImageLab Exact Head fc57379 Observer",
+    "run_id": 30238007807,
+    "control_sha": "ae22789767610a816252af16032779273140d0d1",
+    "conclusion": "success",
+    "artifact_id": 8642262301,
+    "artifact_digest": "sha256:e5de678dcb59fdcbc6fd2bdc877c571829aedda5d99e79f298e433ace747a1b8"
+  },
+  "checks": {
+    "evidence_python": {"result": "success", "checked_out_sha": "fc57379bbef5bfb1dbef08fca91f786e979b3d2e"},
+    "evidence_powershell": {"result": "success", "checked_out_sha": "fc57379bbef5bfb1dbef08fca91f786e979b3d2e"},
+    "evidence_installer": {"result": "success", "checked_out_sha": "fc57379bbef5bfb1dbef08fca91f786e979b3d2e"},
+    "evidence_browser": {"result": "success", "checked_out_sha": "fc57379bbef5bfb1dbef08fca91f786e979b3d2e"},
+    "evidence_lifecycle": {"result": "success", "checked_out_sha": "fc57379bbef5bfb1dbef08fca91f786e979b3d2e"},
+    "governance": {"result": "success", "checked_out_sha": "fc57379bbef5bfb1dbef08fca91f786e979b3d2e"},
+    "dependency": {"result": "success", "checked_out_sha": "fc57379bbef5bfb1dbef08fca91f786e979b3d2e"},
+    "source_snapshot": {"result": "success", "checked_out_sha": "fc57379bbef5bfb1dbef08fca91f786e979b3d2e"},
+    "bootstrap": {"result": "success", "checked_out_sha": "fc57379bbef5bfb1dbef08fca91f786e979b3d2e"}
+  },
+  "failed_conditions": [],
+  "scope_limitations": [
+    "This evidence proves mandatory automated checks for the exact source commit only.",
+    "It does not prove physical Windows L5, actual G7 update/rollback evidence, Genesis authorization, merge authorization, installer release readiness, or local release completion."
+  ]
+}
