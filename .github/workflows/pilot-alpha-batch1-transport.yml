@@ -1,8 +1,8 @@
 name: ImageLab Pilot Alpha Batch 1 Transport
 
 on:
-  push:
-    branches: [transport/pilot-alpha-batch1-files]
+  pull_request:
+    branches: [transport/pilot-alpha-batch1-squash-base]
     paths:
       - transport/pilot-alpha-batch1/**
       - .github/workflows/pilot-alpha-batch1-transport.yml
@@ -38,7 +38,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "${GITHUB_REF_NAME}" = "transport/pilot-alpha-batch1-files"
+          test "${GITHUB_EVENT_NAME}" = "pull_request"
+          test "${GITHUB_HEAD_REF}" = "transport/pilot-alpha-batch1-files"
+          test "${GITHUB_BASE_REF}" = "transport/pilot-alpha-batch1-squash-base"
           git cat-file -e "${GOV_SHA}^{commit}"
           if git ls-remote --exit-code --heads origin "refs/heads/${RESULT_BRANCH}" >/dev/null 2>&1; then
             echo "Result branch already exists: ${RESULT_BRANCH}"
