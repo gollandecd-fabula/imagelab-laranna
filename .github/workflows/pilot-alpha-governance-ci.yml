@@ -54,9 +54,51 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          baseline=410841404d3afc2788b8a01d2166699beb1cfc27
+          guard=.github/workflows/pilot-alpha-governance-ci.yml
           pattern='M2A_COMPLETE|M2B_COMPLETE|PRODUCTION_READY|RELEASE_AUTHORIZED|GENESIS_RELEASE_AUTHORIZED'
-          if grep -RInE "$pattern" recovery/source/app recovery/source/tests .github/workflows; then
-            echo "::error::prohibited completion claim found"
+
+          contains_prohibited_claim() {
+            local path
+            for path in "$@"; do
+              if grep -nE "$pattern" "$path"; then
+                return 0
+              fi
+            done
+            return 1
+          }
+
+          mapfile -d '' -t changed_paths < <(
+            git diff --name-only -z --diff-filter=ACMR "$baseline"...HEAD -- \
+              recovery/source/app recovery/source/tests .github/workflows
+          )
+          candidate_paths=()
+          for path in "${changed_paths[@]}"; do
+            [[ "$path" == "$guard" ]] && continue
+            candidate_paths+=("$path")
+          done
+
+          grep -qE "$pattern" "$guard" || {
+            echo "::error::guard self-test fixture is missing the prohibited pattern declaration"
+            exit 1
+          }
+          for path in "${candidate_paths[@]}"; do
+            [[ "$path" != "$guard" ]] || {
+              echo "::error::guard file leaked into the completion-claim scan"
+              exit 1
+            }
+          done
+
+          negative_fixture="$(mktemp)"
+          trap 'rm -f "$negative_fixture"' EXIT
+          printf 'status = "RELEASE_AUTHORIZED"\n' > "$negative_fixture"
+          contains_prohibited_claim "$negative_fixture" || {
+            echo "::error::negative fixture was not detected"
+            exit 1
+          }
+
+          if ((${#candidate_paths[@]})) && contains_prohibited_claim "${candidate_paths[@]}"; then
+            echo "::error::prohibited completion claim found in Pilot Alpha changes"
             exit 1
           fi
       - name: Validate baseline manifest
