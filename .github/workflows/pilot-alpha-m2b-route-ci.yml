@@ -46,7 +46,7 @@ jobs:
           grep -q 'uvicorn' tests/m2b_pilot_route_probe.py
           grep -q 'http.client' tests/m2b_pilot_route_probe.py
           grep -q 'PNG_DTF' tests/m2b_pilot_route_probe.py
-          grep -q '_original_geometry' tests/sitecustomize.py
+          grep -q 'original_geometry' tests/sitecustomize.py
           ! grep -nE 'TestClient|monkeypatch|unittest\.mock|from mock|import mock|page\.route|route\.fulfill' tests/m2b_pilot_route_probe.py
       - name: Run real M2B-PILOT route probe
         env:
