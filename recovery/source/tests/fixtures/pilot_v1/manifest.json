@@ -1,0 +1,198 @@
+{
+  "schema_version": 1,
+  "pilot_set_id": "FROZEN_PILOT_SET_V1",
+  "source_spec": "ImageLab EXECUTION SPEC v1.3.1",
+  "rtm_requirement": "PIL-015",
+  "change_register": "CR-007",
+  "frozen_parent_sha": "cf1f0f3f1d1192976aac0fc01b104c0736ba48da",
+  "generator": {
+    "path": "tools/generate_pilot_frozen_set.py",
+    "sha256": "55092609c8f98ca4d524a997c7ae7448c65dc5b986d52096c49f13cf9766e9e4",
+    "runtime": "Python standard library only"
+  },
+  "benchmark_status": "NOT_STARTED",
+  "claims": {
+    "pilot_alpha_pass": false,
+    "release_authorized": false
+  },
+  "required_counts": {
+    "representative": 5,
+    "adversarial": 3,
+    "total": 8
+  },
+  "required_coverage": [
+    "transparency",
+    "difficult_edge",
+    "text_logo",
+    "low_resolution",
+    "non_uniform_background",
+    "large_file",
+    "truncated_png",
+    "crc_corruption"
+  ],
+  "limits_frozen_from_baseline": {
+    "max_upload_bytes": 52428800,
+    "max_image_pixels": 120000000
+  },
+  "fixtures": [
+    {
+      "id": "FPS-REP-01",
+      "classification": "representative",
+      "coverage": "transparency",
+      "file": "rep_transparency.png",
+      "size_bytes": 1498,
+      "sha256": "1fed41525f428888d2f6e7194077f2a7eef2277ee4aabf549a96f40a8080cbc8",
+      "expected": {
+        "png_valid": true,
+        "width": 256,
+        "height": 256,
+        "bit_depth": 8,
+        "color_type": 6,
+        "planned_upload_result": "accept"
+      },
+      "thresholds": {
+        "alpha_zero_min": 33000,
+        "alpha_partial_min": 21000,
+        "alpha_full_min": 10000,
+        "unique_rgba_min": 4
+      }
+    },
+    {
+      "id": "FPS-REP-02",
+      "classification": "representative",
+      "coverage": "difficult_edge",
+      "file": "rep_difficult_edge.png",
+      "size_bytes": 5904,
+      "sha256": "fb16152f96892b0c156d0d9a2dbe6e6bf6c20b5087e5e363fadbfca1c7acad80",
+      "expected": {
+        "png_valid": true,
+        "width": 512,
+        "height": 512,
+        "bit_depth": 8,
+        "color_type": 6,
+        "planned_upload_result": "accept"
+      },
+      "thresholds": {
+        "alpha_partial_min": 10000,
+        "alpha_full_min": 4000,
+        "unique_rgba_min": 10
+      }
+    },
+    {
+      "id": "FPS-REP-03",
+      "classification": "representative",
+      "coverage": "text_logo",
+      "file": "rep_text_logo.png",
+      "size_bytes": 2798,
+      "sha256": "439d0e58ea3190b0a2483a828c818634b4aa51f711f74d16d7c4dc43914ea7a0",
+      "expected": {
+        "png_valid": true,
+        "width": 640,
+        "height": 320,
+        "bit_depth": 8,
+        "color_type": 2,
+        "planned_upload_result": "accept"
+      },
+      "thresholds": {
+        "unique_rgba_min": 5,
+        "dark_pixels_min": 30000,
+        "light_pixels_min": 160000
+      }
+    },
+    {
+      "id": "FPS-REP-04",
+      "classification": "representative",
+      "coverage": "low_resolution",
+      "file": "rep_low_resolution.png",
+      "size_bytes": 166,
+      "sha256": "6eb85c56f3cb3265668627acd442b95a1dd0c91c550eae523b46b910088f1fe1",
+      "expected": {
+        "png_valid": true,
+        "width": 32,
+        "height": 32,
+        "bit_depth": 8,
+        "color_type": 2,
+        "planned_upload_result": "accept"
+      },
+      "thresholds": {
+        "max_dimension_max": 32,
+        "unique_rgba_min": 4
+      }
+    },
+    {
+      "id": "FPS-REP-05",
+      "classification": "representative",
+      "coverage": "non_uniform_background",
+      "file": "rep_non_uniform_background.png",
+      "size_bytes": 214994,
+      "sha256": "ecd3824a93547dcb0734bfba6285cae8d5c430df2e03aa3514c8ddd60d0fb659",
+      "expected": {
+        "png_valid": true,
+        "width": 512,
+        "height": 384,
+        "bit_depth": 8,
+        "color_type": 2,
+        "planned_upload_result": "accept"
+      },
+      "thresholds": {
+        "unique_rgba_min": 60000,
+        "dark_pixels_min": 5000,
+        "light_pixels_min": 40000
+      }
+    },
+    {
+      "id": "FPS-ADV-01",
+      "classification": "adversarial",
+      "coverage": "large_file",
+      "file": "adv_large_dimensions.png",
+      "size_bytes": 371504,
+      "sha256": "631f71234b1a9659311da6eb35ba09161444cd61e9ba19560dbe73c90a623abb",
+      "expected": {
+        "png_valid": true,
+        "width": 12001,
+        "height": 10001,
+        "bit_depth": 8,
+        "color_type": 2,
+        "planned_upload_result": "reject",
+        "planned_reject_code": "max_image_pixels"
+      },
+      "thresholds": {
+        "pixel_count_min": 120000001,
+        "pixel_count_limit": 120000000,
+        "skip_pixel_decode": true
+      }
+    },
+    {
+      "id": "FPS-ADV-02",
+      "classification": "adversarial",
+      "coverage": "truncated_png",
+      "file": "adv_truncated.png",
+      "size_bytes": 80,
+      "sha256": "d01da2e04ef080ac9564f0d1193cff589650934bb7b7e22e40b03dd3e5143322",
+      "expected": {
+        "png_valid": false,
+        "planned_upload_result": "reject",
+        "planned_reject_code": "corrupt_or_unsupported"
+      },
+      "thresholds": {
+        "validation_error_contains": "truncated"
+      }
+    },
+    {
+      "id": "FPS-ADV-03",
+      "classification": "adversarial",
+      "coverage": "crc_corruption",
+      "file": "adv_crc_corrupt.png",
+      "size_bytes": 166,
+      "sha256": "ba1d52f27e964f4d9a76626cc9d9fab1809be98e38beb2461e3ca3a06b239192",
+      "expected": {
+        "png_valid": false,
+        "planned_upload_result": "reject",
+        "planned_reject_code": "corrupt_or_unsupported"
+      },
+      "thresholds": {
+        "validation_error_contains": "crc"
+      }
+    }
+  ]
+}

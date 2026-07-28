@@ -29,6 +29,24 @@ jobs:
           do
             test -s "$path" || { echo "::error::missing $path"; exit 1; }
           done
+      - name: Build Frozen Pilot Set v1
+        shell: bash
+        run: |
+          set -euo pipefail
+          python recovery/source/tools/generate_pilot_frozen_set.py
+      - name: Validate Frozen Pilot Set v1
+        shell: bash
+        run: |
+          set -euo pipefail
+          python recovery/source/tests/test_pilot_frozen_set.py
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        with:
+          name: ImageLab-Frozen-Pilot-Set-v1-${{ github.sha }}
+          path: |
+            recovery/source/tests/fixtures/pilot_v1/manifest.json
+            recovery/source/tests/fixtures/pilot_v1/generated/
+          retention-days: 30
+          if-no-files-found: error
       - name: Require exact baseline ancestry
         shell: bash
         run: |
