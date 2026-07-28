@@ -1,0 +1,194 @@
+name: ImageLab CR-005A Apply Once
+
+on:
+  push:
+    branches: [pilot/controlled-vertical-alpha-v1-3-1]
+    paths:
+      - .github/workflows/cr005a-apply-once.yml
+      - .github/patches/cr005a.patch
+
+permissions:
+  contents: write
+
+concurrency:
+  group: imagelab-cr005a-apply-once
+  cancel-in-progress: false
+
+jobs:
+  apply-verified-patch:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.13.14'
+      - name: Require exact branch head
+        shell: bash
+        run: |
+          set -euo pipefail
+          branch='pilot/controlled-vertical-alpha-v1-3-1'
+          git fetch origin "$branch"
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          test "$(git rev-parse "origin/$branch")" = "${GITHUB_SHA}"
+      - name: Apply exact CR-005A patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo 'c0ac7c29188de798927434e841a878334226919ce81226c6e2ce32a990e7800d  .github/patches/cr005a.patch' | sha256sum -c -
+          git apply --check .github/patches/cr005a.patch
+          git apply .github/patches/cr005a.patch
+      - name: Validate exact CR-005A implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install -q --requirement recovery/source/requirements.txt
+          python -m py_compile \
+            recovery/source/app/services/image_processing.py \
+            recovery/source/tests/m2b_pilot_route_probe.py
+          node --check recovery/source/app/static/app.js
+          python - <<'PY'
+          from __future__ import annotations
+          import importlib.util
+          import sys
+          import types
+          from pathlib import Path
+          import numpy as np
+          from PIL import Image
+
+          root = Path('recovery/source')
+          modules = {
+              'app': types.ModuleType('app'),
+              'app.ai': types.ModuleType('app.ai'),
+              'app.ai.registry': types.ModuleType('app.ai.registry'),
+              'app.ai.runtime': types.ModuleType('app.ai.runtime'),
+              'app.config': types.ModuleType('app.config'),
+              'app.models': types.ModuleType('app.models'),
+              'app.services': types.ModuleType('app.services'),
+              'app.services.file_inspector': types.ModuleType('app.services.file_inspector'),
+          }
+          class AIModelError(Exception):
+              pass
+          modules['app.ai.registry'].AIModelError = AIModelError
+          modules['app.ai.runtime'].get_ai_engine = lambda: None
+          class Settings:
+              max_image_pixels = 120_000_000
+              workspace_ppi = 300
+              max_halftone_cells = 1_000_000
+              upload_dir = Path('/tmp')
+          modules['app.config'].settings = Settings()
+          class AssetRecord:
+              pass
+          class CheckItem:
+              pass
+          modules['app.models'].AssetRecord = AssetRecord
+          modules['app.models'].CheckItem = CheckItem
+          class UploadValidationError(Exception):
+              pass
+          modules['app.services.file_inspector'].UploadValidationError = UploadValidationError
+          modules['app.services.file_inspector'].inspect_upload = lambda *args, **kwargs: None
+          for name, module in modules.items():
+              sys.modules[name] = module
+          spec = importlib.util.spec_from_file_location(
+              'cr005a_image_processing',
+              root / 'app/services/image_processing.py',
+          )
+          module = importlib.util.module_from_spec(spec)
+          assert spec.loader is not None
+          spec.loader.exec_module(module)
+
+          source = Image.new('RGBA', (640, 320), (10, 20, 30, 255))
+          common = {
+              'width_mm': 50.8,
+              'height_mm': '',
+              'ppi': 300,
+              'preserve_aspect': True,
+              'rotate': 0,
+              'crop': {'x': 0, 'y': 0, 'width': 100, 'height': 100},
+              'ai_auto_crop': False,
+          }
+          valid = {
+              **common,
+              'canvas_width_mm': 60.96,
+              'canvas_height_mm': 30.48,
+              'margin_top_mm': 2.54,
+              'margin_right_mm': 5.08,
+              'margin_bottom_mm': 2.54,
+              'margin_left_mm': 5.08,
+          }
+          output, ppi = module._geometry(source, 300, valid)
+          assert output.size == (720, 360)
+          assert ppi == 300
+          alpha = np.asarray(output)[:, :, 3]
+          ys, xs = np.nonzero(alpha > 250)
+          assert (int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1) == (60, 30, 660, 330)
+          assert np.all(alpha[:30, :] == 0) and np.all(alpha[-30:, :] == 0)
+          assert np.all(alpha[:, :60] == 0) and np.all(alpha[:, -60:] == 0)
+          invalid = (
+              {**valid, 'canvas_width_mm': 50.8, 'canvas_height_mm': 25.4},
+              {**common, 'margin_left_mm': -1},
+          )
+          for params in invalid:
+              try:
+                  module._geometry(source, 300, params)
+              except module.ProcessingError:
+                  pass
+              else:
+                  raise AssertionError('invalid canvas or margin was accepted')
+          base, _ = module._geometry(source, 300, common)
+          zero, _ = module._geometry(
+              source,
+              300,
+              {
+                  **common,
+                  'canvas_width_mm': '',
+                  'canvas_height_mm': '',
+                  'margin_top_mm': '0',
+                  'margin_right_mm': '0',
+                  'margin_bottom_mm': '0',
+                  'margin_left_mm': '0',
+              },
+          )
+          assert base.size == zero.size == (600, 300)
+          assert np.array_equal(np.asarray(base), np.asarray(zero))
+          print('CR-005A dynamic geometry contract: PASS')
+          PY
+          git diff --check
+      - name: Enforce minimal atomic diff
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/cr005a-apply-once.yml .github/patches/cr005a.patch
+          mapfile -t changed < <(git diff --name-only | sort)
+          expected=(
+            '.github/patches/cr005a.patch'
+            '.github/workflows/cr005a-apply-once.yml'
+            'recovery/source/app/services/image_processing.py'
+            'recovery/source/app/static/app.js'
+            'recovery/source/app/static/index.html'
+            'recovery/source/tests/m2b_pilot_route_probe.py'
+          )
+          printf '%s\n' "${changed[@]}" > /tmp/changed.txt
+          printf '%s\n' "${expected[@]}" > /tmp/expected.txt
+          diff -u /tmp/expected.txt /tmp/changed.txt
+          ! git diff --name-only | grep -E '(^|/)(requirements|pyproject|package-lock|poetry\.lock|Dockerfile|installer|release|k8s|terraform)'
+      - name: Commit and push exact CR-005A patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          branch='pilot/controlled-vertical-alpha-v1-3-1'
+          git fetch origin "$branch"
+          test "$(git rev-parse "origin/$branch")" = "${GITHUB_SHA}"
+          git config user.name 'ImageLab Pilot Bot'
+          git config user.email 'imagelab-pilot-bot@users.noreply.github.com'
+          git add \
+            .github/patches/cr005a.patch \
+            .github/workflows/cr005a-apply-once.yml \
+            recovery/source/app/services/image_processing.py \
+            recovery/source/app/static/app.js \
+            recovery/source/app/static/index.html \
+            recovery/source/tests/m2b_pilot_route_probe.py
+          git commit -m 'fix(pilot): add canvas and margin geometry contract'
+          git push origin "HEAD:$branch"
