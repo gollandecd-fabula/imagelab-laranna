@@ -12,6 +12,7 @@ import traceback
 import uuid
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from playwright.sync_api import Browser, Page, sync_playwright
 
@@ -149,8 +150,6 @@ def stop_server(process: subprocess.Popen[bytes] | None, log: Any | None) -> Non
 
 
 def prepare_real_project() -> dict[str, Any]:
-    # The source runtime creates TS-001 during startup. Reuse that real project
-    # and reset only its assets instead of issuing a duplicate create request.
     request("GET", f"/api/projects/{PROJECT_ID}")
     request("DELETE", f"/api/projects/{PROJECT_ID}/assets")
     fixture_bytes = FIXTURE.read_bytes()
@@ -256,12 +255,26 @@ def inspect_active_controls(page: Page, module: str) -> list[dict[str, Any]]:
 
 def width_probe(browser: Browser, width: int) -> dict[str, Any]:
     page = browser.new_page(viewport={"width": width, "height": VIEWPORT_HEIGHT})
-    console_errors: list[str] = []
+    console_errors: list[dict[str, Any]] = []
+    http_errors: list[dict[str, Any]] = []
     page_errors: list[str] = []
-    page.on(
-        "console",
-        lambda message: console_errors.append(message.text) if message.type == "error" else None,
-    )
+
+    def on_console(message) -> None:
+        if message.type == "error":
+            console_errors.append(
+                {"text": message.text, "location": dict(message.location or {})}
+            )
+
+    def on_response(response) -> None:
+        if response.status >= 400:
+            path = urlparse(response.url).path
+            item = {"status": response.status, "url": response.url, "path": path}
+            if path == "/favicon.ico":
+                item["ignored_reason"] = "browser_favicon_probe_not_part_of_ui_contract"
+            http_errors.append(item)
+
+    page.on("console", on_console)
+    page.on("response", on_response)
     page.on("pageerror", lambda error: page_errors.append(str(error)))
     report: dict[str, Any] = {
         "width": width,
@@ -351,13 +364,26 @@ def width_probe(browser: Browser, width: int) -> dict[str, Any]:
             }
         )
     finally:
+        blocking_http_errors = [
+            item for item in http_errors if "ignored_reason" not in item
+        ]
+        blocking_console_errors = [
+            item
+            for item in console_errors
+            if urlparse(item.get("location", {}).get("url", "")).path
+            != "/favicon.ico"
+        ]
         report["failures"].extend(
-            {"kind": "console_error", "message": item} for item in console_errors
+            {"kind": "http_error", **item} for item in blocking_http_errors
+        )
+        report["failures"].extend(
+            {"kind": "console_error", **item} for item in blocking_console_errors
         )
         report["failures"].extend(
             {"kind": "page_error", "message": item} for item in page_errors
         )
         report["console_errors"] = console_errors
+        report["http_errors"] = http_errors
         report["page_errors"] = page_errors
         page.close()
     return report
