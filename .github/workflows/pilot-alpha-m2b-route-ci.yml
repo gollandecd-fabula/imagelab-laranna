@@ -50,6 +50,7 @@ jobs:
         env:
           PILOT_EVIDENCE_DIR: artifacts/pilot-m2b-route
           PILOT_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          PYTHONVERBOSE: '1'
         run: python tests/m2b_pilot_route_probe.py
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         if: always()
