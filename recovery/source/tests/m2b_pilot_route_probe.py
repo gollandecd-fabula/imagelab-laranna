@@ -320,8 +320,16 @@ def main() -> int:
         start = app_js.find("$('#applyGeometry').addEventListener")
         end = app_js.find("data-export-format", start if start >= 0 else 0)
         geometry_action = app_js[start:end] if start >= 0 and end > start else ""
-        canvas_wired = bool(geometry_action) and (
-            "margin" in geometry_action.casefold() or "canvas" in geometry_action.casefold()
+        required_geometry_tokens = (
+            "canvas_width_mm",
+            "canvas_height_mm",
+            "margin_top_mm",
+            "margin_right_mm",
+            "margin_bottom_mm",
+            "margin_left_mm",
+        )
+        canvas_wired = bool(geometry_action) and all(
+            token in geometry_action for token in required_geometry_tokens
         )
         check(
             "geometry_canvas_margin_runtime_contract",
@@ -629,6 +637,124 @@ def main() -> int:
                 "image": info,
             }
             (EVIDENCE_ROOT / "geometry-unlinked-result.png").write_bytes(raw)
+
+        canvas_geometry = process_operation(
+            "geometry_canvas",
+            text_logo["id"],
+            "geometry",
+            {
+                "width_mm": 50.8,
+                "height_mm": "",
+                "ppi": 300,
+                "preserve_aspect": True,
+                "rotate": 0,
+                "crop": {"x": 0, "y": 0, "width": 100, "height": 100},
+                "canvas_width_mm": 60.96,
+                "canvas_height_mm": 30.48,
+                "margin_top_mm": 2.54,
+                "margin_right_mm": 5.08,
+                "margin_bottom_mm": 2.54,
+                "margin_left_mm": 5.08,
+                "ai_auto_crop": False,
+            },
+        )
+        if canvas_geometry:
+            raw = download(canvas_geometry)
+            _, array, info = image_from_bytes(raw)
+            alpha = array[:, :, 3]
+            ys, xs = np.nonzero(alpha > 250)
+            alpha_box = (
+                [int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1]
+                if xs.size and ys.size
+                else None
+            )
+            check(
+                "geometry_canvas_margin_binary",
+                (info["width"], info["height"]) == (720, 360)
+                and info["dpi"] is not None
+                and abs(info["dpi"][0] - 300) <= 1.0
+                and abs(info["dpi"][1] - 300) <= 1.0
+                and alpha_box == [60, 30, 660, 330]
+                and bool(np.all(alpha[:30, :] == 0))
+                and bool(np.all(alpha[-30:, :] == 0))
+                and bool(np.all(alpha[:, :60] == 0))
+                and bool(np.all(alpha[:, -60:] == 0)),
+                "canvas dimensions, exact margins, placement and embedded PPI must match request",
+                expected={"pixels": [720, 360], "alpha_box": [60, 30, 660, 330], "ppi": 300},
+                actual={"image": info, "alpha_box": alpha_box},
+            )
+            outputs["geometry_canvas"] = {
+                "asset": canvas_geometry,
+                "sha256": sha256(raw),
+                "image": info,
+                "alpha_box": alpha_box,
+            }
+            (EVIDENCE_ROOT / "geometry-canvas-result.png").write_bytes(raw)
+
+        before_invalid_canvas = require_http("GET", f"/api/projects/{PROJECT_ID}")
+        invalid_canvas_status, _, invalid_canvas_data = request(
+            "POST",
+            f"/api/projects/{PROJECT_ID}/process",
+            json_body={
+                "asset_id": text_logo["id"],
+                "operation": "geometry",
+                "parameters": {
+                    "width_mm": 50.8,
+                    "height_mm": "",
+                    "ppi": 300,
+                    "preserve_aspect": True,
+                    "canvas_width_mm": 50.8,
+                    "canvas_height_mm": 25.4,
+                    "margin_left_mm": 5.08,
+                    "margin_right_mm": 5.08,
+                    "margin_top_mm": 2.54,
+                    "margin_bottom_mm": 2.54,
+                    "auto_repair": False,
+                    "learn_from_result": False,
+                },
+            },
+        )
+        after_invalid_canvas = require_http("GET", f"/api/projects/{PROJECT_ID}")
+        check(
+            "geometry_invalid_canvas_blocked",
+            invalid_canvas_status == 422
+            and len(before_invalid_canvas["assets"]) == len(after_invalid_canvas["assets"]),
+            "canvas smaller than image plus margins must fail without creating an asset",
+            http_status=invalid_canvas_status,
+            response=decode_body(invalid_canvas_data),
+            assets_before=len(before_invalid_canvas["assets"]),
+            assets_after=len(after_invalid_canvas["assets"]),
+        )
+
+        before_invalid_margin = require_http("GET", f"/api/projects/{PROJECT_ID}")
+        invalid_margin_status, _, invalid_margin_data = request(
+            "POST",
+            f"/api/projects/{PROJECT_ID}/process",
+            json_body={
+                "asset_id": text_logo["id"],
+                "operation": "geometry",
+                "parameters": {
+                    "width_mm": 50.8,
+                    "height_mm": "",
+                    "ppi": 300,
+                    "preserve_aspect": True,
+                    "margin_left_mm": -1,
+                    "auto_repair": False,
+                    "learn_from_result": False,
+                },
+            },
+        )
+        after_invalid_margin = require_http("GET", f"/api/projects/{PROJECT_ID}")
+        check(
+            "geometry_negative_margin_blocked",
+            invalid_margin_status == 422
+            and len(before_invalid_margin["assets"]) == len(after_invalid_margin["assets"]),
+            "negative margin must fail without creating an asset",
+            http_status=invalid_margin_status,
+            response=decode_body(invalid_margin_data),
+            assets_before=len(before_invalid_margin["assets"]),
+            assets_after=len(after_invalid_margin["assets"]),
+        )
 
         before_invalid = require_http("GET", f"/api/projects/{PROJECT_ID}")
         invalid_status, _, invalid_data = request(

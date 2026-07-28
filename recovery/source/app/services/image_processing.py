@@ -761,6 +761,61 @@ def _geometry(image: Image.Image, ppi: float, params: dict[str, Any]) -> tuple[I
         target_height = max(1, int(round(height_value / 25.4 * target_ppi)))
         _check_output_size(target_width, target_height)
         out = out.resize((target_width, target_height), Image.Resampling.LANCZOS)
+
+    canvas_keys = (
+        "canvas_width_mm",
+        "canvas_height_mm",
+        "margin_top_mm",
+        "margin_right_mm",
+        "margin_bottom_mm",
+        "margin_left_mm",
+    )
+    canvas_requested = any(
+        params.get(key) is not None and params.get(key) != "" for key in canvas_keys
+    )
+    if canvas_requested:
+        def optional_mm(key: str, *, minimum: float, default: float | None) -> float | None:
+            raw = params.get(key)
+            if raw is None or raw == "":
+                return default
+            return _number({"value": raw}, "value", default or minimum, minimum, 2000)
+
+        margin_top_mm = optional_mm("margin_top_mm", minimum=0, default=0) or 0
+        margin_right_mm = optional_mm("margin_right_mm", minimum=0, default=0) or 0
+        margin_bottom_mm = optional_mm("margin_bottom_mm", minimum=0, default=0) or 0
+        margin_left_mm = optional_mm("margin_left_mm", minimum=0, default=0) or 0
+        canvas_width_mm = optional_mm("canvas_width_mm", minimum=0.01, default=None)
+        canvas_height_mm = optional_mm("canvas_height_mm", minimum=0.01, default=None)
+
+        margin_top = int(round(margin_top_mm / 25.4 * target_ppi))
+        margin_right = int(round(margin_right_mm / 25.4 * target_ppi))
+        margin_bottom = int(round(margin_bottom_mm / 25.4 * target_ppi))
+        margin_left = int(round(margin_left_mm / 25.4 * target_ppi))
+        minimum_width = out.width + margin_left + margin_right
+        minimum_height = out.height + margin_top + margin_bottom
+        canvas_width = (
+            int(round(canvas_width_mm / 25.4 * target_ppi))
+            if canvas_width_mm is not None
+            else minimum_width
+        )
+        canvas_height = (
+            int(round(canvas_height_mm / 25.4 * target_ppi))
+            if canvas_height_mm is not None
+            else minimum_height
+        )
+        if canvas_width < minimum_width or canvas_height < minimum_height:
+            raise ProcessingError(
+                "Холст меньше изображения с заданными полями: "
+                f"минимум {minimum_width}×{minimum_height} px"
+            )
+        _check_output_size(canvas_width, canvas_height)
+        extra_width = canvas_width - minimum_width
+        extra_height = canvas_height - minimum_height
+        paste_x = margin_left + extra_width // 2
+        paste_y = margin_top + extra_height // 2
+        canvas = Image.new("RGBA", (canvas_width, canvas_height), (0, 0, 0, 0))
+        canvas.alpha_composite(out.convert("RGBA"), (paste_x, paste_y))
+        out = canvas
     return out, target_ppi
 
 

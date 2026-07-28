@@ -503,7 +503,25 @@ $('#applyHalftone').addEventListener('click',()=>processSelected('halftone',{mod
 $$('[data-vector-mode]').forEach((button)=>button.addEventListener('click',()=>{ state.vectorMode=button.dataset.vectorMode; $$('[data-vector-mode]').forEach((item)=>item.classList.toggle('active',item===button)); }));
 $('#applyVectorize').addEventListener('click',()=>processSelected('vectorize',{mode:state.vectorMode,colors:number('#vectorColors',6),simplify_mm:number('#vectorSimplifyMm',.2),min_area_mm2:number('#vectorMinAreaMm2',.5),optimize:$('#vectorOptimize').checked,ai_auto:$('#vectorAiAuto').checked},'SVG создан'));
 
-$('#applyGeometry').addEventListener('click',()=>{ const params={width_mm:$('#widthMm').value,height_mm:$('#heightMm').value,ppi:number('#geometryPpi',300),preserve_aspect:$('#preserveAspect').checked,rotate:number('#rotateAngle'),crop:{x:number('#cropX'),y:number('#cropY'),width:number('#cropWidth',100),height:number('#cropHeight',100)},ai_auto_crop:$('#geometryAiCrop').checked}; if($('#usePerspective').checked)params.perspective=pointValues('p'); processSelected('geometry',params,'Размер и геометрия применены'); });
+$('#applyGeometry').addEventListener('click',()=>{
+  const params={
+    width_mm:$('#widthMm').value,
+    height_mm:$('#heightMm').value,
+    ppi:number('#geometryPpi',300),
+    preserve_aspect:$('#preserveAspect').checked,
+    rotate:number('#rotateAngle'),
+    crop:{x:number('#cropX'),y:number('#cropY'),width:number('#cropWidth',100),height:number('#cropHeight',100)},
+    canvas_width_mm:$('#canvasWidthMm').value,
+    canvas_height_mm:$('#canvasHeightMm').value,
+    margin_top_mm:$('#marginTopMm').value,
+    margin_right_mm:$('#marginRightMm').value,
+    margin_bottom_mm:$('#marginBottomMm').value,
+    margin_left_mm:$('#marginLeftMm').value,
+    ai_auto_crop:$('#geometryAiCrop').checked
+  };
+  if($('#usePerspective').checked)params.perspective=pointValues('p');
+  processSelected('geometry',params,'Размер, холст и поля применены');
+});
 $$('[data-export-format]').forEach((button)=>button.addEventListener('click',()=>{ state.exportFormat=button.dataset.exportFormat; $$('[data-export-format]').forEach((item)=>item.classList.toggle('active',item===button)); }));
 $('#applyExport').addEventListener('click',exportSelected); $('#runQaButton').addEventListener('click',runQa); $('#runReportButton').addEventListener('click',runReport);
 $('#masterCleanButton').addEventListener('click',()=>processSelected('master_clean',{},'Clean Master создан'));
