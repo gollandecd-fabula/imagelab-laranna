@@ -1,0 +1,60 @@
+name: ImageLab Pilot Alpha M2B Route
+
+on:
+  pull_request:
+    branches: [redteam/imagelab-complete-audit-20260725-v2]
+    paths:
+      - recovery/source/app/**
+      - recovery/source/tests/m2b_pilot_route_probe.py
+      - recovery/source/tests/fixtures/pilot_v1/**
+      - recovery/source/tools/generate_pilot_frozen_set.py
+      - recovery/source/requirements.txt
+      - .github/workflows/pilot-alpha-m2b-route-ci.yml
+  push:
+    branches: [pilot/controlled-vertical-alpha-v1-3-1]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: imagelab-pilot-m2b-route-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  m2b-pilot-route:
+    name: Real background extract cleanup size QA PNG PNG-DTF restart
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    defaults:
+      run:
+        working-directory: recovery/source
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.13.14'
+      - name: Install exact source dependencies
+        run: python -m pip install -q --requirement requirements.txt
+      - name: Generate exact Frozen Pilot Set v1
+        run: python tools/generate_pilot_frozen_set.py
+      - name: Enforce real-runtime evidence boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'uvicorn' tests/m2b_pilot_route_probe.py
+          grep -q 'http.client' tests/m2b_pilot_route_probe.py
+          grep -q 'PNG_DTF' tests/m2b_pilot_route_probe.py
+          ! grep -nE 'TestClient|monkeypatch|unittest\.mock|from mock|import mock|page\.route|route\.fulfill' tests/m2b_pilot_route_probe.py
+      - name: Run real M2B-PILOT route probe
+        env:
+          PILOT_EVIDENCE_DIR: artifacts/pilot-m2b-route
+          PILOT_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: python tests/m2b_pilot_route_probe.py
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        if: always()
+        with:
+          name: ImageLab-M2B-Pilot-Route-${{ github.event.pull_request.head.sha || github.sha }}
+          path: recovery/source/artifacts/pilot-m2b-route/
+          retention-days: 30
+          if-no-files-found: error
