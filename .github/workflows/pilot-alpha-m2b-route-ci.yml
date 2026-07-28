@@ -55,6 +55,12 @@ jobs:
         if: always()
         with:
           name: ImageLab-M2B-Pilot-Route-${{ github.event.pull_request.head.sha || github.sha }}
-          path: recovery/source/artifacts/pilot-m2b-route/
+          path: |
+            recovery/source/artifacts/pilot-m2b-route/
+            recovery/source/app/static/index.html
+            recovery/source/app/static/app.js
+            recovery/source/app/services/image_processing.py
+            recovery/source/app/services/qa_service.py
+            recovery/source/tests/m2b_pilot_route_probe.py
           retention-days: 30
           if-no-files-found: error
