@@ -12,26 +12,26 @@ Approved by the user on 2026-07-27:
 - Rule: an evidence gap does not authorize a product-code change.
 - Rule: PASS requires implementation, relevant test and artifact on one exact candidate SHA.
 
-| ID | Requirement | Allowed action | Mandatory test | Evidence/artifact | PASS criterion | Status |
-|---|---|---|---|---|---|---|
-| PIL-001 | Pilot scope authorization | Approved v1.3.1/RTM recorded before product patch; executable scope guard | Static governance/commit-order check | Spec, RTM, register, baseline, guard | All five artifacts in the first atomic commit; no conflicting scope | APPROVED / REPOSITORY RECORD PENDING |
-| PIL-002 | Exact baseline | Recheck PR #11/head and parallel mutation immediately before implementation | PR/head/ancestry/diff inventory | Baseline manifest and GitHub metadata | One baseline and rollback SHA; no parallel mutation | BASELINE VERIFIED FOR GOVERNANCE |
-| PIL-003 | Project lifecycle | Do not change product code until live route reproduces a defect | Real FastAPI create→upload→process→restart→reopen | Trace, project JSON and hashes | Project/history/active version persist; source unchanged | PARTIAL / LIVE EVIDENCE GAP |
-| PIL-004 | Real upload | Add real fixture/live upload evidence; fix only reproduced defect | UI/API upload of real raster | Stored hash, metadata, checks, preview | Asset metadata factual and file intact | EVIDENCE GAP |
-| PIL-005 | Mask | Prove live persistence and asset isolation | Draw/add/subtract/clear/switch/restart | Mask data and browser trace | Mask bound to correct asset and restored | EVIDENCE GAP |
-| PIL-006 | Background/Extract | Open only explicit M2B-PILOT path | Live masked operation on frozen fixtures | Source/result hashes, lineage, boundary metrics | New version; unchanged source; no forbidden outside-mask change | NOT STARTED |
-| PIL-007 | Cleanup | Use conservative deterministic operations only | Live cleanup, region/color checks | Before/after metrics and parameters | No hidden color/geometry change; valid lineage | NOT STARTED |
-| PIL-008 | Size/PPI/Canvas | Reproduce specific live/visual defect before minimal fix | Linked/unlinked, resample, margins, invalid input, binary check | Requested/actual table, screenshots, output | Binary file matches requested values; controls reachable | BLOCKED BY LIVE/VISUAL EVIDENCE |
-| PIL-009 | Pilot QA | Implement only deterministic mandatory checks | Positive and negative QA fixtures | QA report linked to asset/candidate | All required checks PASS; failure blocks readiness | NOT STARTED |
-| PIL-010 | PNG export | Add live export/download and binary validation | UI/API export and decode | PNG, hash, dimensions, alpha, PPI, lineage | File exactly matches claimed parameters | EVIDENCE GAP |
-| PIL-011 | Basic PNG DTF | Fix one basic pilot profile without production claim | Live export/decode/metadata | PNG DTF, manifest and QA | Valid basic profile; no production-ready claim | NOT STARTED |
-| PIL-012 | LIVE-E2E-01 | Use real FastAPI/ProjectStore/filesystem/processing/export; no route mocks | Full Alpha route | Server log, Playwright trace, downloads, persisted project | Full route passes without mocked production surfaces | NOT STARTED / P0 |
-| PIL-013 | Visual reachability | Fix only reproduced layout/scroll/focus defects | Reachability at 800/1024/1280/1440/1920 | Screenshots, assertions, manual review | No clipped or unreachable mandatory controls | OPEN / P0 |
-| PIL-014 | No runtime training | Fail-close train/rollback in user runtime; keep offline evaluation code | Negative API/UI and no-write tests | 403/404/disabled behavior and no promoted-model writes | No user runtime path changes model weights | OPEN / P0 |
-| PIL-015 | Frozen Pilot Set v1 | Create 5 representative + 3 adversarial immutable fixtures before benchmark | Fixture hash/property validation | Fixture files and manifest | Eight fixtures and thresholds frozen before processing | NOT STARTED / P0 |
-| PIL-016 | Single candidate | Bind CI, traces, screenshots, outputs and reports to one SHA | Mismatched-SHA negative guard | Candidate manifest and workflow metadata | No mixed snapshots, orphan blobs or different installer SHA | NOT STARTED |
-| PIL-017 | Exact Windows Beta | Do not touch installer before Alpha PASS | Clean install, route, restart, uninstall, preservation | Installer SHA and Windows evidence | Same route passes on exact installed build | DEFERRED |
-| PIL-018 | Physical pilot | Run only after exact Beta clean-install PASS | User executes full route | L5 report, output hashes, defect register | Physical route complete; blockers classified | DEFERRED |
+| ID | Requirement | Milestone / gate | Allowed action | Mandatory test | Evidence / artifact | Required evidence level | PASS criterion | Factual status |
+|---|---|---|---|---|---|---|---|---|
+| PIL-001 | Pilot scope authorization | PG0–PG1 | Approved v1.3.1/RTM recorded before product patch; executable scope guard | Static governance/commit-order check | Spec, RTM, register, baseline, guard | L2 | All five artifacts in the first atomic commit; no conflicting scope | VERIFIED L2 — governance guard run `30389784679` on head `c26c83b12fdec68bb2aa89c3ca05d8588f3768d9` |
+| PIL-002 | Exact baseline | PG0 and before each batch | Recheck PR #11/head and parallel mutation immediately before implementation | PR/head/ancestry/diff inventory | Baseline manifest and GitHub metadata | L2 | One baseline and rollback SHA; no parallel mutation | VERIFIED L2 FOR PG1 — baseline ancestry passed on run `30389784679`; next batch requires a fresh head check |
+| PIL-003 | Project lifecycle | PG2 | Do not change product code until live route reproduces a defect | Real FastAPI create→upload→process→restart→reopen | Trace, project JSON and hashes | L2 | Project/history/active version persist; source unchanged | PARTIAL / LIVE EVIDENCE GAP |
+| PIL-004 | Real upload | PG2 | Add real fixture/live upload evidence; fix only reproduced defect | UI/API upload of real raster | Stored hash, metadata, checks, preview | L2 | Asset metadata factual and file intact | EVIDENCE GAP |
+| PIL-005 | Mask | PG2 | Prove live persistence and asset isolation | Draw/add/subtract/clear/switch/restart | Mask data and browser trace | L2 | Mask bound to correct asset and restored | EVIDENCE GAP |
+| PIL-006 | Background/Extract | PG3 | Open only explicit M2B-PILOT path | Live masked operation on frozen fixtures | Source/result hashes, lineage, boundary metrics | L2 | New version; unchanged source; no forbidden outside-mask change | NOT STARTED |
+| PIL-007 | Cleanup | PG3 | Use conservative deterministic operations only | Live cleanup, region/color checks | Before/after metrics and parameters | L2 | No hidden color/geometry change; valid lineage | NOT STARTED |
+| PIL-008 | Size/PPI/Canvas | PG3–PG4 | Reproduce specific live/visual defect before minimal fix | Linked/unlinked, resample, margins, invalid input, binary check | Requested/actual table, screenshots, output | L2 | Binary file matches requested values; controls reachable | BLOCKED BY LIVE/VISUAL EVIDENCE |
+| PIL-009 | Pilot QA | PG3 | Implement only deterministic mandatory checks | Positive and negative QA fixtures | QA report linked to asset/candidate | L2 | All required checks PASS; failure blocks readiness | NOT STARTED |
+| PIL-010 | PNG export | PG3 | Add live export/download and binary validation | UI/API export and decode | PNG, hash, dimensions, alpha, PPI, lineage | L2 | File exactly matches claimed parameters | EVIDENCE GAP |
+| PIL-011 | Basic PNG DTF | PG3 | Fix one basic pilot profile without production claim | Live export/decode/metadata | PNG DTF, manifest and QA | L2 | Valid basic profile; no production-ready claim | NOT STARTED |
+| PIL-012 | LIVE-E2E-01 | PG2–PG3 | Use real FastAPI/ProjectStore/filesystem/processing/export; no route mocks | Full Alpha route | Server log, Playwright trace, downloads, persisted project | L2 | Full route passes without mocked production surfaces | NOT STARTED / P0 |
+| PIL-013 | Visual reachability | PG4 | Fix only reproduced layout/scroll/focus defects | Reachability at 800/1024/1280/1440/1920 | Screenshots, assertions, manual review | L2 | No clipped or unreachable mandatory controls | OPEN / P0 |
+| PIL-014 | No runtime training | PG2 | Fail-close train/rollback in user runtime; keep offline evaluation code | Negative API/UI and no-write tests | 403/404/disabled behavior and no promoted-model writes | L2 | No user runtime path changes model weights | OPEN / P0 |
+| PIL-015 | Frozen Pilot Set v1 | PG1 | Create 5 representative + 3 adversarial immutable fixtures before benchmark | Fixture hash/property validation | Fixture generator, manifest, hosted artifact `8700428913` | L2 | Eight fixtures and thresholds frozen before processing | VERIFIED L2 — run `30389784679`; artifact digest `sha256:e1d36524fbf08abc23d3e867dd1b9514ffcb92e90b54a24cfa6b5424c5ae9779`; benchmark remains `NOT_STARTED` |
+| PIL-016 | Single candidate | PG5 | Bind CI, traces, screenshots, outputs and reports to one SHA | Mismatched-SHA negative guard | Candidate manifest and workflow metadata | L2 | No mixed snapshots, orphan blobs or different installer SHA | NOT STARTED |
+| PIL-017 | Exact Windows Beta | PG7 | Do not touch installer before Alpha PASS | Clean install, route, restart, uninstall, preservation | Installer SHA and Windows evidence | L4 | Same route passes on exact installed build | DEFERRED |
+| PIL-018 | Physical pilot | PG8 | Run only after exact Beta clean-install PASS | User executes full route | L5 report, output hashes, defect register | L5 | Physical route complete; blockers classified | DEFERRED |
 
 ## Gate order
 
@@ -44,11 +44,22 @@ Approved by the user on 2026-07-27:
 7. `PG6`: close PIL-001–PIL-016 or remain blocked.
 8. `PG7–PG8`: exact Windows Beta and physical pilot, only after Alpha PASS.
 
+## PG1 execution evidence
+
+- Governance self-match defect reproduced on run `30287592705`; failed step: `Block prohibited completion claims`.
+- Minimal guard-only correction: commit `cf1f0f3f1d1192976aac0fc01b104c0736ba48da`.
+- Corrected governance run `30388836881`: all governance steps successful.
+- Frozen Pilot Set commit: `c26c83b12fdec68bb2aa89c3ca05d8588f3768d9`.
+- Frozen-set run `30389784679`: generation, validation, artifact upload, ancestry, scope, claim and manifest checks successful.
+- Hosted artifact: `8700428913`, head SHA `c26c83b12fdec68bb2aa89c3ca05d8588f3768d9`, digest `sha256:e1d36524fbf08abc23d3e867dd1b9514ffcb92e90b54a24cfa6b5424c5ae9779`.
+- Downloaded archive was re-read successfully; ZIP integrity and all eight file hashes matched the frozen manifest.
+
 Current protocol status:
 
 ```text
 PILOT_ALPHA_AUTHORIZED
-GOVERNANCE_FIRST_COMMIT_PENDING
+PG1_VERIFIED_L2
+PG2_NOT_STARTED
 PRODUCT_IMPLEMENTATION_NOT_STARTED
 M2A_IN_PROGRESS
 M2B_FULL_NOT_STARTED
