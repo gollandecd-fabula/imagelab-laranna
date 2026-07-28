@@ -208,7 +208,7 @@ def activate_module(page: Page, module: str) -> str:
     page.wait_for_function(
         "module => { const pane = document.querySelector(`[data-pane=\"${module}\"]`); "
         "return pane && pane.classList.contains('active'); }",
-        module,
+        arg=module,
         timeout=5000,
     )
     return method
