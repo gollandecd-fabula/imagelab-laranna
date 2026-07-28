@@ -1,0 +1,62 @@
+name: ImageLab Pilot Alpha Visual Reachability
+
+on:
+  pull_request:
+    branches: [redteam/imagelab-complete-audit-20260725-v2]
+    paths:
+      - recovery/source/app/**
+      - recovery/source/tests/visual_reachability_probe.py
+      - recovery/source/tests/fixtures/pilot_v1/**
+      - recovery/source/tools/generate_pilot_frozen_set.py
+      - recovery/source/requirements.txt
+      - .github/workflows/pilot-alpha-visual-reachability-ci.yml
+  push:
+    branches: [pilot/controlled-vertical-alpha-v1-3-1]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: imagelab-pilot-visual-reachability-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  visual-reachability:
+    name: Real Chromium five-width controls and screenshots
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    defaults:
+      run:
+        working-directory: recovery/source
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.13.14'
+      - name: Install exact source and browser dependencies
+        run: |
+          python -m pip install -q --requirement requirements.txt
+          python -m pip install -q playwright==1.60.0
+          python -m playwright install --with-deps chromium
+      - name: Generate exact Frozen Pilot Set v1
+        run: python tools/generate_pilot_frozen_set.py
+      - name: Enforce real-runtime browser boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'uvicorn' tests/visual_reachability_probe.py
+          grep -q 'page.goto' tests/visual_reachability_probe.py
+          ! grep -nE 'page\.route|route\.fulfill|TestClient|monkeypatch|unittest\.mock|from mock|import mock' tests/visual_reachability_probe.py
+      - name: Run five-width visual reachability probe
+        env:
+          PILOT_EVIDENCE_DIR: artifacts/pilot-visual-reachability
+          PILOT_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: python tests/visual_reachability_probe.py
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        if: always()
+        with:
+          name: ImageLab-Visual-Reachability-${{ github.event.pull_request.head.sha || github.sha }}
+          path: recovery/source/artifacts/pilot-visual-reachability/
+          retention-days: 30
+          if-no-files-found: error
