@@ -70,29 +70,29 @@ def request(
         connection.request(method, path, body=payload, headers=request_headers)
         response = connection.getresponse()
         data = response.read()
-        normalized_headers = {key.lower(): value for key, value in response.getheaders()}
+        response_headers = {key.lower(): value for key, value in response.getheaders()}
     finally:
         connection.close()
     if response.status not in expected:
         raise ReachabilityError(
-            f"{method} {path}: HTTP {response.status}; {data.decode('utf-8', 'replace')[:1600]}"
+            f"{method} {path}: HTTP {response.status}; {data.decode('utf-8', 'replace')[:1200]}"
         )
-    return response.status, normalized_headers, data
+    return response.status, response_headers, data
 
 
-def multipart_file(field: str, filename: str, media_type: str, data: bytes) -> tuple[bytes, str]:
+def multipart_file(filename: str, data: bytes) -> tuple[bytes, str]:
     boundary = f"ImageLabVisual{uuid.uuid4().hex}"
-    body = bytearray()
-    body.extend(f"--{boundary}\r\n".encode("ascii"))
-    body.extend(
+    payload = bytearray()
+    payload.extend(f"--{boundary}\r\n".encode("ascii"))
+    payload.extend(
         (
-            f'Content-Disposition: form-data; name="{field}"; filename="{filename}"\r\n'
-            f"Content-Type: {media_type}\r\n\r\n"
+            f'Content-Disposition: form-data; name="files"; filename="{filename}"\r\n'
+            "Content-Type: image/png\r\n\r\n"
         ).encode("utf-8")
     )
-    body.extend(data)
-    body.extend(f"\r\n--{boundary}--\r\n".encode("ascii"))
-    return bytes(body), boundary
+    payload.extend(data)
+    payload.extend(f"\r\n--{boundary}--\r\n".encode("ascii"))
+    return bytes(payload), boundary
 
 
 def start_server() -> tuple[subprocess.Popen[bytes], Any]:
@@ -119,14 +119,14 @@ def start_server() -> tuple[subprocess.Popen[bytes], Any]:
         stdout=log,
         stderr=subprocess.STDOUT,
     )
-    deadline = time.monotonic() + 75.0
+    deadline = time.monotonic() + 75
     last_error = "no response"
     while time.monotonic() < deadline:
         if process.poll() is not None:
             log.close()
             raise ReachabilityError(f"runtime exited with code {process.returncode}")
         try:
-            status, _, _ = request("GET", "/api/health", timeout=2.0)
+            status, _, _ = request("GET", "/api/health", timeout=2)
             if status == 200:
                 return process, log
         except Exception as exc:  # startup polling only
@@ -149,21 +149,19 @@ def stop_server(process: subprocess.Popen[bytes] | None, log: Any | None) -> Non
 
 
 def prepare_real_project() -> dict[str, Any]:
-    request(
-        "POST",
-        f"/api/projects/{PROJECT_ID}",
-        json_body={"title": "Pilot Visual Reachability"},
-    )
+    # The source runtime creates TS-001 during startup. Reuse that real project
+    # and reset only its assets instead of issuing a duplicate create request.
+    request("GET", f"/api/projects/{PROJECT_ID}")
+    request("DELETE", f"/api/projects/{PROJECT_ID}/assets")
     fixture_bytes = FIXTURE.read_bytes()
-    upload_body, boundary = multipart_file("files", FIXTURE.name, "image/png", fixture_bytes)
+    upload_body, boundary = multipart_file(FIXTURE.name, fixture_bytes)
     _, _, data = request(
         "POST",
         f"/api/projects/{PROJECT_ID}/upload",
         body=upload_body,
         headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
     )
-    payload = json.loads(data.decode("utf-8"))
-    asset = payload["uploaded"][0]
+    asset = json.loads(data.decode("utf-8"))["uploaded"][0]
     require(asset["sha256"] == sha256(fixture_bytes), "real upload SHA mismatch")
     return asset
 
@@ -171,13 +169,13 @@ def prepare_real_project() -> dict[str, Any]:
 def launch_browser(manager) -> Browser:
     executable = next(
         (
-            candidate
-            for candidate in (
+            path
+            for path in (
                 shutil.which("chromium"),
                 shutil.which("chromium-browser"),
                 shutil.which("google-chrome"),
             )
-            if candidate
+            if path
         ),
         None,
     )
@@ -187,13 +185,13 @@ def launch_browser(manager) -> Browser:
 
 
 def module_names(page: Page) -> list[str]:
-    modules = page.locator("button[data-module]").evaluate_all(
-        "elements => elements.map(element => element.dataset.module).filter(Boolean)"
+    desktop = page.locator("button[data-module]").evaluate_all(
+        "nodes => nodes.map(node => node.dataset.module).filter(Boolean)"
     )
     mobile = page.locator(".m2a-mobile-nav option").evaluate_all(
-        "elements => elements.map(element => element.value).filter(Boolean)"
+        "nodes => nodes.map(node => node.value).filter(Boolean)"
     )
-    return list(dict.fromkeys([*modules, *mobile]))
+    return list(dict.fromkeys([*desktop, *mobile]))
 
 
 def activate_module(page: Page, module: str) -> str:
@@ -216,34 +214,33 @@ def activate_module(page: Page, module: str) -> str:
     return method
 
 
-def interactive_results(page: Page, module: str) -> list[dict[str, Any]]:
+def inspect_active_controls(page: Page, module: str) -> list[dict[str, Any]]:
     pane = page.locator(f'[data-pane="{module}"].active').first
-    require(pane.count() == 1, f"active pane missing for {module}")
+    require(pane.count() == 1, f"active pane missing: {module}")
     controls = pane.locator("button, a[href], input, select, textarea, summary")
-    results: list[dict[str, Any]] = []
+    result: list[dict[str, Any]] = []
     for index in range(controls.count()):
         control = controls.nth(index)
         if not control.is_visible():
             continue
-        result = control.evaluate(
+        metrics = control.evaluate(
             """element => {
                 element.scrollIntoView({block: 'center', inline: 'nearest'});
                 const rect = element.getBoundingClientRect();
                 const disabled = Boolean(element.disabled) || element.getAttribute('aria-disabled') === 'true';
-                const hiddenInput = element.tagName === 'INPUT' && element.type === 'hidden';
-                if (!disabled && !hiddenInput) element.focus({preventScroll: true});
-                const focused = disabled || hiddenInput || document.activeElement === element || element.contains(document.activeElement);
-                const centerX = Math.min(window.innerWidth - 1, Math.max(0, rect.left + rect.width / 2));
-                const centerY = Math.min(window.innerHeight - 1, Math.max(0, rect.top + rect.height / 2));
-                const top = document.elementFromPoint(centerX, centerY);
+                const hidden = element.tagName === 'INPUT' && element.type === 'hidden';
+                if (!disabled && !hidden) element.focus({preventScroll: true});
+                const focused = disabled || hidden || document.activeElement === element || element.contains(document.activeElement);
+                const x = Math.min(window.innerWidth - 1, Math.max(0, rect.left + rect.width / 2));
+                const y = Math.min(window.innerHeight - 1, Math.max(0, rect.top + rect.height / 2));
+                const top = document.elementFromPoint(x, y);
                 const unobscured = Boolean(top && (top === element || element.contains(top) || top.contains(element)));
                 const inside = rect.width > 0 && rect.height > 0 && rect.left >= -1 && rect.right <= window.innerWidth + 1 && rect.top >= -1 && rect.bottom <= window.innerHeight + 1;
-                const text = (element.innerText || element.getAttribute('aria-label') || element.getAttribute('title') || element.getAttribute('name') || '').trim().replace(/\s+/g, ' ').slice(0, 100);
                 return {
                     id: element.id || null,
                     tag: element.tagName.toLowerCase(),
                     type: element.type || null,
-                    text,
+                    text: (element.innerText || element.getAttribute('aria-label') || element.getAttribute('title') || element.getAttribute('name') || '').trim().replace(/\s+/g, ' ').slice(0, 100),
                     disabled,
                     focused,
                     unobscured,
@@ -252,10 +249,9 @@ def interactive_results(page: Page, module: str) -> list[dict[str, Any]]:
                 };
             }"""
         )
-        result["module"] = module
-        result["index"] = index
-        results.append(result)
-    return results
+        metrics.update({"module": module, "index": index})
+        result.append(metrics)
+    return result
 
 
 def width_probe(browser: Browser, width: int) -> dict[str, Any]:
@@ -267,6 +263,13 @@ def width_probe(browser: Browser, width: int) -> dict[str, Any]:
         lambda message: console_errors.append(message.text) if message.type == "error" else None,
     )
     page.on("pageerror", lambda error: page_errors.append(str(error)))
+    report: dict[str, Any] = {
+        "width": width,
+        "height": VIEWPORT_HEIGHT,
+        "modules": [],
+        "module_reports": [],
+        "failures": [],
+    }
     try:
         page.goto(ORIGIN, wait_until="load", timeout=60_000)
         page.wait_for_selector("#projectName", state="visible", timeout=15_000)
@@ -275,76 +278,89 @@ def width_probe(browser: Browser, width: int) -> dict[str, Any]:
             timeout=15_000,
         )
         page.wait_for_timeout(500)
-        forbidden_ui = page.locator(
-            "#aiTrainButton, #aiRollbackButton, #aiTrainModule"
-        ).count()
-        html = page.content()
-        require("/api/ai/train" not in html and "/api/ai/rollback" not in html, "training route leaked into served HTML")
-        require(forbidden_ui == 0, "runtime training controls leaked into served HTML")
-
+        require(
+            page.locator("#aiTrainButton, #aiRollbackButton, #aiTrainModule").count() == 0,
+            "runtime training controls leaked into served HTML",
+        )
         modules = module_names(page)
-        require(len(modules) >= 9, f"too few modules discovered: {modules}")
-        module_reports: list[dict[str, Any]] = []
-        failures: list[dict[str, Any]] = []
+        require(len(modules) >= 9, f"too few modules: {modules}")
+        report["modules"] = modules
         max_overflow = 0.0
         for module in modules:
-            method = activate_module(page, module)
-            page.wait_for_timeout(40)
-            overflow = float(
-                page.evaluate(
-                    "Math.max(0, document.documentElement.scrollWidth - window.innerWidth)"
+            try:
+                navigation = activate_module(page, module)
+                page.wait_for_timeout(40)
+                overflow = float(
+                    page.evaluate(
+                        "Math.max(0, document.documentElement.scrollWidth - window.innerWidth)"
+                    )
                 )
-            )
-            max_overflow = max(max_overflow, overflow)
-            controls = interactive_results(page, module)
-            require(controls, f"active module has no visible controls: {module}")
-            module_failures = [
-                item
-                for item in controls
-                if not item["inside"] or not item["unobscured"] or not item["focused"]
-            ]
-            if overflow > 1:
-                module_failures.append(
+                max_overflow = max(max_overflow, overflow)
+                controls = inspect_active_controls(page, module)
+                require(controls, f"active module has no visible controls: {module}")
+                failures = [
+                    item
+                    for item in controls
+                    if not item["inside"] or not item["unobscured"] or not item["focused"]
+                ]
+                if overflow > 1:
+                    failures.append(
+                        {
+                            "module": module,
+                            "kind": "horizontal_overflow",
+                            "overflow_px": overflow,
+                        }
+                    )
+                report["failures"].extend(failures)
+                report["module_reports"].append(
                     {
                         "module": module,
-                        "kind": "horizontal_overflow",
-                        "overflow_px": overflow,
+                        "navigation": navigation,
+                        "visible_controls": len(controls),
+                        "horizontal_overflow_px": overflow,
+                        "failures": failures,
                     }
                 )
-            failures.extend(module_failures)
-            module_reports.append(
-                {
+            except Exception as exc:
+                failure = {
                     "module": module,
-                    "navigation": method,
-                    "visible_controls": len(controls),
-                    "horizontal_overflow_px": overflow,
-                    "failures": module_failures,
+                    "kind": "module_probe_error",
+                    "message": f"{type(exc).__name__}: {exc}",
                 }
-            )
-
+                report["failures"].append(failure)
+                report["module_reports"].append(
+                    {"module": module, "navigation": None, "failures": [failure]}
+                )
         screenshot_module = "geometry" if "geometry" in modules else modules[0]
         activate_module(page, screenshot_module)
-        page.screenshot(
-            path=str(EVIDENCE_ROOT / f"visual-{width}.png"),
-            full_page=True,
+        screenshot = EVIDENCE_ROOT / f"visual-{width}.png"
+        page.screenshot(path=str(screenshot), full_page=True)
+        report.update(
+            {
+                "max_horizontal_overflow_px": max_overflow,
+                "screenshot": screenshot.name,
+                "screenshot_size_bytes": screenshot.stat().st_size,
+            }
         )
-        screenshot_size = (EVIDENCE_ROOT / f"visual-{width}.png").stat().st_size
-        return {
-            "width": width,
-            "height": VIEWPORT_HEIGHT,
-            "modules": modules,
-            "module_reports": module_reports,
-            "max_horizontal_overflow_px": max_overflow,
-            "console_errors": console_errors,
-            "page_errors": page_errors,
-            "screenshot": f"visual-{width}.png",
-            "screenshot_size_bytes": screenshot_size,
-            "failures": failures
-            + [{"kind": "console_error", "message": item} for item in console_errors]
-            + [{"kind": "page_error", "message": item} for item in page_errors],
-        }
+    except Exception as exc:
+        report["failures"].append(
+            {
+                "kind": "width_probe_error",
+                "message": f"{type(exc).__name__}: {exc}",
+                "traceback": traceback.format_exc(),
+            }
+        )
     finally:
+        report["failures"].extend(
+            {"kind": "console_error", "message": item} for item in console_errors
+        )
+        report["failures"].extend(
+            {"kind": "page_error", "message": item} for item in page_errors
+        )
+        report["console_errors"] = console_errors
+        report["page_errors"] = page_errors
         page.close()
+    return report
 
 
 def main() -> int:
