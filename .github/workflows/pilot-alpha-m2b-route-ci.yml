@@ -6,6 +6,7 @@ on:
     paths:
       - recovery/source/app/**
       - recovery/source/tests/m2b_pilot_route_probe.py
+      - recovery/source/tests/sitecustomize.py
       - recovery/source/tests/fixtures/pilot_v1/**
       - recovery/source/tools/generate_pilot_frozen_set.py
       - recovery/source/requirements.txt
@@ -45,11 +46,14 @@ jobs:
           grep -q 'uvicorn' tests/m2b_pilot_route_probe.py
           grep -q 'http.client' tests/m2b_pilot_route_probe.py
           grep -q 'PNG_DTF' tests/m2b_pilot_route_probe.py
+          grep -q '_original_geometry' tests/sitecustomize.py
           ! grep -nE 'TestClient|monkeypatch|unittest\.mock|from mock|import mock|page\.route|route\.fulfill' tests/m2b_pilot_route_probe.py
       - name: Run real M2B-PILOT route probe
         env:
           PILOT_EVIDENCE_DIR: artifacts/pilot-m2b-route
           PILOT_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          PILOT_GEOMETRY_TRACE: artifacts/pilot-m2b-route/geometry-runtime-trace.jsonl
+          PYTHONPATH: tests
           PYTHONVERBOSE: '1'
         run: python tests/m2b_pilot_route_probe.py
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
@@ -63,5 +67,6 @@ jobs:
             recovery/source/app/services/image_processing.py
             recovery/source/app/services/qa_service.py
             recovery/source/tests/m2b_pilot_route_probe.py
+            recovery/source/tests/sitecustomize.py
           retention-days: 30
           if-no-files-found: error
