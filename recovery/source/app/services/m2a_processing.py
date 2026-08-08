@@ -115,6 +115,26 @@ def geometry_m2a(image: Image.Image, ppi: float, params: dict[str, Any]) -> tupl
         params["content_resampled"] = False
 
     canvas = params.get("canvas")
+    if not isinstance(canvas, dict):
+        flat_canvas_keys = (
+            "canvas_width_mm",
+            "canvas_height_mm",
+            "margin_top_mm",
+            "margin_right_mm",
+            "margin_bottom_mm",
+            "margin_left_mm",
+        )
+        if any(params.get(key) is not None and params.get(key) != "" for key in flat_canvas_keys):
+            canvas = {
+                "width_mm": params.get("canvas_width_mm"),
+                "height_mm": params.get("canvas_height_mm"),
+                "top_mm": params.get("margin_top_mm", 0),
+                "right_mm": params.get("margin_right_mm", 0),
+                "bottom_mm": params.get("margin_bottom_mm", 0),
+                "left_mm": params.get("margin_left_mm", 0),
+                "anchor": "center",
+            }
+            params["canvas"] = canvas
     if isinstance(canvas, dict):
         top_mm = legacy._number(canvas, "top_mm", 0, 0, 500)
         bottom_mm = legacy._number(canvas, "bottom_mm", 0, 0, 500)
