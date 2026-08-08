@@ -1,0 +1,73 @@
+{
+  "schema": 1,
+  "status": "PASS_CANONICAL_SOURCE_PIN",
+  "authorization": "NON_AUTHORIZING_IDENTITY_PIN_ONLY",
+  "project": "ImageLab by LarannA",
+  "repository": "gollandecd-fabula/imagelab-laranna",
+  "branch": "bootstrap/zero-trust-gate",
+  "pinning_transaction_parent_sha": "12208d708f3870fc2323ad351b3a2abe14fa672a",
+  "source": {
+    "file": "bootstrap/imagelab-source.zip",
+    "version": "1.4.9-recovery-candidate",
+    "build_id": "REC-RT8-M6-20260724-06",
+    "sha256": "83bcfcc9e9d6dfaa29ef2827f3a967d9719cbff2650672b7d5d9d3eac1af4885",
+    "git_blob_sha": "31ca6f0643b4b769ce99c6edeeb2bc98f1caafd6",
+    "size_bytes": 378975,
+    "member_count": 87,
+    "members_sha256": "b0c43a785c437bf649750a5541386b81b6436c160aad07a5aa6903265581e2fe"
+  },
+  "provenance": {
+    "canonical_source_path": "recovery/dist/ImageLab_by_LarannA_RECOVERY_1.4.9_SOURCE.zip",
+    "canonical_source_git_blob_sha": "31ca6f0643b4b769ce99c6edeeb2bc98f1caafd6",
+    "promotion_commit": "87dfdb2f1c37359028320a2df3b055baf9a03b1f",
+    "promotion_commit_message": "recovery: promote exact 1.4.9 source to bootstrap [recovery-bootstrap-149-output]"
+  },
+  "independent_evidence": {
+    "source_manifest": {
+      "path": "recovery/dist/source-manifest-1.4.9.json",
+      "git_blob_sha": "67545ef8ad468fec5440b78f98cd64bba1b5c7d7",
+      "status": "PASS",
+      "reproducible_builds": 2,
+      "builds_byte_identical": true
+    },
+    "promotion_admission": {
+      "path": "recovery/evidence/bootstrap-promotion-1.4.9/admission.json",
+      "git_blob_sha": "e5390101e150c6b1e9ff26286aff5641fbc9ae67",
+      "status": "PASS"
+    },
+    "hosted_windows_summary": {
+      "path": "recovery/evidence/windows-gate/rc13-windows-evidence-summary.json",
+      "git_blob_sha": "79e4eaa98182e078f97d95c3638d1fc1f921aec3",
+      "run_id": "30111216367",
+      "gates": {
+        "B0": "PASS",
+        "B1": "PASS",
+        "B2": "PASS",
+        "B3_B5": "PASS",
+        "B8": "PASS"
+      }
+    },
+    "checksum_file": {
+      "path": "bootstrap/imagelab-source.sha256",
+      "git_blob_sha": "7405fffce082932393ad885945a1de23285bd288"
+    },
+    "rc13_workflow": {
+      "path": ".github/workflows/rc13-windows-gate.yml",
+      "git_blob_sha": "ad1aeaf04cb87b94c90b0f81267900b440736ce8",
+      "expected_source_sha256": "83bcfcc9e9d6dfaa29ef2827f3a967d9719cbff2650672b7d5d9d3eac1af4885"
+    }
+  },
+  "rejected_stale_identity": {
+    "sha256": "e130ce027c2d54b72161afe6b9882f66a4311f01d7249b6c7e9bbd9ce4645327",
+    "version": "1.4.7-recovery-candidate",
+    "build_id": "REC-RT8-M6-20260724-04",
+    "reason": "Superseded by intentional reproducible 1.4.9 bootstrap promotion and exact hosted Windows evidence."
+  },
+  "claim_boundary": {
+    "canonical_source_identity": "PASS",
+    "historical_evidence_rewritten": false,
+    "authorizing_update_baseline": "UNAVAILABLE",
+    "physical_user_machine_L5": "UNVERIFIED",
+    "release": "BLOCKED"
+  }
+}

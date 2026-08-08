@@ -4,20 +4,31 @@
 
 ## Exact source identity
 
-Для текущего цикла разрешён только один исходный пакет:
+Для текущего recovery-цикла разрешён только один исходный пакет:
 
 - файл: `imagelab-source.zip`;
-- версия: `1.4.3-redteam-cycle6-candidate`;
-- Build ID: `RT8-M6-20260724-02`;
-- SHA-256: `272e825aa4dc320bc6c287fe44700d1c234a9cd97414b719fc62a74b0fc37ab5`.
+- версия: `1.4.9-recovery-candidate`;
+- Build ID: `REC-RT8-M6-20260724-06`;
+- SHA-256: `83bcfcc9e9d6dfaa29ef2827f3a967d9719cbff2650672b7d5d9d3eac1af4885`;
+- размер: `378975` bytes;
+- entries: `87`;
+- canonical provenance: `recovery/dist/ImageLab_by_LarannA_RECOVERY_1.4.9_SOURCE.zip`;
+- promotion commit: `87dfdb2f1c37359028320a2df3b055baf9a03b1f`.
 
-Файл `imagelab-source.sha256` закрепляет этот SHA-256. Совпадение только с самим checksum-файлом недостаточно: B0 независимо проверяет ожидаемую версию, Build ID, безопасные пути архива, CRC, обязательные файлы и privacy denylist.
+`bootstrap/imagelab-source.zip` и `recovery/dist/ImageLab_by_LarannA_RECOVERY_1.4.9_SOURCE.zip` являются одним и тем же Git blob `31ca6f0643b4b769ce99c6edeeb2bc98f1caafd6`.
 
-## Текущий блокер
+Файл `imagelab-source.sha256` закрепляет тот же SHA-256. Совпадение только с checksum-файлом недостаточно: B0 независимо проверяет ожидаемый SHA-256, версию, Build ID, CRC, безопасные пути архива, обязательные файлы и privacy denylist.
 
-На ветке всё ещё находится предыдущий архив с SHA-256 `c236656f53447996dc837a206a8896fc6abacf13d45829d8e9e64888b9f6b308`. Он не соответствует cycle 6 и обязан блокироваться до распаковки/исполнения последующих ворот.
+## Canonical-source evidence
 
-Для продолжения RT8-M6 необходимо атомарно заменить только `bootstrap/imagelab-source.zip` точным cycle-6 архивом. Подмена checksum, ручное изменение версии внутри старого ZIP или ослабление B0 запрещены.
+Текущая source identity подтверждена следующими независимыми артефактами:
+
+- `recovery/dist/source-manifest-1.4.9.json` — reproducible source bundle `2/2 BYTE_IDENTICAL`;
+- `recovery/evidence/bootstrap-promotion-1.4.9/admission.json` — intentional 1.4.9 → bootstrap promotion, expected SHA = actual SHA;
+- `recovery/evidence/windows-gate/rc13-windows-evidence-summary.json` — hosted B0/B1/B2/B3-B5/B8 PASS для source SHA `83bc...4885`;
+- `recovery/evidence/windows-gate/bootstrap-canonical-source-pin.json` — текущая синхронизированная canonical-source pinning запись.
+
+Исторические evidence-файлы не переписываются для подгонки нового кандидата.
 
 ## Проверки bootstrap
 
@@ -29,7 +40,9 @@ Workflow выполняет:
 - B3–B5: чистую Windows-установку, установленный UI-путь и проверку результатов;
 - B8: независимый повторный Windows-прогон.
 
-Bootstrap никогда не публикует установщик как пользовательский релиз. Пока не проверены обновление реальной предыдущей версии, forced-failure rollback и физический пользовательский путь, итог остаётся:
+Bootstrap никогда не авторизует пользовательский релиз. Авторизующая проверка update/rollback требует реального предыдущего `RELEASE_AUTHORIZED` baseline, а физический пользовательский путь требует отдельного L5 на реальном пользовательском компьютере.
+
+Пока эти обязательные gates не доказаны, итог остаётся:
 
 `FAIL-CLOSED`
 

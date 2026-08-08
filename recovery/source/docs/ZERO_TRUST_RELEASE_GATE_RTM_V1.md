@@ -22,6 +22,9 @@ The exact installer binary delivered to the user must be the same binary, by SHA
 
 - Version: `1.4.9-recovery-candidate`.
 - Build ID: `REC-RT8-M6-20260724-06`.
+- Source bundle SHA-256: `83bcfcc9e9d6dfaa29ef2827f3a967d9719cbff2650672b7d5d9d3eac1af4885`.
+- Canonical source provenance: `recovery/dist/ImageLab_by_LarannA_RECOVERY_1.4.9_SOURCE.zip`, promoted to `bootstrap/imagelab-source.zip` by commit `87dfdb2f1c37359028320a2df3b055baf9a03b1f`.
+- Canonical-source pin: `recovery/evidence/windows-gate/bootstrap-canonical-source-pin.json`.
 - Installer SHA-256: `12817550c2fac6a6453945c38eefe86368cd4cfa1991c1565e49b092bd818d56`.
 - Hosted Windows evidence run: `30111216367`.
 - Real-project update/rollback diagnostic: PASS, explicitly non-authorizing.
