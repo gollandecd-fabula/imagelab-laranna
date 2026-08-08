@@ -15,7 +15,23 @@ jobs:
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
+      - name: Bind exact Pilot candidate SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected='${{ github.event.pull_request.head.sha || github.sha }}'
+          actual="$(git rev-parse HEAD)"
+          require_exact() { test "$1" = "$2"; }
+          require_exact "$actual" "$expected" || { echo "::error::candidate mismatch actual=$actual expected=$expected"; exit 1; }
+          mismatch="${expected%?}0"
+          test "$mismatch" != "$expected" || mismatch="${expected%?}1"
+          if require_exact "$actual" "$mismatch"; then
+            echo "::error::mismatched-SHA negative fixture was accepted"
+            exit 1
+          fi
+          printf 'exact_candidate_sha=%s\n' "$actual"
       - name: Require governance artifacts
         shell: bash
         run: |
@@ -41,7 +57,7 @@ jobs:
           python recovery/source/tests/test_pilot_frozen_set.py
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         with:
-          name: ImageLab-Frozen-Pilot-Set-v1-${{ github.sha }}
+          name: ImageLab-Frozen-Pilot-Set-v1-${{ github.event.pull_request.head.sha || github.sha }}
           path: |
             recovery/source/tests/fixtures/pilot_v1/manifest.json
             recovery/source/tests/fixtures/pilot_v1/generated/
