@@ -1,0 +1,59 @@
+START
+IDENTITY PASS
+COMPILEALL 0
+PYTEST START test_a0.py
+PYTEST END test_a0.py 0
+PYTEST START test_a1.py
+PYTEST END test_a1.py 0
+PYTEST START test_a2_a4.py
+PYTEST END test_a2_a4.py 0
+PYTEST START test_ai_audit_concurrency.py
+PYTEST END test_ai_audit_concurrency.py 0
+PYTEST START test_ai_contours.py
+PYTEST END test_ai_contours.py 0
+PYTEST START test_bootstrap.py
+PYTEST END test_bootstrap.py 0
+PYTEST START test_core_failure_regression.py
+PYTEST END test_core_failure_regression.py 0
+PYTEST START test_installer_update_lock.py
+PYTEST END test_installer_update_lock.py 0
+PYTEST START test_isolated_processing.py
+PYTEST END test_isolated_processing.py 0
+PYTEST START test_l5_iz017_regression.py
+PYTEST END test_l5_iz017_regression.py 0
+PYTEST START test_m1_ui.py
+PYTEST END test_m1_ui.py 0
+PYTEST START test_print_extraction.py
+PYTEST END test_print_extraction.py 0
+PYTEST START test_product_workflows.py
+PYTEST END test_product_workflows.py 0
+PYTEST START test_project_lookup_resilience.py
+PYTEST END test_project_lookup_resilience.py 0
+PYTEST START test_project_store_concurrency.py
+PYTEST END test_project_store_concurrency.py 0
+PYTEST START test_redteam_adversarial.py
+PYTEST END test_redteam_adversarial.py 0
+PYTEST START test_redteam_contracts.py
+PYTEST END test_redteam_contracts.py 0
+PYTEST START test_second_core_failure_regression.py
+PYTEST END test_second_core_failure_regression.py 0
+PYTEST START test_segmentation_governance.py
+PYTEST END test_segmentation_governance.py 0
+PYTEST START test_slu_m1_units.py
+PYTEST END test_slu_m1_units.py 0
+PYTEST START test_slu_m2_m5.py
+PYTEST END test_slu_m2_m5.py 0
+PYTEST START test_slu_m3_segmentation.py
+PYTEST END test_slu_m3_segmentation.py 0
+PYTEST START test_slu_m5_e2e.py
+PYTEST END test_slu_m5_e2e.py 0
+PYTEST START test_storage_and_package_integrity.py
+PYTEST END test_storage_and_package_integrity.py 0
+PYTEST START test_windows_packaging_config.py
+PYTEST END test_windows_packaging_config.py 0
+PYTEST START test_zero_trust_release_gate.py
+PYTEST END test_zero_trust_release_gate.py 0
+PYTEST MATRIX COMPLETE
+JAVASCRIPT 0
+BACKEND PASS
+FINAL PASS

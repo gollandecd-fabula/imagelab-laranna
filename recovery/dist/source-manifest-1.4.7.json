@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "status": "PASS",
+  "identity": {
+    "version": "1.4.7-recovery-candidate",
+    "build_id": "REC-RT8-M6-20260724-04"
+  },
+  "file": "ImageLab_by_LarannA_RECOVERY_1.4.7_SOURCE.zip",
+  "sha256": "e130ce027c2d54b72161afe6b9882f66a4311f01d7249b6c7e9bbd9ce4645327",
+  "size_bytes": 377869,
+  "member_count": 87,
+  "members_sha256": "b0c43a785c437bf649750a5541386b81b6436c160aad07a5aa6903265581e2fe",
+  "reproducible_builds": 2,
+  "builds_byte_identical": true
+}

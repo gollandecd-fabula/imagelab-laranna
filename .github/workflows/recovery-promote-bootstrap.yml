@@ -1,0 +1,17 @@
+name: Recovery Promote Bootstrap Source — Retired 1.4.7
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  retired:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Preserve fail-closed retirement record
+        run: |
+          echo 'Automatic promotion of 1.4.7 is retired.'
+          echo 'Active promotion is recovery-promote-bootstrap-rc12.yml for exact 1.4.8.'
+          exit 1

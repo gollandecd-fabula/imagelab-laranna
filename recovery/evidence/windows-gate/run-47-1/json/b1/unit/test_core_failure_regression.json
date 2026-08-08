@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "status": "PASS",
+  "case_id": "test_core_failure_regression",
+  "test_file": "tests/test_core_failure_regression.py",
+  "exit_code": 0,
+  "timed_out": false,
+  "duration_seconds": 1.149,
+  "command": [
+    "/opt/hostedtoolcache/Python/3.13.14/x64/bin/python",
+    "/home/runner/work/imagelab-laranna/imagelab-laranna/source-tree/scripts/run_pytest_exit_safe.py",
+    "-q",
+    "tests/test_core_failure_regression.py"
+  ],
+  "stdout": ".....                                                                    [100%]\n",
+  "stderr": ""
+}

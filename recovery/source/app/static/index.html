@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ImageLab by LarannA</title>
+  <link rel="stylesheet" href="/static/styles.css?v=1.4.5-recovery">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="brand-mark">IL</span><strong>ImageLab</strong><span>by LarannA</span></div>
+    <div class="project-chip">Проект: <strong id="projectName">TS-001</strong></div><div class="ai-health-chip" id="aiHealthChip"><span></span><strong>AI</strong><em id="aiHealthText">проверка…</em></div>
+      <div class="build-version-chip" id="buildVersionChip" title="Версия фактически запущенного сервера">версия: проверка…</div>
+    <div class="top-spacer"></div>
+    <label class="top-mode">Режим<select id="globalOperationMode"><option value="fast">Быстро</option><option value="professional" selected>Профессионально</option><option value="autoparams">Автопараметры</option><option value="check-only">Только проверка</option></select></label>
+    <label class="top-auto-repair"><input id="globalAutoRepair" type="checkbox" checked> AI автоисправление</label>
+    <button class="icon-button" id="refreshButton" type="button" title="Обновить проект">↻</button>
+    <button class="primary-button compact" id="downloadButton" type="button" disabled>Экспорт</button>
+  </header>
+
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Модули ImageLab">
+      <button class="nav-item active" type="button" data-module="upload"><span>⇧</span>Загрузка</button>
+      <button class="nav-item" type="button" data-module="improve"><span>✣</span>Улучшение</button>
+      <button class="nav-item print-nav" type="button" data-module="extract"><span>▧</span>Достать принт</button>
+      <button class="nav-item" type="button" data-module="selection"><span>⌁</span>Выделение</button>
+      <button class="nav-item" type="button" data-module="cleanup"><span>♧</span>Очистка</button>
+      <button class="nav-item" type="button" data-module="halftone"><span>◉</span>Полутон</button>
+      <button class="nav-item" type="button" data-module="vector"><span>◇</span>Вектор</button>
+      <button class="nav-item" type="button" data-module="geometry"><span>▣</span>Размер</button>
+      <button class="nav-item" type="button" data-module="export"><span>⇩</span>Экспорт</button>
+    </aside>
+
+    <main class="workspace">
+      <section class="controls-column">
+        <div class="module-title"><span id="moduleNumber">1.</span><div><h1 id="moduleTitle">Загрузка</h1><p id="moduleSubtitle">Исходные изображения проекта</p></div></div><div class="active-input-strip"><span>Вход обработки</span><strong id="activeInputName">Файл не выбран</strong><span class="lineage-badge" id="activeInputLineage">—</span></div>
+
+        <div class="module-pane active" data-pane="upload">
+          <div class="ai-module-bar" data-ai-scope="upload"><div><span class="ai-spark">AI</span><strong>AI-анализ входа</strong><small>Тип изображения, качество и пригодность определяются автоматически.</small></div><button class="ai-analyze-button" type="button" data-ai-analyze="upload">Проверить AI</button></div>
+          <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Выбрать изображения для загрузки">
+            <div class="upload-symbol">⇧</div>
+            <strong>Перетащите изображение сюда</strong>
+            <span>или нажмите для выбора</span>
+            <button class="primary-button" id="chooseButton" type="button">Выбрать файл</button>
+            <input id="fileInput" type="file" multiple accept=".png,.jpg,.jpeg,.webp,.tif,.tiff,.bmp,.svg" hidden>
+          </div>
+          <p class="hint">Форматы: PNG, JPG, WEBP, TIFF, BMP, SVG · до 50 МБ</p>
+          <div class="row-actions"><span id="assetCount">0 файлов</span><button class="ghost-button danger" id="clearButton" type="button" disabled>Очистить</button></div>
+        </div>
+
+        <div class="module-pane" data-pane="improve">
+          <div class="ai-module-bar" data-ai-scope="improve"><div><span class="ai-spark">AI</span><strong>AI-восстановление</strong><small>Модель выбирает профиль восстановления; параметры остаются под контролем пользователя.</small></div><button class="ai-analyze-button" type="button" data-ai-analyze="improve">Проверить AI</button></div>
+          <div class="segmented"><button class="segment active" type="button" data-improve-mode="quick">Быстро</button><button class="segment" type="button" data-improve-mode="manual">Ручная настройка</button></div>
+          <label>Пресет<select id="enhancePreset"><option value="standard">Стандартное</option><option value="soft">Мягкое</option><option value="detail">Детализация</option><option value="custom">Ручное</option></select></label>
+          <div id="improveManual" class="advanced-group compact-hidden">
+            <label class="range-row"><span>Контраст</span><input id="enhanceContrast" type="range" min="20" max="250" value="110"><output data-for="enhanceContrast">110%</output></label>
+            <label class="range-row"><span>Насыщенность</span><input id="enhanceSaturation" type="range" min="0" max="300" value="105"><output data-for="enhanceSaturation">105%</output></label>
+            <label class="range-row"><span>Резкость</span><input id="enhanceSharpness" type="range" min="0" max="400" value="130"><output data-for="enhanceSharpness">130%</output></label>
+          </div>
+          <label class="range-row"><span>Шумоподавление</span><input id="enhanceDenoise" type="range" min="0" max="100" value="20"><output data-for="enhanceDenoise">20%</output></label>
+          <div class="divider"></div>
+          <strong class="field-group-title">Желаемый размер результата</strong>
+          <div class="region-grid">
+            <label>Желаемая ширина, мм<input id="improveWidthMm" type="number" min="0.1" max="2000" step="0.01"></label>
+            <label>Желаемая высота, мм<input id="improveHeightMm" type="number" min="0.1" max="2000" step="0.01"></label>
+          </div>
+          <label>PPI (DPI), 100–1000<input id="improvePpi" type="number" min="100" max="1000" step="1" value="300"></label>
+          <label class="check-row"><input id="improvePreserveAspect" type="checkbox" checked> Сохранять пропорции</label>
+          <p class="hint" id="improvePixelEstimate">Пиксельный размер будет рассчитан из мм и PPI.</p>
+          <label class="check-row ai-control"><input id="improveAiAuto" type="checkbox" checked> Использовать AI-профиль восстановления</label><button class="primary-button wide" id="applyEnhance" type="button">Применить улучшение</button>
+          <div class="divider"></div>
+          <label>Масштаб реконструкции<select id="reconstructScale"><option value="1">1×</option><option value="2" selected>2×</option><option value="3">3×</option><option value="4">4×</option></select></label>
+          <label class="range-row"><span>Восстановление деталей</span><input id="reconstructDetail" type="range" min="0" max="100" value="50"><output data-for="reconstructDetail">50%</output></label>
+          <button class="secondary-button wide" id="applyReconstruct" type="button">Реконструировать</button>
+        </div>
+
+        <div class="module-pane" data-pane="extract">
+          <div class="ai-module-bar" data-ai-scope="extract"><div><span class="ai-spark">AI</span><strong>AI-сегментация принта</strong><small>Модель отделяет пигмент принта от ткани; опасные маски блокируются.</small></div><button class="ai-analyze-button" type="button" data-ai-analyze="extract">Проверить AI</button></div>
+          <div class="feature-callout"><strong>Извлечение принта с изделия</strong><p>Отделяет изображение принта от ткани, складок и фона. Результат сохраняется отдельным PNG.</p></div>
+          <div class="segmented"><button class="segment active" type="button" data-extract-mode="auto">Автоматически</button><button class="segment" type="button" data-extract-mode="region">Указать область</button></div>
+          <div class="region-grid compact-hidden" id="extractRegionControls">
+            <label>X, %<input id="extractX" type="number" min="0" max="99" value="10"></label>
+            <label>Y, %<input id="extractY" type="number" min="0" max="99" value="10"></label>
+            <label>Ширина, %<input id="extractWidth" type="number" min="1" max="100" value="80"></label>
+            <label>Высота, %<input id="extractHeight" type="number" min="1" max="100" value="80"></label>
+          </div>
+          <label class="range-row"><span>Чувствительность</span><input id="extractSensitivity" type="range" min="0" max="100" value="58"><output data-for="extractSensitivity">58%</output></label>
+          <label class="range-row"><span>Удаление фактуры ткани</span><input id="extractTexture" type="range" min="0" max="100" value="35"><output data-for="extractTexture">35%</output></label>
+          <label class="range-row"><span>Мягкость края, px</span><input id="extractFeather" type="range" min="0" max="20" value="1"><output data-for="extractFeather">1 px</output></label>
+          <label>Отступ после обрезки, мм<input id="extractPaddingMm" type="number" min="0" max="50" step="0.1" value="2"></label>
+          <label class="check-row"><input id="extractCrop" type="checkbox" checked> Обрезать по границам принта</label>
+          <details class="details-block"><summary>Исправить перспективу</summary><label class="check-row"><input id="extractPerspectiveEnabled" type="checkbox"> Использовать четыре точки</label><div class="perspective-grid" id="extractPerspectiveGrid"></div></details>
+          <label class="check-row ai-control"><input id="extractAiRequired" type="checkbox" checked disabled> AI-сегментация обязательна</label><button class="primary-button wide" id="applyExtractPrint" type="button">Достать принт</button>
+          <p class="hint warning-text">Автоматический режим не гарантирует идеальный результат на любом фото. Для сложного изделия используйте «Указать область».</p>
+        </div>
+
+        <div class="module-pane" data-pane="selection">
+          <div class="ai-module-bar" data-ai-scope="selection"><div><span class="ai-spark">AI</span><strong>AI-выделение</strong><small>AI строит исходную маску, а ручные инструменты позволяют точно её исправить.</small></div><button class="ai-analyze-button" type="button" data-ai-analyze="selection">Проверить AI</button></div>
+          <strong class="field-group-title">Что выделить</strong>
+          <div class="tile-grid three">
+            <button class="mode-tile active" type="button" data-selection-mode="object">Объект</button>
+            <button class="mode-tile" type="button" data-selection-mode="print">Принт</button>
+            <button class="mode-tile" type="button" data-selection-mode="element">Элемент</button>
+          </div>
+          <strong class="field-group-title">Инструмент</strong>
+          <div class="tile-grid">
+            <button class="mode-tile active" type="button" data-selection-tool="brush">Кисть</button>
+            <button class="mode-tile" type="button" data-selection-tool="lasso">Лассо</button>
+            <button class="mode-tile" type="button" data-selection-tool="rectangle">Прямоугольник</button>
+            <button class="mode-tile" type="button" data-selection-tool="erase">Стереть</button>
+          </div>
+          <label>Диаметр кисти, мм<input id="selectionBrushMm" type="number" min="0.1" max="100" step="0.1" value="5"></label>
+          <label>Расширение края, мм<input id="selectionGrowMm" type="number" min="-50" max="50" step="0.1" value="0"></label>
+          <label class="range-row"><span>Мягкость края, px</span><input id="selectionFeather" type="range" min="0" max="40" value="2"><output data-for="selectionFeather">2 px</output></label>
+          <div class="selection-editor-help"><strong>Редактирование на изображении</strong><p>Рисуйте выбранным инструментом прямо по предпросмотру. Синим добавляется маска, инструмент «Стереть» удаляет её.</p><button class="secondary-button wide" id="clearSelectionEdits" type="button">Очистить ручные правки</button></div>
+          <label class="check-row ai-control"><input id="selectionAiAuto" type="checkbox" checked> Сначала построить AI-маску</label><button class="primary-button wide" id="applySelection" type="button">Сохранить выделение</button>
+        </div>
+
+        <div class="module-pane" data-pane="cleanup">
+          <div class="ai-module-bar" data-ai-scope="cleanup"><div><span class="ai-spark">AI</span><strong>AI-очистка</strong><small>Модель строит маску объекта и проверяет прозрачность результата.</small></div><button class="ai-analyze-button" type="button" data-ai-analyze="cleanup">Проверить AI</button></div>
+          <label class="check-row"><input id="removeBackground" type="checkbox" checked> Удалить фон</label>
+          <label class="check-row"><input id="removeHalo" type="checkbox" checked> Удалить ореол</label>
+          <label class="check-row"><input id="removeColor" type="checkbox"> Удалить выбранный цвет</label>
+          <label>Удаляемый цвет<input id="cleanupColor" type="color" value="#ffffff"></label>
+          <label class="range-row"><span>Допуск</span><input id="cleanupTolerance" type="range" min="0" max="100" value="18"><output data-for="cleanupTolerance">18%</output></label>
+          <label class="range-row"><span>Мягкость края, px</span><input id="backgroundFeather" type="range" min="0" max="40" value="2"><output data-for="backgroundFeather">2 px</output></label>
+          <label class="check-row"><input id="cleanupDefects" type="checkbox"> Очистка дефектов</label>
+          <label class="check-row"><input id="cleanupBinaryAlpha" type="checkbox"> Бинарный Alpha (0/255)</label>
+          <label class="check-row ai-control"><input id="cleanupAiAuto" type="checkbox" checked> AI-маска и AI-preflight</label><button class="primary-button wide" id="applyCleanup" type="button">Применить очистку</button>
+        </div>
+
+        <div class="module-pane" data-pane="halftone">
+          <div class="ai-module-bar" data-ai-scope="halftone"><div><span class="ai-spark">AI</span><strong>AI-подбор полутона</strong><small>Модель рекомендует параметры, затем валидатор ограничивает их производственным диапазоном.</small></div><button class="ai-analyze-button" type="button" data-ai-analyze="halftone">Проверить AI</button></div>
+          <div class="segmented"><button class="segment active" type="button" data-halftone-mode="color">Цветной полутон</button><button class="segment" type="button" data-halftone-mode="mono">Монохромный</button></div>
+          <div class="tile-grid three"><button class="mode-tile active" type="button" data-raster="dot">Точечный</button><button class="mode-tile" type="button" data-raster="line">Линейный</button><button class="mode-tile" type="button" data-raster="hybrid">Гибридный</button></div>
+          <div class="region-grid"><label>Размер точки, мм<input id="halftoneSize" type="number" min="0.05" max="5" step="0.01" value="0.20"></label><label>LPI<input id="halftoneLpi" type="number" min="5" max="300" step="1" value="45"></label></div>
+          <div class="region-grid"><label>Минимальный размер, мм<input id="halftoneMinSize" type="number" min="0.01" max="5" step="0.01" value="0.08"></label><label>Максимальный размер, мм<input id="halftoneMaxSize" type="number" min="0.05" max="10" step="0.01" value="0.40"></label></div>
+          <div class="region-grid"><label>Угол, °<input id="halftoneAngle" type="number" min="-180" max="180" step="1" value="45"></label><label>Форма точки<select id="halftoneShape"><option value="circle">Круг</option><option value="ellipse">Эллипс</option><option value="square">Квадрат</option><option value="diamond">Ромб</option></select></label></div>
+          <label class="range-row"><span>Плотность</span><input id="halftoneDensity" type="range" min="1" max="100" value="75"><output data-for="halftoneDensity">75%</output></label>
+          <label class="range-row"><span>Порог Alpha</span><input id="halftoneAlphaThreshold" type="range" min="0" max="255" value="8"><output data-for="halftoneAlphaThreshold">8</output></label>
+          <label class="check-row"><input id="halftoneInvert" type="checkbox"> Инверсный полутон</label>
+          <label>Цвет точки<input id="halftoneColor" type="color" value="#000000"></label>
+          <strong class="field-group-title">Фон предпросмотра</strong>
+          <div class="segmented"><button class="segment active" type="button" data-halftone-preview="transparent">Прозрачный</button><button class="segment" type="button" data-halftone-preview="white">Белый</button><button class="segment" type="button" data-halftone-preview="black">Чёрный</button></div>
+          <label class="check-row ai-control"><input id="halftoneAiAuto" type="checkbox" checked> AI-подбор параметров</label><button class="primary-button wide" id="applyHalftone" type="button">Создать полутон</button>
+        </div>
+
+        <div class="module-pane" data-pane="vector">
+          <div class="ai-module-bar" data-ai-scope="vector"><div><span class="ai-spark">AI</span><strong>AI-подготовка вектора</strong><small>Модель подбирает число цветов и упрощение, затем создаётся проверяемый SVG.</small></div><button class="ai-analyze-button" type="button" data-ai-analyze="vector">Проверить AI</button></div>
+          <div class="segmented"><button class="segment active" type="button" data-vector-mode="color">Цветной</button><button class="segment" type="button" data-vector-mode="mono">Монохромный</button></div>
+          <label>Количество цветов<input id="vectorColors" type="number" min="2" max="16" value="6"></label>
+          <label>Допуск контура, мм<input id="vectorSimplifyMm" type="number" min="0.01" max="20" step="0.01" value="0.20"></label>
+          <label>Минимальная область, мм²<input id="vectorMinAreaMm2" type="number" min="0.01" max="10000" step="0.01" value="0.50"></label>
+          <label class="check-row"><input id="vectorOptimize" type="checkbox" checked> Оптимизировать пути</label>
+          <label class="check-row ai-control"><input id="vectorAiAuto" type="checkbox" checked> AI-подбор контуров</label><button class="primary-button wide" id="applyVectorize" type="button">Векторизовать</button>
+        </div>
+
+        <div class="module-pane" data-pane="geometry">
+          <div class="ai-module-bar" data-ai-scope="geometry"><div><span class="ai-spark">AI</span><strong>AI-компоновка</strong><small>Модель предлагает безопасный кроп; миллиметры и PPI рассчитываются детерминированно.</small></div><button class="ai-analyze-button" type="button" data-ai-analyze="geometry">Проверить AI</button></div>
+          <div class="region-grid">
+            <label>Ширина, мм<input id="widthMm" type="number" min="1" max="2000" step="0.01"></label>
+            <label>Высота, мм<input id="heightMm" type="number" min="1" max="2000" step="0.01"></label>
+          </div>
+          <label>PPI (DPI), 100–1000<input id="geometryPpi" type="number" min="100" max="1000" value="300"></label>
+          <label class="check-row"><input id="preserveAspect" type="checkbox" checked> Сохранить пропорции</label>
+          <label>Поворот, °<input id="rotateAngle" type="number" min="-360" max="360" value="0"></label>
+          <details class="details-block"><summary>Кадрирование и перспектива</summary><div class="region-grid"><label>X, %<input id="cropX" type="number" min="0" max="99" value="0"></label><label>Y, %<input id="cropY" type="number" min="0" max="99" value="0"></label><label>Ширина, %<input id="cropWidth" type="number" min="1" max="100" value="100"></label><label>Высота, %<input id="cropHeight" type="number" min="1" max="100" value="100"></label></div><label class="check-row"><input id="usePerspective" type="checkbox"> Коррекция перспективы</label><div class="perspective-grid" id="perspectiveGrid"></div></details>
+          <label class="check-row ai-control"><input id="geometryAiCrop" type="checkbox"> AI-автокроп</label><button class="primary-button wide" id="applyGeometry" type="button">Применить размер</button>
+        </div>
+
+        <div class="module-pane" data-pane="export">
+          <div class="ai-module-bar" data-ai-scope="export"><div><span class="ai-spark">AI</span><strong>AI-проверка экспорта</strong><small>Модель рекомендует формат и выполняет визуальный preflight перед сохранением.</small></div><button class="ai-analyze-button" type="button" data-ai-analyze="export">Проверить AI</button></div>
+          <div class="format-grid"><button class="format-button active" type="button" data-export-format="PNG">PNG</button><button class="format-button" type="button" data-export-format="PNG_DTF">PNG DTF</button><button class="format-button" type="button" data-export-format="SVG">SVG</button><button class="format-button" type="button" data-export-format="JPG">JPG</button><button class="format-button" type="button" data-export-format="WEBP">WEBP</button></div>
+          <label>PPI (DPI), 100–1000<input id="exportPpi" type="number" min="100" max="1000" value="300"></label><label>Качество<input id="exportQuality" type="number" min="60" max="100" value="92"></label>
+          <label class="check-row"><input id="exportAlpha" type="checkbox" checked> Сохранять прозрачность</label>
+          <label class="check-row ai-control"><input id="exportAiAuto" type="checkbox"> AI выберет формат</label><button class="primary-button wide" id="applyExport" type="button">Экспортировать</button>
+          <div class="divider"></div>
+          <button class="secondary-button wide" id="runQaButton" type="button">Проверить выбранный файл</button>
+          <button class="secondary-button wide" id="runReportButton" type="button">Сформировать отчёт</button>
+          <div class="divider"></div><strong class="field-group-title">Производственные мастера</strong>
+          <button class="secondary-button wide" id="masterCleanButton" type="button">Clean Master</button>
+          <button class="secondary-button wide" id="masterCardButton" type="button">Card Master</button>
+          <button class="secondary-button wide" id="masterDtfButton" type="button">DTF Master</button>
+          <button class="secondary-button wide" id="logoPrepareButton" type="button">Подготовить логотип</button>
+          <a class="secondary-button wide link-button" id="bundleButton" href="#">ZIP проекта</a>
+          <a class="secondary-button wide link-button" id="cardlabButton" href="#">Пакет CardLab выбранного файла</a>
+        </div>
+      </section>
+
+      <section class="preview-column">
+        <div class="preview-toolbar"><div><strong id="previewTitle">Предпросмотр</strong><span id="previewOperation">Исходный файл</span></div><div class="toolbar-actions"><button class="icon-button" id="sourceButton" type="button" title="Вернуться к источнику">↶</button><span>100%</span></div></div>
+        <div class="preview-stage checkerboard" id="previewStage"><div class="empty-preview"><span>IL</span><p>Загрузите изображение</p></div></div>
+        <div class="history-panel"><div class="history-heading"><strong>Файлы и история</strong><span id="historyCount">0</span></div><div class="history-strip" id="historyStrip"><span class="empty-note">История пуста</span></div></div>
+        <div class="preview-footer"><span id="previewDimensions">Размер не указан</span><span id="previewFormat">—</span></div><div class="result-evidence" id="resultEvidence" aria-live="polite">Выберите или создайте файл — здесь появятся фактические размеры и PPI.</div>
+      </section>
+    </main>
+
+    <aside class="info-sidebar">
+      <div class="info-tabs"><button class="info-tab active" type="button" data-info-tab="info">Информация</button><button class="info-tab" type="button" data-info-tab="checks">Проверка</button><button class="info-tab" type="button" data-info-tab="report">Отчёт</button><button class="info-tab" type="button" data-info-tab="ai">AI</button></div>
+      <div class="info-content active" id="infoContent"><dl class="metadata" id="metadata"><div><dt>Ширина</dt><dd>—</dd></div><div><dt>Высота</dt><dd>—</dd></div><div><dt>Разрешение</dt><dd>—</dd></div><div><dt>Размер печати</dt><dd>—</dd></div><div><dt>Формат</dt><dd>—</dd></div><div><dt>Профиль</dt><dd>—</dd></div><div><dt>Прозрачность</dt><dd>—</dd></div><div><dt>Размер файла</dt><dd>—</dd></div></dl></div>
+      <div class="info-content" id="checksContent"><div class="check-list" id="checkList"><span class="empty-note">Нет данных</span></div></div><div class="info-content" id="reportContent"><pre class="report-box" id="reportBox" aria-live="polite">Отчёт не сформирован.</pre></div>
+      <div class="info-content" id="aiContent">
+        <div class="ai-panel-status"><span class="ai-spark large">AI</span><div><strong id="aiPanelTitle">AI-контур</strong><small id="aiPanelStatus">Выберите файл для просмотра evidence.</small></div></div>
+        <dl class="metadata ai-metadata"><div><dt>Модель</dt><dd id="aiModelValue">—</dd></div><div><dt>Версия</dt><dd id="aiVersionValue">—</dd></div><div><dt>Confidence</dt><dd id="aiConfidenceValue">—</dd></div><div><dt>Provider</dt><dd id="aiProviderValue">—</dd></div><div><dt>Runtime</dt><dd id="aiRuntimeValue">—</dd></div><div><dt>Input SHA</dt><dd id="aiHashValue">—</dd></div></dl>
+        <button class="secondary-button wide" id="aiAnalyzeSelected" type="button">Повторить AI-анализ</button>
+        <button class="secondary-button wide" id="aiExplainSelected" type="button">Объяснить дефекты</button>
+        <pre class="ai-explanation" id="aiExplanation">Нет AI-объяснения.</pre>
+        <div class="divider"></div>
+        <strong class="section-caption">Обратная связь и обучение</strong>
+        <div class="feedback-row"><button class="feedback-button accept" id="aiAccept" type="button">✓ Принять</button><button class="feedback-button reject" id="aiReject" type="button">✕ Отклонить</button></div>
+        <label>Модуль обучения<select id="aiTrainModule"><option value="upload">Загрузка</option><option value="improve">Улучшение</option><option value="extract">Достать принт</option><option value="selection">Выделение</option><option value="cleanup">Очистка</option><option value="halftone">Полутон</option><option value="vector">Вектор</option><option value="geometry">Размер</option><option value="export">Экспорт</option><option value="qa">QA</option></select></label>
+        <button class="primary-button wide" id="aiTrainButton" type="button">Обучить и проверить кандидата</button>
+        <button class="secondary-button wide" id="aiRollbackButton" type="button">Откатить модель</button>
+        <small class="ai-boundary">Новая модель активируется только после validation benchmark. Результаты не улучшаются бесконтрольно после каждого клика.</small>
+      </div>
+    </aside>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <div class="busy-overlay" id="busyOverlay"><div class="spinner"></div><strong>Обработка…</strong></div>
+  <script src="/static/app.js?v=1.4.5-recovery"></script>
+</body>
+</html>

@@ -1,0 +1,437 @@
+{
+  "schema": 1,
+  "status": "PASS",
+  "identity": {
+    "version": "1.4.9-recovery-candidate",
+    "build_id": "REC-RT8-M6-20260724-06"
+  },
+  "failed_checks": [],
+  "checks": {
+    "compileall": {
+      "command": [
+        "/opt/hostedtoolcache/Python/3.13.14/x64/bin/python",
+        "-m",
+        "compileall",
+        "-q",
+        "app",
+        "release_gate",
+        "scripts"
+      ],
+      "exit_code": 0,
+      "duration_seconds": 0.033,
+      "stdout": "",
+      "stderr": ""
+    },
+    "critical_pytest": {
+      "command": [
+        "isolated critical pytest files"
+      ],
+      "exit_code": 0,
+      "duration_seconds": 29.419,
+      "stdout": "26/26 critical test files passed",
+      "stderr": "",
+      "files": {
+        "test_a0.py": {
+          "command": [
+            "/opt/hostedtoolcache/Python/3.13.14/x64/bin/python",
+            "scripts/run_pytest_exit_safe.py",
+            "-q",
+            "tests/test_a0.py"
+          ],
+          "exit_code": 0,
+          "duration_seconds": 0.827,
+          "stdout": ".....                                                                    [100%]\n",
+          "stderr": ""
+        },
+        "test_a1.py": {
+          "command": [
+            "/opt/hostedtoolcache/Python/3.13.14/x64/bin/python",
+            "scripts/run_pytest_exit_safe.py",
+            "-q",
+            "tests/test_a1.py"
+          ],
+          "exit_code": 0,
+          "duration_seconds": 1.081,
+          "stdout": "....                                                                     [100%]\n",
+          "stderr": ""
+        },
+        "test_a2_a4.py": {
+          "command": [
+            "/opt/hostedtoolcache/Python/3.13.14/x64/bin/python",
+            "scripts/run_pytest_exit_safe.py",
+            "-q",
+            "tests/test_a2_a4.py"
+          ],
+          "exit_code": 0,
+          "duration_seconds": 1.817,
+          "stdout": "..                                                                       [100%]\n",
+          "stderr": ""
+        },
+        "test_ai_audit_concurrency.py": {
+          "command": [
+            "/opt/hostedtoolcache/Python/3.13.14/x64/bin/python",
+            "scripts/run_pytest_exit_safe.py",
+            "-q",
+            "tests/test_ai_audit_concurrency.py"
+          ],
+          "exit_code": 0,
+          "duration_seconds": 0.915,
+          "stdout": "..                                                                       [100%]\n",
+          "stderr": ""
+        },
+        "test_ai_contours.py": {
+          "command": [
+            "/opt/hostedtoolcache/Python/3.13.14/x64/bin/python",
+            "scripts/run_pytest_exit_safe.py",
+            "-q",
+            "tests/test_ai_contours.py"
+          ],
+          "exit_code": 0,
+          "duration_seconds": 3.285,
+          "stdout": ".......                                                                  [100%]\n",
+          "stderr": ""
+        },
+        "test_bootstrap.py": {
+          "command": [
+            "/opt/hostedtoolcache/Python/3.13.14/x64/bin/python",
+            "scripts/run_pytest_exit_safe.py",
+            "-q",
+            "tests/test_bootstrap.py"
+          ],
+          "exit_code": 0,
+          "duration_seconds": 0.286,
+          "stdout": ".....                                                                    [100%]\n",
+          "stderr": ""
+        },
+        "test_core_failure_regression.py": {
+          "command": [
+            "/opt/hostedtoolcache/Python/3.13.14/x64/bin/python",
+            "scripts/run_pytest_exit_safe.py",
+            "-q",
+            "tests/test_core_failure_regression.py"
+          ],
+          "exit_code": 0,
+          "duration_seconds": 1.095,
+          "stdout": ".....                                                                    [100%]\n",
+          "stderr": ""
+        },
+        "test_installer_update_lock.py": {
+          "command": [
+            "/opt/hostedtoolcache/Python/3.13.14/x64/bin/python",
+            "scripts/run_pytest_exit_safe.py",
+            "-q",
+            "tests/test_installer_update_lock.py"
+          ],
+          "exit_code": 0,
+          "duration_seconds": 0.76,
+          "stdout": "........                                                                 [100%]\n",
+          "stderr": ""
+        },
+        "test_isolated_processing.py": {
+          "command": [
+            "/opt/hostedtoolcache/Python/3.13.14/x64/bin/python",
+            "scripts/run_pytest_exit_safe.py",
+            "-q",
+            "tests/test_isolated_processing.py"
+          ],
+          "exit_code": 0,
+          "duration_seconds": 1.254,
+          "stdout": "...                                                                      [100%]\n",
+          "stderr": ""
+        },
+        "test_l5_iz017_regression.py": {
+          "command": [
+            "/opt/hostedtoolcache/Python/3.13.14/x64/bin/python",
+            "scripts/run_pytest_exit_safe.py",
+            "-q",
+            "tests/test_l5_iz017_regression.py"
+          ],
+          "exit_code": 0,
+          "duration_seconds": 2.445,
+          "stdout": "...                                                                      [100%]\n",
+          "stderr": ""
+        },
+        "test_m1_ui.py": {
+          "command": [
+            "/opt/hostedtoolcache/Python/3.13.14/x64/bin/python",
+            "scripts/run_pytest_exit_safe.py",
+            "-q",
+            "tests/test_m1_ui.py"
+          ],
+          "exit_code": 0,
+          "duration_seconds": 0.751,
+          "stdout": ".....                                                                    [100%]\n",
+          "stderr": ""
+        },
+        "test_print_extraction.py": {
+          "command": [
+            "/opt/hostedtoolcache/Python/3.13.14/x64/bin/python",
+            "scripts/run_pytest_exit_safe.py",
+            "-q",
+            "tests/test_print_extraction.py"
+          ],
+          "exit_code": 0,
+          "duration_seconds": 2.222,
+          "stdout": "....                                                                     [100%]\n",
+          "stderr": ""
+        },
+        "test_product_workflows.py": {
+          "command": [
+            "/opt/hostedtoolcache/Python/3.13.14/x64/bin/python",
+            "scripts/run_pytest_exit_safe.py",
+            "-q",
+            "tests/test_product_workflows.py"
+          ],
+          "exit_code": 0,
+          "duration_seconds": 0.512,
+          "stdout": "....                                                                     [100%]\n",
+          "stderr": ""
+        },
+        "test_project_lookup_resilience.py": {
+          "command": [
+            "/opt/hostedtoolcache/Python/3.13.14/x64/bin/python",
+            "scripts/run_pytest_exit_safe.py",
+            "-q",
+            "tests/test_project_lookup_resilience.py"
+          ],
+          "exit_code": 0,
+          "duration_seconds": 0.353,
+          "stdout": ".......                                                                  [100%]\n",
+          "stderr": ""
+        },
+        "test_project_store_concurrency.py": {
+          "command": [
+            "/opt/hostedtoolcache/Python/3.13.14/x64/bin/python",
+            "scripts/run_pytest_exit_safe.py",
+            "-q",
+            "tests/test_project_store_concurrency.py"
+          ],
+          "exit_code": 0,
+          "duration_seconds": 0.64,
+          "stdout": "....                                                                     [100%]\n",
+          "stderr": ""
+        },
+        "test_redteam_adversarial.py": {
+          "command": [
+            "/opt/hostedtoolcache/Python/3.13.14/x64/bin/python",
+            "scripts/run_pytest_exit_safe.py",
+            "-q",
+            "tests/test_redteam_adversarial.py"
+          ],
+          "exit_code": 0,
+          "duration_seconds": 1.9,
+          "stdout": "...............................                                          [100%]\n",
+          "stderr": ""
+        },
+        "test_redteam_contracts.py": {
+          "command": [
+            "/opt/hostedtoolcache/Python/3.13.14/x64/bin/python",
+            "scripts/run_pytest_exit_safe.py",
+            "-q",
+            "tests/test_redteam_contracts.py"
+          ],
+          "exit_code": 0,
+          "duration_seconds": 0.78,
+          "stdout": ".....                                                                    [100%]\n",
+          "stderr": ""
+        },
+        "test_second_core_failure_regression.py": {
+          "command": [
+            "/opt/hostedtoolcache/Python/3.13.14/x64/bin/python",
+            "scripts/run_pytest_exit_safe.py",
+            "-q",
+            "tests/test_second_core_failure_regression.py"
+          ],
+          "exit_code": 0,
+          "duration_seconds": 1.399,
+          "stdout": ".....                                                                    [100%]\n",
+          "stderr": ""
+        },
+        "test_segmentation_governance.py": {
+          "command": [
+            "/opt/hostedtoolcache/Python/3.13.14/x64/bin/python",
+            "scripts/run_pytest_exit_safe.py",
+            "-q",
+            "tests/test_segmentation_governance.py"
+          ],
+          "exit_code": 0,
+          "duration_seconds": 0.655,
+          "stdout": "..                                                                       [100%]\n",
+          "stderr": ""
+        },
+        "test_slu_m1_units.py": {
+          "command": [
+            "/opt/hostedtoolcache/Python/3.13.14/x64/bin/python",
+            "scripts/run_pytest_exit_safe.py",
+            "-q",
+            "tests/test_slu_m1_units.py"
+          ],
+          "exit_code": 0,
+          "duration_seconds": 1.076,
+          "stdout": ".....                                                                    [100%]\n",
+          "stderr": ""
+        },
+        "test_slu_m2_m5.py": {
+          "command": [
+            "/opt/hostedtoolcache/Python/3.13.14/x64/bin/python",
+            "scripts/run_pytest_exit_safe.py",
+            "-q",
+            "tests/test_slu_m2_m5.py"
+          ],
+          "exit_code": 0,
+          "duration_seconds": 1.251,
+          "stdout": ".....                                                                    [100%]\n",
+          "stderr": ""
+        },
+        "test_slu_m3_segmentation.py": {
+          "command": [
+            "/opt/hostedtoolcache/Python/3.13.14/x64/bin/python",
+            "scripts/run_pytest_exit_safe.py",
+            "-q",
+            "tests/test_slu_m3_segmentation.py"
+          ],
+          "exit_code": 0,
+          "duration_seconds": 0.74,
+          "stdout": "...                                                                      [100%]\n",
+          "stderr": ""
+        },
+        "test_slu_m5_e2e.py": {
+          "command": [
+            "/opt/hostedtoolcache/Python/3.13.14/x64/bin/python",
+            "scripts/run_pytest_exit_safe.py",
+            "-q",
+            "tests/test_slu_m5_e2e.py"
+          ],
+          "exit_code": 0,
+          "duration_seconds": 1.28,
+          "stdout": ".                                                                        [100%]\n",
+          "stderr": ""
+        },
+        "test_storage_and_package_integrity.py": {
+          "command": [
+            "/opt/hostedtoolcache/Python/3.13.14/x64/bin/python",
+            "scripts/run_pytest_exit_safe.py",
+            "-q",
+            "tests/test_storage_and_package_integrity.py"
+          ],
+          "exit_code": 0,
+          "duration_seconds": 0.543,
+          "stdout": "......                                                                   [100%]\n",
+          "stderr": ""
+        },
+        "test_windows_packaging_config.py": {
+          "command": [
+            "/opt/hostedtoolcache/Python/3.13.14/x64/bin/python",
+            "scripts/run_pytest_exit_safe.py",
+            "-q",
+            "tests/test_windows_packaging_config.py"
+          ],
+          "exit_code": 0,
+          "duration_seconds": 0.294,
+          "stdout": "......                                                                   [100%]\n",
+          "stderr": ""
+        },
+        "test_zero_trust_release_gate.py": {
+          "command": [
+            "/opt/hostedtoolcache/Python/3.13.14/x64/bin/python",
+            "scripts/run_pytest_exit_safe.py",
+            "-q",
+            "tests/test_zero_trust_release_gate.py"
+          ],
+          "exit_code": 0,
+          "duration_seconds": 1.258,
+          "stdout": ".........                                                                [100%]\n",
+          "stderr": ""
+        }
+      }
+    },
+    "javascript": {
+      "command": [
+        "node",
+        "--check",
+        "app/static/app.js"
+      ],
+      "exit_code": 0,
+      "duration_seconds": 0.024,
+      "stdout": "",
+      "stderr": ""
+    },
+    "backend_selftest": {
+      "command": [
+        "/opt/hostedtoolcache/Python/3.13.14/x64/bin/python",
+        "-m",
+        "app.release_selftest",
+        "--output",
+        "/tmp/imagelab-source-gate-04cmyjb4/backend-selftest.json"
+      ],
+      "exit_code": 0,
+      "duration_seconds": 0.933,
+      "stdout": "{\n  \"schema\": 1,\n  \"status\": \"PASS\",\n  \"app\": \"ImageLab by LarannA\",\n  \"version\": \"1.4.9-recovery-candidate\",\n  \"build_id\": \"REC-RT8-M6-20260724-06\",\n  \"install_id\": \"source-tree\",\n  \"python\": \"3.13.14 (main, Jun 11 2026, 03:02:07) [GCC 13.3.0]\",\n  \"data_dir\": \"/tmp/imagelab-source-gate-04cmyjb4/data\",\n  \"tests\": {\n    \"resize_ppi\": {\n      \"status\": \"PASS\",\n      \"asset_id\": \"1ef2e669dbfa432d8d4f7d07eca59849\",\n      \"size_px\": [\n        400,\n        300\n      ],\n      \"ppi\": 200.0,\n      \"sha256\": \"32768585753a10c6e4b5e82e32e82c6518c400baa30fe031d2539813c8a6c691\"\n    },\n    \"background\": {\n      \"status\": \"PASS\",\n      \"asset_id\": \"1951d12a0e0442d883c25fcf8b6bfcfa\",\n      \"border_visible_ratio\": 0.0,\n      \"visible_ratio\": 0.439635,\n      \"transparent_ratio\": 0.560365,\n      \"sha256\": \"656909881f5c4c9d9e555424337dcf70640ae85bbab38a335ac31559b26c5906\"\n    },\n    \"halftone\": {\n      \"status\": \"PASS\",\n      \"asset_id\": \"1cdb7352f46f4c2b9e710649777a0cd8\",\n      \"coverage_ratio\": 0.139219,\n      \"components\": 973,\n      \"sha256\": \"d31484048818acaad057360d4bf8fb02aff506ab3b5421de5e90bf5095f6e340\"\n    },\n    \"vector\": {\n      \"status\": \"PASS\",\n      \"asset_id\": \"1ab330962d4c432c866835a36633d7ed\",\n      \"path_count\": 9,\n      \"coverage_ratio\": 1.0,\n      \"quality_score\": 0.996949,\n      \"sha256\": \"6d0afbcc7972e50f8f58b92cc71fa38dc483f890db8ded8643c8ba9a6d907b2a\"\n    },\n    \"history_lineage\": {\n      \"status\": \"PASS\",\n      \"source_asset_id\": \"eff3956e223349f7a257d7b51a0cb872\",\n      \"resize_asset_id\": \"1ef2e669dbfa432d8d4f7d07eca59849\",\n      \"vector_asset_id\": \"1ab330962d4c432c866835a36633d7ed\",\n      \"active_revision\": 3\n    },\n    \"export\": {\n      \"status\": \"PASS\",\n      \"asset_id\": \"101d9c8d2f88417c89c6baafd4556442\",\n      \"format\": \"PNG\",\n      \"size_px\": [\n        400,\n        300\n      ],\n      \"ppi\": 200.0,\n      \"sha256\": \"32768585753a10c6e4b5e82e32e82c6518c400baa30fe031d2539813c8a6c691\"\n    }\n  },\n  \"duration_seconds\": 0.612\n}\n",
+      "stderr": ""
+    }
+  },
+  "backend_selftest": {
+    "schema": 1,
+    "status": "PASS",
+    "app": "ImageLab by LarannA",
+    "version": "1.4.9-recovery-candidate",
+    "build_id": "REC-RT8-M6-20260724-06",
+    "install_id": "source-tree",
+    "python": "3.13.14 (main, Jun 11 2026, 03:02:07) [GCC 13.3.0]",
+    "data_dir": "/tmp/imagelab-source-gate-04cmyjb4/data",
+    "tests": {
+      "resize_ppi": {
+        "status": "PASS",
+        "asset_id": "1ef2e669dbfa432d8d4f7d07eca59849",
+        "size_px": [
+          400,
+          300
+        ],
+        "ppi": 200.0,
+        "sha256": "32768585753a10c6e4b5e82e32e82c6518c400baa30fe031d2539813c8a6c691"
+      },
+      "background": {
+        "status": "PASS",
+        "asset_id": "1951d12a0e0442d883c25fcf8b6bfcfa",
+        "border_visible_ratio": 0.0,
+        "visible_ratio": 0.439635,
+        "transparent_ratio": 0.560365,
+        "sha256": "656909881f5c4c9d9e555424337dcf70640ae85bbab38a335ac31559b26c5906"
+      },
+      "halftone": {
+        "status": "PASS",
+        "asset_id": "1cdb7352f46f4c2b9e710649777a0cd8",
+        "coverage_ratio": 0.139219,
+        "components": 973,
+        "sha256": "d31484048818acaad057360d4bf8fb02aff506ab3b5421de5e90bf5095f6e340"
+      },
+      "vector": {
+        "status": "PASS",
+        "asset_id": "1ab330962d4c432c866835a36633d7ed",
+        "path_count": 9,
+        "coverage_ratio": 1.0,
+        "quality_score": 0.996949,
+        "sha256": "6d0afbcc7972e50f8f58b92cc71fa38dc483f890db8ded8643c8ba9a6d907b2a"
+      },
+      "history_lineage": {
+        "status": "PASS",
+        "source_asset_id": "eff3956e223349f7a257d7b51a0cb872",
+        "resize_asset_id": "1ef2e669dbfa432d8d4f7d07eca59849",
+        "vector_asset_id": "1ab330962d4c432c866835a36633d7ed",
+        "active_revision": 3
+      },
+      "export": {
+        "status": "PASS",
+        "asset_id": "101d9c8d2f88417c89c6baafd4556442",
+        "format": "PNG",
+        "size_px": [
+          400,
+          300
+        ],
+        "ppi": 200.0,
+        "sha256": "32768585753a10c6e4b5e82e32e82c6518c400baa30fe031d2539813c8a6c691"
+      }
+    },
+    "duration_seconds": 0.612
+  }
+}

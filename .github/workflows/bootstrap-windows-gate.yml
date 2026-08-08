@@ -1,0 +1,303 @@
+name: ImageLab Bootstrap Windows Gate
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - bootstrap/imagelab-source.zip
+      - bootstrap/imagelab-source.sha256
+      - bootstrap/verify_source_bundle.py
+      - .github/workflows/bootstrap-windows-gate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PYTHONUTF8: '1'
+  PIP_DISABLE_PIP_VERSION_CHECK: '1'
+  EXACT_PYTHON_VERSION: '3.13.14'
+  GATE_REVISION: 'RC13-CANONICAL-SOURCE-SYNC-1'
+  EXPECTED_SOURCE_SHA256: '83bcfcc9e9d6dfaa29ef2827f3a967d9719cbff2650672b7d5d9d3eac1af4885'
+  EXPECTED_APP_VERSION: '1.4.9-recovery-candidate'
+  EXPECTED_BUILD_ID: 'REC-RT8-M6-20260724-06'
+
+jobs:
+  verify-source-bundle:
+    name: B0 Verify exact source bundle and identity
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: ${{ env.EXACT_PYTHON_VERSION }}
+      - name: Verify exact SHA, archive safety, privacy and identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf source-tree bundle-evidence
+          python bootstrap/verify_source_bundle.py \
+            --archive bootstrap/imagelab-source.zip \
+            --checksum bootstrap/imagelab-source.sha256 \
+            --output bundle-evidence/source-bundle.json \
+            --extract-to source-tree \
+            --expected-sha256 "$EXPECTED_SOURCE_SHA256" \
+            --expected-version "$EXPECTED_APP_VERSION" \
+            --expected-build-id "$EXPECTED_BUILD_ID"
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        if: always()
+        with:
+          name: bootstrap-bundle-evidence
+          path: bundle-evidence/
+          if-no-files-found: warn
+          retention-days: 30
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        if: success()
+        with:
+          name: bootstrap-source-tree
+          path: source-tree/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
+
+  source-and-regression-gate:
+    name: B1 Source and regression gate
+    needs: verify-source-bundle
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          name: bootstrap-source-tree
+          path: source-tree
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: ${{ env.EXACT_PYTHON_VERSION }}
+      - name: Install exact application and test dependencies
+        working-directory: source-tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install \
+            --requirement requirements.txt \
+            pytest==9.0.2 \
+            httpx==0.28.1
+      - name: Run mandatory 26-file Source Gate
+        working-directory: source-tree
+        run: python release_gate/source_gate.py --output evidence-bootstrap/source-gate.json
+      - name: Repeat six critical isolated regressions
+        working-directory: source-tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence-bootstrap/unit
+          cases=(
+            tests/test_core_failure_regression.py
+            tests/test_second_core_failure_regression.py
+            tests/test_l5_iz017_regression.py
+            tests/test_slu_m1_units.py
+            tests/test_slu_m5_e2e.py
+            tests/test_zero_trust_release_gate.py
+          )
+          for test_file in "${cases[@]}"; do
+            case_id="$(basename "$test_file" .py)"
+            python release_gate/run_unit_case.py \
+              --case-id "$case_id" \
+              --test-file "$test_file" \
+              --output "evidence-bootstrap/unit/$case_id.json" \
+              --timeout 600
+          done
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        if: always()
+        with:
+          name: bootstrap-source-regression-evidence
+          path: source-tree/evidence-bootstrap/
+          if-no-files-found: warn
+          retention-days: 30
+
+  build-exact-windows-candidate:
+    name: B2 Build exact reproducible Windows candidate
+    needs: source-and-regression-gate
+    runs-on: windows-2022
+    timeout-minutes: 35
+    steps:
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          name: bootstrap-source-tree
+          path: source-tree
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: ${{ env.EXACT_PYTHON_VERSION }}
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with:
+          go-version: '1.25.x'
+          cache: false
+      - name: Build twice and require exact identity and installer SHA
+        working-directory: source-tree
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python scripts/build_zero_trust_candidate.py --output-dir dist-a --label BOOTSTRAP_ZERO_TRUST
+          python scripts/build_zero_trust_candidate.py --output-dir dist-b --label BOOTSTRAP_ZERO_TRUST
+          $aText = Get-Content -Raw dist-a/candidate-manifest.json
+          $bText = Get-Content -Raw dist-b/candidate-manifest.json
+          $a = $aText | ConvertFrom-Json
+          $b = $bText | ConvertFrom-Json
+          if ($a.installer.sha256 -ne $b.installer.sha256) { throw 'Non-reproducible installer build' }
+          foreach ($manifestText in @($aText, $bText)) {
+            if (-not $manifestText.Contains($env:EXPECTED_APP_VERSION)) { throw 'Candidate manifest version mismatch' }
+            if (-not $manifestText.Contains($env:EXPECTED_BUILD_ID)) { throw 'Candidate manifest build ID mismatch' }
+          }
+          New-Item -ItemType Directory -Force exact-candidate | Out-Null
+          Copy-Item dist-a/* exact-candidate/ -Force
+          @{
+            schema = 2
+            status = 'PASS'
+            source_sha256 = $env:EXPECTED_SOURCE_SHA256
+            expected_version = $env:EXPECTED_APP_VERSION
+            expected_build_id = $env:EXPECTED_BUILD_ID
+            installer_sha256 = $a.installer.sha256
+            second_build_sha256 = $b.installer.sha256
+          } | ConvertTo-Json | Set-Content exact-candidate/reproducibility.json -Encoding utf8
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        with:
+          name: UNVERIFIED_BOOTSTRAP_WINDOWS_CANDIDATE
+          path: source-tree/exact-candidate/
+          if-no-files-found: error
+          retention-days: 2
+
+  clean-install-ui:
+    name: B3-B5 Clean Windows installation and UI path
+    needs: build-exact-windows-candidate
+    runs-on: windows-2022
+    timeout-minutes: 70
+    steps:
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          name: bootstrap-source-tree
+          path: source-tree
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          name: UNVERIFIED_BOOTSTRAP_WINDOWS_CANDIDATE
+          path: exact-candidate
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: ${{ env.EXACT_PYTHON_VERSION }}
+      - name: Install exact browser harness
+        working-directory: source-tree
+        shell: pwsh
+        run: |
+          python -m pip install --requirement requirements.txt
+          python -m pip install --requirement requirements-release.txt
+          python -m playwright install chromium
+          python -c "import PIL; import playwright.sync_api; print('RELEASE_GATE_DEPS_PASS')"
+      - name: Install exact candidate and drive installed UI
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $installer = (Get-ChildItem exact-candidate -Filter *.exe -File | Select-Object -First 1).FullName
+          if (-not $installer) { throw 'Exact installer missing' }
+          ./source-tree/release_gate/run_clean_install_gate.ps1 `
+            -InstallerPath $installer `
+            -CandidateManifestPath exact-candidate/candidate-manifest.json `
+            -EvidenceDir evidence-clean `
+            -Mode clean `
+            -BrowserChannel msedge
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        if: always()
+        with:
+          name: bootstrap-clean-install-evidence
+          path: evidence-clean/
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 30
+
+  independent-windows-rerun:
+    name: B8 Independent Windows rerun
+    needs: build-exact-windows-candidate
+    runs-on: windows-2022
+    timeout-minutes: 70
+    steps:
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          name: bootstrap-source-tree
+          path: source-tree
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          name: UNVERIFIED_BOOTSTRAP_WINDOWS_CANDIDATE
+          path: exact-candidate
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: ${{ env.EXACT_PYTHON_VERSION }}
+      - name: Install exact independent browser harness
+        working-directory: source-tree
+        shell: pwsh
+        run: |
+          python -m pip install --requirement requirements.txt
+          python -m pip install --requirement requirements-release.txt
+          python -m playwright install chromium
+          python -c "import PIL; import playwright.sync_api; print('RELEASE_GATE_DEPS_PASS')"
+      - name: Repeat exact installed user path independently
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $installer = (Get-ChildItem exact-candidate -Filter *.exe -File | Select-Object -First 1).FullName
+          if (-not $installer) { throw 'Exact installer missing' }
+          ./source-tree/release_gate/run_clean_install_gate.ps1 `
+            -InstallerPath $installer `
+            -CandidateManifestPath exact-candidate/candidate-manifest.json `
+            -EvidenceDir evidence-independent `
+            -Mode independent `
+            -BrowserChannel bundled
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        if: always()
+        with:
+          name: bootstrap-independent-evidence
+          path: evidence-independent/
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 30
+
+  bootstrap-verdict:
+    name: Bootstrap verdict — always release blocked
+    if: ${{ always() }}
+    needs:
+      - verify-source-bundle
+      - source-and-regression-gate
+      - build-exact-windows-candidate
+      - clean-install-ui
+      - independent-windows-rerun
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Write exact fail-closed verdict
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p bootstrap-verdict
+          cat > bootstrap-verdict/final-verdict.json <<JSON
+          {
+            "schema": 5,
+            "status": "RELEASE_BLOCKED",
+            "run_id": "${GITHUB_RUN_ID}",
+            "gate_revision": "${GATE_REVISION}",
+            "expected_source_sha256": "${EXPECTED_SOURCE_SHA256}",
+            "expected_version": "${EXPECTED_APP_VERSION}",
+            "expected_build_id": "${EXPECTED_BUILD_ID}",
+            "verify_source_bundle": "${{ needs.verify-source-bundle.result }}",
+            "source_and_regression_gate": "${{ needs.source-and-regression-gate.result }}",
+            "build_exact_windows_candidate": "${{ needs.build-exact-windows-candidate.result }}",
+            "clean_install_ui": "${{ needs.clean-install-ui.result }}",
+            "independent_windows_rerun": "${{ needs.independent-windows-rerun.result }}",
+            "reason": "Bootstrap cannot authorize release. Update/rollback and physical L5 remain separate mandatory gates."
+          }
+          JSON
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        with:
+          name: ImageLab-BOOTSTRAP-VERDICT
+          path: bootstrap-verdict/
+          if-no-files-found: error
+          retention-days: 90
+      - name: Enforce release block
+        run: exit 1

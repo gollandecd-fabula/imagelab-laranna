@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "status": "PASS",
+  "identity": {
+    "app": "ImageLab by LarannA",
+    "version": "1.4.6-recovery-candidate",
+    "build_id": "REC-RT8-M6-20260724-03"
+  },
+  "installer": {
+    "path": "D:\\a\\imagelab-laranna\\imagelab-laranna\\source-tree\\dist-a\\ImageLab_by_LarannA_BOOTSTRAP_ZERO_TRUST_Setup_x64.exe",
+    "name": "ImageLab_by_LarannA_BOOTSTRAP_ZERO_TRUST_Setup_x64.exe",
+    "sha256": "f67aac4ac412d4b934fc672bc25cf949e36ec54c02b3bb2fd5277a7f1d5c180f",
+    "size_bytes": 9973248,
+    "pe": {
+      "mz": true,
+      "pe": true,
+      "machine_x64": true,
+      "pe32_plus": true,
+      "size_bytes": 9973248
+    }
+  },
+  "payload": {
+    "path": "D:\\a\\imagelab-laranna\\imagelab-laranna\\source-tree\\windows_installer\\installer\\payload.zip",
+    "sha256": "4ce69fa5a93c229d4404823fadf4a385d99ba47396c4e4807dc65d7a2cd3adc1",
+    "entries": 37,
+    "crc_ok": true,
+    "missing_required": []
+  },
+  "source": {
+    "path": "D:\\a\\imagelab-laranna\\imagelab-laranna\\source-tree\\dist-a\\ImageLab_by_LarannA_BOOTSTRAP_ZERO_TRUST_SOURCE.zip",
+    "sha256": "918336c95fd35eac50b544110e975937b7a590954f09b41e35e2973f3e6330ed",
+    "entries": 87,
+    "crc_ok": true
+  }
+}

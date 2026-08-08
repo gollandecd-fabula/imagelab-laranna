@@ -1,0 +1,17 @@
+name: Recovery Promote Bootstrap RC12 — Retired 1.4.8
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  retired:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Preserve fail-closed retirement record
+        run: |
+          echo 'Automatic promotion of 1.4.8 is retired.'
+          echo 'Active promotion must target exact 1.4.9 RC13.'
+          exit 1

@@ -1,0 +1,33 @@
+{
+  "schema": 1,
+  "status": "PASS",
+  "mode": "RECOVERY_1.4.8_TO_BOOTSTRAP_PROMOTION",
+  "identity": {
+    "version": "1.4.8-recovery-candidate",
+    "build_id": "REC-RT8-M6-20260724-05"
+  },
+  "bundle": {
+    "expected_sha256": "fa5809e797c57164bc0eed8b111902731d2dad0a903f142cfcf95a378474ca17",
+    "actual_sha256": "fa5809e797c57164bc0eed8b111902731d2dad0a903f142cfcf95a378474ca17",
+    "member_count": 87,
+    "members_sha256": "b0c43a785c437bf649750a5541386b81b6436c160aad07a5aa6903265581e2fe",
+    "crc_failure": null
+  },
+  "checks": {
+    "full_pytest": "145/145 PASS",
+    "required_test_files": "26/26 PASS",
+    "compileall": "PASS",
+    "javascript_syntax": "PASS",
+    "backend_selftest": "PASS",
+    "source_zip_reproducibility": "2/2 BYTE_IDENTICAL"
+  },
+  "claim_boundary": {
+    "source_recovery_increment": "PASS",
+    "windows_clean_install": "NOT_YET_REPEATED_FOR_1.4.8",
+    "windows_independent_rerun": "NOT_YET_REPEATED_FOR_1.4.8",
+    "update_rollback": "UNVERIFIED",
+    "physical_user_path_L5": "UNVERIFIED",
+    "release": "BLOCKED"
+  },
+  "failures": []
+}

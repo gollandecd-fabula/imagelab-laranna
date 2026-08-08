@@ -1,0 +1,39 @@
+{
+  "archive": {
+    "crc_failure": null,
+    "duplicate_members": [],
+    "forbidden_members": [],
+    "member_count": 87,
+    "members_sha256": "b0c43a785c437bf649750a5541386b81b6436c160aad07a5aa6903265581e2fe",
+    "total_uncompressed_bytes": 872272,
+    "unsafe_members": []
+  },
+  "expected": {
+    "build_id": "REC-RT8-M6-20260724-06",
+    "sha256": "83bcfcc9e9d6dfaa29ef2827f3a967d9719cbff2650672b7d5d9d3eac1af4885",
+    "version": "1.4.9-recovery-candidate"
+  },
+  "extract_state": "PUBLISHED_ATOMICALLY",
+  "failures": [],
+  "identity": {
+    "expected_build_id_text_present": true,
+    "expected_version_text_present": true
+  },
+  "missing_required_files": [],
+  "observed": {
+    "actual_sha256": "83bcfcc9e9d6dfaa29ef2827f3a967d9719cbff2650672b7d5d9d3eac1af4885",
+    "pinned_filename": "imagelab-source.zip",
+    "pinned_sha256": "83bcfcc9e9d6dfaa29ef2827f3a967d9719cbff2650672b7d5d9d3eac1af4885"
+  },
+  "required_files": [
+    "app/main.py",
+    "app/config.py",
+    "release_gate/source_gate.py",
+    "release_gate/run_clean_install_gate.ps1",
+    "scripts/build_zero_trust_candidate.py",
+    "windows_installer/installer/main.go",
+    "requirements.txt"
+  ],
+  "schema": 3,
+  "status": "PASS"
+}

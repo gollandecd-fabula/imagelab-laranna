@@ -1,0 +1,50 @@
+{
+  "schema": 1,
+  "status": "PASS_SOURCE_RECOVERY_INCREMENT",
+  "identity": {
+    "version": "1.4.6-recovery-candidate",
+    "build_id": "REC-RT8-M6-20260724-03"
+  },
+  "parent": {
+    "version": "1.4.5-recovery-candidate",
+    "build_id": "REC-RT8-M6-20260724-02",
+    "source_sha256": "e4268157d6abc5495eefa9799b09a5352d43102019c4f0047f7303597f6c2ea7"
+  },
+  "patch_sha256": "023b83a9d449fdad27aa5e63610cd12ef7fa8d2bee8fb67b481a31815adfa799",
+  "recovered_cluster": {
+    "id": "RC-10",
+    "name": "bounded installer PID wait without descendant-tree hang",
+    "status": "PASS"
+  },
+  "checks": {
+    "full_pytest": "143/143 PASS",
+    "required_test_files": "26/26 PASS",
+    "compileall": "PASS",
+    "javascript_syntax": "PASS",
+    "backend_selftest": "PASS",
+    "source_zip_reproducibility": "2/2 BYTE_IDENTICAL"
+  },
+  "source_bundle": {
+    "schema": 1,
+    "status": "PASS",
+    "identity": {
+      "version": "1.4.6-recovery-candidate",
+      "build_id": "REC-RT8-M6-20260724-03"
+    },
+    "file": "ImageLab_by_LarannA_RECOVERY_1.4.6_SOURCE.zip",
+    "sha256": "476b68ee2ddea5f2985c1c8fd2fc841de490a866bb3a9676aca9411b463e6538",
+    "size_bytes": 377350,
+    "member_count": 87,
+    "members_sha256": "b0c43a785c437bf649750a5541386b81b6436c160aad07a5aa6903265581e2fe",
+    "reproducible_builds": 2,
+    "builds_byte_identical": true
+  },
+  "claim_boundary": {
+    "source_recovery_increment": "PASS",
+    "windows_clean_install": "NOT_YET_REPEATED_FOR_1.4.6",
+    "windows_independent_rerun": "NOT_YET_REPEATED_FOR_1.4.6",
+    "update_rollback": "UNVERIFIED",
+    "physical_user_path_L5": "UNVERIFIED",
+    "release": "BLOCKED"
+  }
+}

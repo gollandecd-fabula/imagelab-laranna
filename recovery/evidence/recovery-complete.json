@@ -1,0 +1,59 @@
+{
+  "schema": 1,
+  "status": "PASS_SOURCE_RECOVERY_COMPLETE",
+  "identity": {
+    "version": "1.4.5-recovery-candidate",
+    "build_id": "REC-RT8-M6-20260724-02"
+  },
+  "base": {
+    "version": "1.4.2-zero-trust-candidate",
+    "build_id": "ZTR-M6-20260724-01",
+    "archive_sha256": "c236656f53447996dc837a206a8896fc6abacf13d45829d8e9e64888b9f6b308"
+  },
+  "patches": {
+    "rc01_03_sha256": "674ff435d98487a99efde0b4a5081bb0acc311fde9f0a1a42e908b5011b951b5",
+    "rc04_09_sha256": "137640abe5810913c8870bec55a10284e1b7bf2589db84366a7c3d3ce451397d"
+  },
+  "checks": {
+    "full_pytest": "142/142 PASS",
+    "required_test_files": "26/26 PASS",
+    "compileall": "PASS",
+    "javascript_syntax": "PASS",
+    "backend_selftest": "PASS",
+    "source_zip_reproducibility": "2/2 BYTE_IDENTICAL"
+  },
+  "source_bundle": {
+    "schema": 1,
+    "status": "PASS",
+    "identity": {
+      "version": "1.4.5-recovery-candidate",
+      "build_id": "REC-RT8-M6-20260724-02"
+    },
+    "file": "ImageLab_by_LarannA_RECOVERY_1.4.5_SOURCE.zip",
+    "sha256": "e4268157d6abc5495eefa9799b09a5352d43102019c4f0047f7303597f6c2ea7",
+    "size_bytes": 376881,
+    "member_count": 87,
+    "members_sha256": "b0c43a785c437bf649750a5541386b81b6436c160aad07a5aa6903265581e2fe",
+    "reproducible_builds": 2,
+    "builds_byte_identical": true
+  },
+  "recovered_clusters": [
+    "RC-01",
+    "RC-02",
+    "RC-03",
+    "RC-04",
+    "RC-05",
+    "RC-06",
+    "RC-07",
+    "RC-08",
+    "RC-09"
+  ],
+  "claim_boundary": {
+    "source_recovery": "PASS",
+    "windows_packaging": "NOT_STARTED_FOR_RECOVERY_CANDIDATE",
+    "installed_windows_runtime_L4": "UNVERIFIED",
+    "physical_user_path_L5": "UNVERIFIED",
+    "update_rollback": "UNVERIFIED",
+    "release": "BLOCKED"
+  }
+}

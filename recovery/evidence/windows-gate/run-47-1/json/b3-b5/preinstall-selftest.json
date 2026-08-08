@@ -1,0 +1,64 @@
+{
+  "schema": 1,
+  "status": "PASS",
+  "app": "ImageLab by LarannA",
+  "version": "1.4.6-recovery-candidate",
+  "build_id": "REC-RT8-M6-20260724-03",
+  "install_id": "b4bd49f415742017c83bca9a55bb0040",
+  "python": "3.13.14 (tags/v3.13.14:fd17997, Jun 10 2026, 13:03:48) [MSC v.1944 64 bit (AMD64)]",
+  "data_dir": "C:\\Users\\runneradmin\\AppData\\Local\\Temp\\imagelab-release-selftest-preinstall-711976055\\data",
+  "tests": {
+    "resize_ppi": {
+      "status": "PASS",
+      "asset_id": "a749285f1cda41099e8a91a0451df7c4",
+      "size_px": [
+        400,
+        300
+      ],
+      "ppi": 200.0,
+      "sha256": "fd2aeb2a3705b383570dea80d5ba7585068488c9281cbaae3e7c7431680283f9"
+    },
+    "background": {
+      "status": "PASS",
+      "asset_id": "d9c0d017249f4e76aaa4d2aa9300bea7",
+      "border_visible_ratio": 0.0,
+      "visible_ratio": 0.439635,
+      "transparent_ratio": 0.560365,
+      "sha256": "a4752013a8e3ed353c8d851041ef6cc5df81d98d117dc8b0d8961dd44cbf38cc"
+    },
+    "halftone": {
+      "status": "PASS",
+      "asset_id": "5b0061251991458dbdf362ddb480696e",
+      "coverage_ratio": 0.139219,
+      "components": 973,
+      "sha256": "159c5b96c3c4ff9e1e7cb6ff319e89b76f27fbac6b4d77dc885d0dc9c88fb527"
+    },
+    "vector": {
+      "status": "PASS",
+      "asset_id": "574a82966b814ca39fa28797cfbb57a7",
+      "path_count": 9,
+      "coverage_ratio": 1.0,
+      "quality_score": 0.996949,
+      "sha256": "6d0afbcc7972e50f8f58b92cc71fa38dc483f890db8ded8643c8ba9a6d907b2a"
+    },
+    "history_lineage": {
+      "status": "PASS",
+      "source_asset_id": "90325e3ef17947e986fb9f5a0f0d3e4d",
+      "resize_asset_id": "a749285f1cda41099e8a91a0451df7c4",
+      "vector_asset_id": "574a82966b814ca39fa28797cfbb57a7",
+      "active_revision": 3
+    },
+    "export": {
+      "status": "PASS",
+      "asset_id": "6cc103538b5a411ab4fc261f0e4f8757",
+      "format": "PNG",
+      "size_px": [
+        400,
+        300
+      ],
+      "ppi": 200.0,
+      "sha256": "fd2aeb2a3705b383570dea80d5ba7585068488c9281cbaae3e7c7431680283f9"
+    }
+  },
+  "duration_seconds": 0.936
+}

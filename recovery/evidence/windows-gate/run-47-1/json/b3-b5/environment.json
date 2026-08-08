@@ -1,0 +1,140 @@
+{
+  "schema": 1,
+  "status": "PASS",
+  "mode": "clean",
+  "os": {
+    "Caption": "Microsoft Windows Server 2022 Datacenter",
+    "Version": "10.0.20348",
+    "BuildNumber": "20348",
+    "OSArchitecture": "64-bit"
+  },
+  "powershell": "7.6.3",
+  "installer_path": "D:\\a\\imagelab-laranna\\imagelab-laranna\\exact-candidate\\ImageLab_by_LarannA_BOOTSTRAP_ZERO_TRUST_Setup_x64.exe",
+  "installer_sha256": "f67aac4ac412d4b934fc672bc25cf949e36ec54c02b3bb2fd5277a7f1d5c180f",
+  "installed_manifest": {
+    "app": "ImageLab by LarannA",
+    "version": "1.4.6-recovery-candidate",
+    "build_id": "REC-RT8-M6-20260724-03",
+    "install_id": "b4bd49f415742017c83bca9a55bb0040",
+    "payload_sha256": "4ce69fa5a93c229d4404823fadf4a385d99ba47396c4e4807dc65d7a2cd3adc1",
+    "critical_files": {
+      "ImageLab.exe": "e63164ce808855bcb434d0e6790cade70b261be752425a0e707f72a9d0532276",
+      "app/config.py": "71cace184d3273de546cde4d1d964f000648607f393dbf86ebfe65239ced78ff",
+      "app/main.py": "6668d2b5f40160aac41d150b6c1b3bb63e749bb0966008a7f10bf34d0d066921",
+      "app/release_selftest.py": "729346f0040d4cad3eab9ecd933ade5f307ebdb7fde1bfea44e66c7c27528ed1",
+      "app/static/app.js": "a6fc48a833e521ba5efbfd201ba15cce319a01bdf5526f8d12173fd7e897caf4",
+      "app/static/index.html": "786d8105c68358e8dac472402c28fed0cd3a3ce2e218d83927b530c4d9a01a2f",
+      "app/static/styles.css": "d3c5a252652a3e843f25b35e9ba4c4daf58c74b4d3595f34cfc6cdee80863327",
+      "bootstrap.py": "edd664b22127c320106e0c10441f2d2db43b8926dbc1adb586ead6b08a3a2aff",
+      "models/manifest.json": "a1733ffae825ce29098aa14a358af3551d946d0f21f271e7dede464ddaa85efe",
+      "requirements.txt": "8c739736b66baeaa1f0338fd3597b365575348b950e7a2a45cdd791b9e3020ce"
+    },
+    "installed_at": "2026-07-24T16:13:31Z"
+  },
+  "health": {
+    "status": "ok",
+    "app": "ImageLab by LarannA",
+    "version": "1.4.6-recovery-candidate",
+    "scope": "IMAGELAB_REC-RT8-M6-20260724-03",
+    "build_id": "REC-RT8-M6-20260724-03",
+    "install_id": "b4bd49f415742017c83bca9a55bb0040",
+    "host_policy": "localhost_only",
+    "ai": {
+      "status": "ready",
+      "suite": "ImageLab Built-in AI",
+      "version": "1.0.0",
+      "runtime": "numpy-linear-ml",
+      "provider": "CPU",
+      "manifest_sha256": "a1733ffae825ce29098aa14a358af3551d946d0f21f271e7dede464ddaa85efe",
+      "models": [
+        {
+          "id": "pixel_subject",
+          "version": "1.0.0",
+          "task": "segmentation",
+          "verified": true
+        },
+        {
+          "id": "pixel_print",
+          "version": "1.0.0",
+          "task": "segmentation",
+          "verified": true
+        },
+        {
+          "id": "content_classifier",
+          "version": "1.0.0",
+          "task": "classification",
+          "verified": true
+        },
+        {
+          "id": "quality_risk",
+          "version": "1.0.0",
+          "task": "quality",
+          "verified": true
+        },
+        {
+          "id": "restoration_profile",
+          "version": "1.0.0",
+          "task": "recommendation",
+          "verified": true
+        },
+        {
+          "id": "tiny_restorer",
+          "version": "1.0.0",
+          "task": "restoration",
+          "verified": true
+        },
+        {
+          "id": "halftone_recommender",
+          "version": "1.0.0",
+          "task": "recommendation",
+          "verified": true
+        },
+        {
+          "id": "vector_recommender",
+          "version": "1.0.0",
+          "task": "recommendation",
+          "verified": true
+        },
+        {
+          "id": "export_recommender",
+          "version": "1.0.0",
+          "task": "recommendation",
+          "verified": true
+        },
+        {
+          "id": "size_assistant",
+          "version": "1.0.0",
+          "task": "recommendation",
+          "verified": true
+        },
+        {
+          "id": "qa_anomaly",
+          "version": "1.0.0",
+          "task": "qa",
+          "verified": true
+        }
+      ],
+      "metrics": {
+        "pixel_subject_train_accuracy": 0.9695061728395061,
+        "pixel_print_train_accuracy": 0.8323425925925926,
+        "content_train_accuracy": 1.0,
+        "quality_blur_accuracy": 0.885,
+        "quality_noise_accuracy": 1.0,
+        "quality_low_contrast_accuracy": 0.95,
+        "quality_compression_accuracy": 0.7583333333333333,
+        "restoration_profile_train_accuracy": 0.8116666666666666,
+        "halftone_train_accuracy": 0.9716666666666667,
+        "export_train_accuracy": 0.8933333333333333,
+        "tiny_restorer_training_mse": 0.0024178640451282263,
+        "qa_anomaly_train_accuracy": 1.0
+      },
+      "limitations": [
+        "Built-in compact models are trained on synthetic garment/product scenes.",
+        "They provide offline AI assistance and require user verification on complex real photographs."
+      ],
+      "feedback_modules": [],
+      "audit_integrity": []
+    }
+  },
+  "base_url": "http://127.0.0.1:8765"
+}

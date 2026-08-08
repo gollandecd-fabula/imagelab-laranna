@@ -1,0 +1,78 @@
+name: ImageLab Evidence Hardening CI
+
+on:
+  pull_request:
+    branches:
+      - bootstrap/zero-trust-gate
+    paths:
+      - recovery/source/release_gate/finalize_gate.py
+      - recovery/source/release_gate/run_update_rollback_gate.ps1
+      - recovery/source/tests/test_zero_trust_release_gate.py
+      - .github/workflows/codex-evidence-hardening-ci.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: imagelab-evidence-hardening-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  PYTHONUTF8: '1'
+  PIP_DISABLE_PIP_VERSION_CHECK: '1'
+
+jobs:
+  python-contracts:
+    name: Python release-gate contracts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: recovery/source
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.13.14'
+      - name: Install exact dependencies
+        run: |
+          python -m pip install -q --requirement requirements.txt
+          python -m pip install -q pytest==8.4.2 httpx==0.28.1
+      - name: Compile changed Python contracts
+        run: python -m compileall -q release_gate/finalize_gate.py tests/test_zero_trust_release_gate.py
+      - name: Run focused release-gate tests
+        run: python -m pytest tests/test_zero_trust_release_gate.py -vv --tb=short
+      - name: Run complete source test suite
+        run: |
+          set +e
+          python -m pytest -q > full-suite.log 2>&1
+          code=$?
+          tail -n 120 full-suite.log
+          exit $code
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        if: always()
+        with:
+          name: ImageLab-evidence-hardening-python
+          path: recovery/source/full-suite.log
+          retention-days: 30
+          if-no-files-found: warn
+
+  powershell-contract:
+    name: Windows PowerShell parser contract
+    runs-on: windows-2025
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      - name: Parse update and rollback gate
+        shell: pwsh
+        run: |
+          $path = Join-Path $PWD 'recovery/source/release_gate/run_update_rollback_gate.ps1'
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile($path, [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            exit 1
+          }
+          Write-Host "PowerShell parser contract PASS"

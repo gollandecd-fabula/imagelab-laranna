@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "status": "PASS",
+  "mode": "CONTROLLED_RECOVERY_BASE_IMPORT",
+  "archive": {
+    "path": "bootstrap/imagelab-source.zip",
+    "expected_sha256": "c236656f53447996dc837a206a8896fc6abacf13d45829d8e9e64888b9f6b308",
+    "actual_sha256": "c236656f53447996dc837a206a8896fc6abacf13d45829d8e9e64888b9f6b308",
+    "member_count": 79,
+    "members_sha256": "1cf0871255a97015afd73afd982109875fee76d54e3d3bfb124ca5ada9dbd5b1",
+    "unsafe_members": [],
+    "duplicate_members": [],
+    "forbidden_members": []
+  },
+  "identity": {
+    "expected_version": "1.4.2-zero-trust-candidate",
+    "expected_build_id": "ZTR-M6-20260724-01"
+  },
+  "required_core_missing": [],
+  "external_release_files_absent_from_source_archive": [
+    "scripts/source_gate.py",
+    "requirements.lock"
+  ],
+  "failures": []
+}

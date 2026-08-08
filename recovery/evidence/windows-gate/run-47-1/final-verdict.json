@@ -1,0 +1,19 @@
+{
+  "schema": 4,
+  "status": "RELEASE_BLOCKED",
+  "run_id": "30107994244",
+  "run_number": "47",
+  "run_attempt": "1",
+  "event": "push",
+  "head_sha": "61595a63d12d08706ab88a5474ccd67eab568bea",
+  "gate_revision": "RC10-WINDOWS-RERUN-3",
+  "expected_source_sha256": "476b68ee2ddea5f2985c1c8fd2fc841de490a866bb3a9676aca9411b463e6538",
+  "expected_version": "1.4.6-recovery-candidate",
+  "expected_build_id": "REC-RT8-M6-20260724-03",
+  "reason": "Bootstrap cannot authorize release. Update/rollback and physical L5 remain separate mandatory gates.",
+  "verify_source_bundle": "success",
+  "source_and_regression_gate": "success",
+  "build_exact_windows_candidate": "success",
+  "clean_install_ui": "failure",
+  "independent_windows_rerun": "failure"
+}
