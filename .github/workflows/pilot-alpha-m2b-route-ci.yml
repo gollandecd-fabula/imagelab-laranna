@@ -32,6 +32,23 @@ jobs:
         working-directory: recovery/source
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Bind exact Pilot candidate SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected='${{ github.event.pull_request.head.sha || github.sha }}'
+          actual="$(git rev-parse HEAD)"
+          require_exact() { test "$1" = "$2"; }
+          require_exact "$actual" "$expected" || { echo "::error::candidate mismatch actual=$actual expected=$expected"; exit 1; }
+          mismatch="${expected%?}0"
+          test "$mismatch" != "$expected" || mismatch="${expected%?}1"
+          if require_exact "$actual" "$mismatch"; then
+            echo "::error::mismatched-SHA negative fixture was accepted"
+            exit 1
+          fi
+          printf 'exact_candidate_sha=%s\n' "$actual"
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: '3.13.14'
