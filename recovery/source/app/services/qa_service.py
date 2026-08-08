@@ -106,6 +106,8 @@ def _asset_checks(asset: AssetRecord) -> list[CheckItem]:
             image = opened.convert("RGBA")
             width, height = opened.size
             checks.append(CheckItem(code="dimensions", label="Размеры совпадают", passed=width == asset.width_px and height == asset.height_px, detail=f"{width}×{height}px"))
+            pilot_size_ok = width >= 64 and height >= 64
+            checks.append(CheckItem(code="pilot_min_dimensions", label="Минимальный размер Pilot QA", passed=pilot_size_ok, detail=f"{width}×{height}px; минимум 64×64px"))
             checks.append(CheckItem(code="mode", label="Цветовой режим определён", passed=True, detail=opened.mode))
             alpha = image.getchannel("A")
             alpha_min, alpha_max = alpha.getextrema()
@@ -178,7 +180,7 @@ CRITICAL_CHECK_CODES = {
     "vector_content", "vector_complexity", "print_coverage", "print_garment_gate",
     "print_border_purity", "background_subject_coverage", "background_border_purity",
     "halftone_parameter_consistency", "ai_visual_preflight", "physical_ppi_range",
-    "physical_size_match",
+    "physical_size_match", "pilot_min_dimensions",
 }
 
 
