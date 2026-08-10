@@ -8,6 +8,8 @@ Mode: PROTOCOL LOCK / FAIL-CLOSED
 
 The exact installer binary delivered to the user must be the same binary, by SHA-256, that passes the clean-Windows release gate. Source tests, API-only tests, portable tests, package inspection, a differently built installer, a matching filename, or an operator-entered authorization flag do not authorize release.
 
+No historical installer may be retroactively renamed, relabelled or declared `RELEASE_AUTHORIZED`.
+
 ## Evidence levels
 
 - L0: static code/configuration evidence.
@@ -17,6 +19,26 @@ The exact installer binary delivered to the user must be the same binary, by SHA
 - L4: exact installer installed and executed on clean Windows.
 - L5: real browser-driven user path on the installed build, with output-file validation.
 - Physical user-machine L5 is an additional release prerequisite and cannot be replaced by a hosted runner.
+
+## First-release bootstrap rule
+
+`GENESIS-FIRST-RELEASE-V1` is a one-time bootstrap rule for the first official ImageLab release only.
+
+It does not mark G6 or G7 as `PASS`. Instead, the dedicated Genesis Release Gate may record:
+
+- `G6 = NOT_APPLICABLE_FIRST_RELEASE`;
+- `G7 = NOT_APPLICABLE_FIRST_RELEASE`.
+
+This is permitted only when all of the following are independently verified:
+
+1. A completed exact-SHA qualification run proves G0–G5 and G8 `PASS` for the candidate.
+2. Complete paginated GitHub Releases and Actions-history queries find zero authorized installer assets, zero `ImageLab-RELEASE-AUTHORIZATION.json` assets, zero prior successful genesis runs and zero prior authorized genesis artifacts.
+3. A strictly validated request changes exactly `recovery/genesis-request/GENESIS-REQUEST.json` in a reviewed push to `bootstrap/zero-trust-gate`; no other file is changed.
+4. An externally produced and independently SHA-pinned physical user-machine L5 manifest and evidence bundle match the exact installer SHA, version and build.
+5. Every other genesis finalizer requirement passes.
+6. The dedicated genesis finalizer creates the first genuine `ImageLab-RELEASE-AUTHORIZATION.json`.
+
+After that first authorization record exists, the genesis path must fail closed permanently. Every later release must use the normal G6/G7 update and rollback path against a genuine prior authorized release.
 
 ## Current exact candidate
 
@@ -42,12 +64,16 @@ The exact installer binary delivered to the user must be the same binary, by SHA
 | ZTR-005 | Install exact EXE in clean Windows | ZTR-M3 | Fresh GitHub-hosted Windows runner installs candidate | PowerShell clean installation test | `clean-install.json`, installation logs, environment | Installer exit 0; exact version/build/install ID responds | HOSTED L4 PASS |
 | ZTR-006 | Control installed UI through a real browser | ZTR-M4 | Playwright drives installed UI in Microsoft Edge; independent job uses bundled Chromium | Browser-driven scenario | trace, video, screenshots, `ui-gate.json` | Forms, buttons, history switching and operations execute from UI | HOSTED L5 PASS; PHYSICAL USER-MACHINE L5 NOT VERIFIED |
 | ZTR-007 | Validate generated files, not UI messages | ZTR-M4 | Binary PNG/SVG validators inspect generated files | Output validation after UI flow | `output-validation.json`, generated files | Actual px/PPI, alpha, halftone structure, SVG fidelity and lineage pass | HOSTED L5 PASS; OUTPUTS BYTE-IDENTICAL ACROSS RUNNERS |
-| ZTR-008 | Test update over a real previous authorized version | ZTR-M5 | Require exact prior installer plus independently SHA-pinned prior finalizer authorization record; keep baseline running; install candidate; verify real project and asset preservation | Windows behavior-level update test | `baseline-verification.json`, `update-test.json`, project snapshots | Prior record says `RELEASE_AUTHORIZED` and binds exact installer; baseline differs from candidate; old process stops; real project survives; new exact identity starts | MECHANISM PASS ON 1.4.8→1.4.9 DIAGNOSTIC; AUTHORIZING G6 BLOCKED — NO PRIOR AUTHORIZED BASELINE |
-| ZTR-009 | Test rollback on forced failure | ZTR-M5 | Inject failure after atomic promotion and reopen the real project after restoration | Windows behavior-level rollback test | `rollback-test.json`, project snapshots | Previous candidate install, critical hashes, identity, project JSON and asset bytes are restored and runnable | MECHANISM PASS, NON-AUTHORIZING; G7 BLOCKED BY G6 BASELINE |
+| ZTR-008 | Test update over a real previous authorized version | ZTR-M5 | Normal mode requires exact prior installer plus independently SHA-pinned prior finalizer record; genesis mode permits only `NOT_APPLICABLE_FIRST_RELEASE` after verified absence | Windows behavior-level update test or genesis absence adversarial test | `baseline-verification.json` or `genesis-baseline-verification.json` | Normal: prior authorized baseline is valid and update passes. Genesis: zero prior authorized assets are proven and no G6 PASS is claimed | MECHANISM PASS ON 1.4.8→1.4.9 DIAGNOSTIC; NORMAL G6 BLOCKED; GENESIS IMPLEMENTATION PENDING CI |
+| ZTR-009 | Test rollback on forced failure | ZTR-M5 | Normal mode injects failure and restores prior authorized install; genesis mode records only `NOT_APPLICABLE_FIRST_RELEASE` | Windows rollback test or genesis finalizer adversarial test | `rollback-test.json`, genesis final verdict | Normal: exact prior install/project restored. Genesis: G7 is not represented as PASS | MECHANISM PASS, NON-AUTHORIZING; NORMAL G7 BLOCKED; GENESIS IMPLEMENTATION PENDING CI |
 | ZTR-010 | Independent second verification | ZTR-M6 | Separate Windows job downloads the same exact candidate and repeats installed user path | Independent Windows/Chromium run | `independent-verification.json`, self-tests, trace and outputs | Same SHA and critical scenarios PASS independently | HOSTED L4/L5 PASS |
-| ZTR-011 | Preserve complete evidence | ZTR-M6 | Always aggregate pass or fail evidence | Final archive and artifact checks | `release-evidence.zip`, `ImageLab-RELEASE-VERDICT` | Logs, traces, videos, screenshots, outputs, hashes and verdict are preserved | HOSTED EVIDENCE PRESERVED; AUTHORIZED RELEASE ARCHIVE BLOCKED |
+| ZTR-011 | Preserve complete evidence | ZTR-M6 | Always aggregate pass or fail evidence | Final archive and artifact checks | `release-evidence.zip`, release verdict artifact | Logs, traces, outputs, hashes, physical L5 bundle and verdict are preserved | HOSTED EVIDENCE PRESERVED; AUTHORIZED RELEASE ARCHIVE BLOCKED |
 | ZTR-012 | Attest released outputs when supported | ZTR-M6 | Optional GitHub artifact attestation only after authorization | Attestation workflow step | GitHub attestation | Attestation subject digest matches authorized outputs | CONFIGURED / NOT EXECUTED |
-| ZTR-013 | Never publish on partial evidence | ZTR-M6 | Authorized artifact upload is conditional on finalizer success; finalizer creates a prior-release authorization record only after complete PASS | Workflow graph, positive and negative tests | workflow, `final-verdict.json`, `ImageLab-RELEASE-AUTHORIZATION.json` | Any skip, missing evidence, mismatch, filename-only baseline, non-authorized record or failure blocks authorized artifact | IMPLEMENTED / L1 VERIFIED |
+| ZTR-013 | Never publish on partial evidence | ZTR-M6 | Authorized upload is conditional on finalizer success | Workflow graph, positive and negative tests | workflow, final verdict, authorization record | Any skip, missing evidence, mismatch or failure blocks authorized artifact | IMPLEMENTED / L1 VERIFIED |
+| ZTR-014 | Bootstrap the first release without inventing a historical baseline | ZTR-M5/M6 | Dedicated genesis workflow consumes a strictly validated request, exact qualification run, Release/Actions history and a separate genesis finalizer | `tests/test_genesis_release_gate.py` | Genesis works only once; normal gate is unchanged; prior assets/runs/artifacts, mixed-file pushes or malformed evidence block | IMPLEMENTED / FINAL-HEAD CI VERIFICATION PENDING |
+| ZTR-014A | Execute genesis without modifying default `main` | ZTR-M5/M6 | Dedicated root request workflow `.github/workflows/zero-trust-genesis-request.yml` listens only for a reviewed request-only push to `bootstrap/zero-trust-gate`; source template retains manual dispatch | Workflow static contract and request resolver tests | Push changes exactly the fixed JSON request path and every field matches the finalizer arguments | IMPLEMENTED / FINAL-HEAD CI VERIFICATION PENDING |
+| ZTR-014B | Prevent repeated genesis before Release publication | ZTR-M5/M6 | Scan prior workflow runs and authorized genesis artifacts in addition to Releases | History verifier adversarial tests | Any prior successful genesis run or authorized artifact blocks | IMPLEMENTED / FINAL-HEAD CI VERIFICATION PENDING |
+| ZTR-015 | Require physical user-machine L5 for genesis authorization | ZTR-M6 | Download independently pinned manifest and evidence ZIP; inspect exact SHA, identity, self-tests, browser trace and output files | Positive and tamper tests | Exact physical L5 manifest and bundle pass; missing or mismatched evidence blocks | VALIDATOR IMPLEMENTED / REAL PHYSICAL L5 NOT YET SUPPLIED |
 
 ## Release gates
 
@@ -59,11 +85,13 @@ The exact installer binary delivered to the user must be the same binary, by SHA
 | G3 | Exact EXE clean Windows installation and mandatory embedded self-tests | L4 | PASS on hosted clean Windows |
 | G4 | Installed UI Playwright flow in Edge | L5 | PASS on hosted Windows; physical user-machine L5 not verified |
 | G5 | Output-file validation | L5 | PASS on hosted Windows |
-| G6 | Update from externally pinned prior authorized release with independently pinned prior finalizer record | L4/L5 | BLOCKED: no genuine historical `RELEASE_AUTHORIZED` installer and record exist; non-authorizing mechanism diagnostic PASS |
-| G7 | Forced-failure rollback with real-project restoration | L4/L5 | BLOCKED in authorizing form by G6; non-authorizing mechanism diagnostic PASS |
+| G6 | Update from externally pinned prior authorized release | L4/L5 | NORMAL: BLOCKED because no genuine historical baseline exists. GENESIS: may be `NOT_APPLICABLE_FIRST_RELEASE`, never PASS, only after verified absence |
+| G7 | Forced-failure rollback to prior authorized release | L4/L5 | NORMAL: BLOCKED by G6. GENESIS: may be `NOT_APPLICABLE_FIRST_RELEASE`, never PASS |
 | G8 | Independent exact-SHA rerun using another browser | L4/L5 | PASS on independent hosted Windows runner |
 
-Release is authorized only when G0–G8 are all `PASS`, all expected evidence files exist, the exact binary SHA is consistent, the baseline authorization record is independently pinned and valid, physical user-machine L5 is verified, and the final verdict is `RELEASE_AUTHORIZED`.
+A normal release is authorized only when G0–G8 are all `PASS`, the prior authorization record is valid, physical user-machine L5 is verified and the final verdict is `RELEASE_AUTHORIZED`.
+
+The one-time genesis release is authorized only when G0–G5 and G8 are `PASS`, G6/G7 are exactly `NOT_APPLICABLE_FIRST_RELEASE`, the request verifier and Release/Actions-history absence verifier are `PASS`, physical user-machine L5 is verified for the exact candidate, and the genesis final verdict is `RELEASE_AUTHORIZED`.
 
 Current final state:
 

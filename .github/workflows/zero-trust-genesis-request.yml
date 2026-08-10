@@ -1,0 +1,241 @@
+name: ImageLab Genesis Request Gate
+
+on:
+  push:
+    branches:
+      - bootstrap/zero-trust-gate
+    paths:
+      - recovery/genesis-request/GENESIS-REQUEST.json
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: imagelab-genesis-first-release
+  cancel-in-progress: false
+
+env:
+  PYTHONUTF8: '1'
+  PIP_DISABLE_PIP_VERSION_CHECK: '1'
+
+jobs:
+  resolve-request:
+    name: Resolve reviewed request-only push
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      request_id: ${{ steps.resolve.outputs.request_id }}
+      qualification_run_id: ${{ steps.resolve.outputs.qualification_run_id }}
+      qualification_head_sha: ${{ steps.resolve.outputs.qualification_head_sha }}
+      physical_l5_release_tag: ${{ steps.resolve.outputs.physical_l5_release_tag }}
+      physical_l5_manifest_sha256: ${{ steps.resolve.outputs.physical_l5_manifest_sha256 }}
+      physical_l5_bundle_sha256: ${{ steps.resolve.outputs.physical_l5_bundle_sha256 }}
+      enable_attestation: ${{ steps.resolve.outputs.enable_attestation }}
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+        with:
+          fetch-depth: 2
+      - name: Require exactly one changed request file
+        id: prepare
+        continue-on-error: true
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF_NAME" == "bootstrap/zero-trust-gate" ]] || { echo "Unexpected branch"; exit 1; }
+          [[ "$BEFORE_SHA" =~ ^[0-9a-fA-F]{40}$ ]] && [[ ! "$BEFORE_SHA" =~ ^0+$ ]] || { echo "Invalid before SHA"; exit 1; }
+          mkdir -p recovery/source/aggregate/request
+          git diff --name-only "$BEFORE_SHA" "$GITHUB_SHA" > recovery/source/aggregate/request/changed-files.txt
+          mapfile -t changed < recovery/source/aggregate/request/changed-files.txt
+          [[ ${#changed[@]} -eq 1 && "${changed[0]}" == "recovery/genesis-request/GENESIS-REQUEST.json" ]] || {
+            echo "Genesis push must change exactly recovery/genesis-request/GENESIS-REQUEST.json"
+            printf '%s\n' "${changed[@]}"
+            exit 1
+          }
+          cp recovery/genesis-request/GENESIS-REQUEST.json recovery/source/aggregate/request/GENESIS-REQUEST.json
+      - name: Validate and normalize request
+        id: resolve
+        continue-on-error: true
+        run: >-
+          python recovery/source/release_gate/genesis/resolve_request.py
+          --request recovery/source/aggregate/request/GENESIS-REQUEST.json
+          --repository "${{ github.repository }}"
+          --source reviewed_recovery_push
+          --output recovery/source/aggregate/request/genesis-request-verification.json
+          --github-output "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        if: always()
+        with:
+          name: genesis-request-evidence
+          path: recovery/source/aggregate/request/
+          retention-days: 90
+          if-no-files-found: error
+      - name: Enforce request resolution
+        if: ${{ steps.prepare.outcome != 'success' || steps.resolve.outcome != 'success' }}
+        run: exit 1
+
+  genesis-contracts:
+    name: Genesis request and finalizer contracts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: recovery/source
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.13.14'
+      - name: Install exact dependencies
+        run: |
+          python -m pip install --requirement requirements.txt
+          python -m pip install pytest==8.4.2 httpx==0.28.1
+      - name: Compile and run focused contracts
+        run: |
+          python -m compileall -q release_gate/genesis tests/test_genesis_release_gate.py tests/test_genesis_request_gate.py
+          python -m pytest tests/test_genesis_release_gate.py tests/test_genesis_request_gate.py -vv --tb=short
+
+  final-genesis-verdict:
+    name: One-time fail-closed genesis authorization
+    needs: [resolve-request, genesis-contracts]
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: recovery/source
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.13.14'
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        continue-on-error: true
+        with:
+          name: genesis-request-evidence
+          path: recovery/source/aggregate/request
+
+      - name: Capture exact qualification run and evidence
+        id: qualification
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          QUALIFICATION_RUN_ID: ${{ needs.resolve-request.outputs.qualification_run_id }}
+          QUALIFICATION_HEAD_SHA: ${{ needs.resolve-request.outputs.qualification_head_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$QUALIFICATION_RUN_ID" =~ ^[0-9]+$ ]] || { echo "qualification_run_id must be numeric"; exit 1; }
+          [[ "$QUALIFICATION_HEAD_SHA" =~ ^[0-9a-fA-F]{40}$ ]] || { echo "qualification_head_sha must be exact"; exit 1; }
+          mkdir -p aggregate/qualification aggregate/qualification-verdict
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$QUALIFICATION_RUN_ID" > aggregate/qualification/run-metadata.json
+          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$QUALIFICATION_RUN_ID/artifacts?per_page=100" --jq '.artifacts[].name' > aggregate/qualification/artifact-names.txt
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          root=Path('aggregate/qualification')
+          meta=json.loads((root/'run-metadata.json').read_text())
+          names=[x.strip() for x in (root/'artifact-names.txt').read_text().splitlines() if x.strip()]
+          result={'schema':1,'status':'PASS','repository':os.environ['GITHUB_REPOSITORY'],'run_id':int(os.environ['QUALIFICATION_RUN_ID']),'head_sha':str(meta.get('head_sha') or ''),'workflow_name':str(meta.get('name') or ''),'event':str(meta.get('event') or ''),'conclusion':str(meta.get('conclusion') or ''),'artifact_names':names}
+          expected={'head_sha':os.environ['QUALIFICATION_HEAD_SHA'].lower(),'workflow_name':'ImageLab Zero-Trust Release Gate','event':'workflow_dispatch','conclusion':'failure'}
+          required={'ztr-source-evidence','ztr-unit-verdict','UNVERIFIED_INTERNAL_EXACT_CANDIDATE','ztr-clean-install-evidence','ztr-independent-evidence','ImageLab-RELEASE-VERDICT'}
+          errors=[k for k,v in expected.items() if str(result.get(k,'')).lower()!=v.lower()]
+          if not required.issubset(set(names)): errors.append('artifact_names')
+          if errors: result.update(status='FAIL',failed_fields=sorted(set(errors)))
+          (root/'qualification-run.json').write_text(json.dumps(result,indent=2))
+          raise SystemExit(0 if result['status']=='PASS' else 1)
+          PY
+          gh run download "$QUALIFICATION_RUN_ID" -n ztr-source-evidence -D aggregate/source
+          gh run download "$QUALIFICATION_RUN_ID" -n ztr-unit-verdict -D aggregate/unit
+          gh run download "$QUALIFICATION_RUN_ID" -n UNVERIFIED_INTERNAL_EXACT_CANDIDATE -D aggregate/build
+          gh run download "$QUALIFICATION_RUN_ID" -n ztr-clean-install-evidence -D aggregate/clean
+          gh run download "$QUALIFICATION_RUN_ID" -n ztr-independent-evidence -D aggregate/independent
+          gh run download "$QUALIFICATION_RUN_ID" -n ImageLab-RELEASE-VERDICT -D aggregate/qualification-verdict
+
+      - name: Prove no prior genesis authorization exists
+        id: genesis-history
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p aggregate/genesis
+          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/releases?per_page=100" > aggregate/genesis/releases.json
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" > aggregate/genesis/current-run.json
+          WORKFLOW_ID="$(python -c 'import json; print(json.load(open("aggregate/genesis/current-run.json"))["workflow_id"])')"
+          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/actions/workflows/$WORKFLOW_ID/runs?per_page=100" > aggregate/genesis/prior-workflow-runs.json
+          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/actions/artifacts?per_page=100&name=ImageLab-GENESIS-RELEASE-AUTHORIZED" > aggregate/genesis/prior-authorized-artifacts.json
+          python release_gate/genesis/verify_no_prior_release.py \
+            --releases-json aggregate/genesis/releases.json \
+            --workflow-runs-json aggregate/genesis/prior-workflow-runs.json \
+            --artifacts-json aggregate/genesis/prior-authorized-artifacts.json \
+            --repository "$GITHUB_REPOSITORY" \
+            --current-run-id "$GITHUB_RUN_ID" \
+            --output aggregate/genesis/genesis-history-verification.json
+
+      - name: Download and pin physical user-machine L5 evidence
+        id: physical-l5
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PHYSICAL_TAG: ${{ needs.resolve-request.outputs.physical_l5_release_tag }}
+          PHYSICAL_MANIFEST_SHA256: ${{ needs.resolve-request.outputs.physical_l5_manifest_sha256 }}
+          PHYSICAL_BUNDLE_SHA256: ${{ needs.resolve-request.outputs.physical_l5_bundle_sha256 }}
+        run: |
+          set -euo pipefail
+          [[ "$PHYSICAL_MANIFEST_SHA256" =~ ^[0-9a-fA-F]{64}$ ]] || exit 1
+          [[ "$PHYSICAL_BUNDLE_SHA256" =~ ^[0-9a-fA-F]{64}$ ]] || exit 1
+          mkdir -p aggregate/physical
+          gh release download "$PHYSICAL_TAG" --pattern 'ImageLab-PHYSICAL-L5.json' --dir aggregate/physical --clobber
+          gh release download "$PHYSICAL_TAG" --pattern 'ImageLab-PHYSICAL-L5-EVIDENCE.zip' --dir aggregate/physical --clobber
+          test "$(find aggregate/physical -maxdepth 1 -name 'ImageLab-PHYSICAL-L5.json' -type f | wc -l)" -eq 1
+          test "$(find aggregate/physical -maxdepth 1 -name 'ImageLab-PHYSICAL-L5-EVIDENCE.zip' -type f | wc -l)" -eq 1
+          echo "$PHYSICAL_MANIFEST_SHA256  aggregate/physical/ImageLab-PHYSICAL-L5.json" | sha256sum --check --strict
+          echo "$PHYSICAL_BUNDLE_SHA256  aggregate/physical/ImageLab-PHYSICAL-L5-EVIDENCE.zip" | sha256sum --check --strict
+
+      - name: Generate exact genesis verdict
+        id: finalize
+        if: ${{ always() }}
+        continue-on-error: true
+        run: >-
+          python release_gate/genesis/orchestrate_request_gate.py
+          --aggregate-dir aggregate
+          --output-dir authorized-release
+          --finalizer release_gate/genesis/finalize_gate.py
+          --repository "${{ github.repository }}"
+          --genesis-request-id "${{ needs.resolve-request.outputs.request_id }}"
+          --qualification-run-id "${{ needs.resolve-request.outputs.qualification_run_id }}"
+          --qualification-head-sha "${{ needs.resolve-request.outputs.qualification_head_sha }}"
+          --physical-manifest-sha256 "${{ needs.resolve-request.outputs.physical_l5_manifest_sha256 }}"
+          --physical-bundle-sha256 "${{ needs.resolve-request.outputs.physical_l5_bundle_sha256 }}"
+
+      - name: Attest exact authorized outputs
+        if: ${{ steps.finalize.outcome == 'success' && needs.resolve-request.outputs.enable_attestation == 'true' }}
+        uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6
+        with:
+          subject-path: recovery/source/authorized-release/*
+          create-storage-record: false
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        if: always()
+        with:
+          name: ImageLab-GENESIS-RELEASE-VERDICT
+          path: recovery/source/authorized-release/
+          retention-days: 90
+          if-no-files-found: error
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        if: ${{ steps.finalize.outcome == 'success' }}
+        with:
+          name: ImageLab-GENESIS-RELEASE-AUTHORIZED
+          path: |
+            recovery/source/authorized-release/*.exe
+            recovery/source/authorized-release/ImageLab-RELEASE-AUTHORIZATION.json
+          retention-days: 90
+          if-no-files-found: error
+      - name: Enforce fail-closed genesis verdict
+        if: ${{ steps.finalize.outcome != 'success' }}
+        run: exit 1
