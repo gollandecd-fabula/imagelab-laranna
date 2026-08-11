@@ -36,6 +36,9 @@ on:
       - recovery/source/docs/ZERO_TRUST_RELEASE_GATE_RUNBOOK_V1.md
       - recovery/evidence/full-audit-20260725/**
       - .github/workflows/codex-evidence-hardening-ci.yml
+  push:
+    branches:
+      - redteam/imagelab-complete-audit-20260725-v2
   workflow_dispatch:
 
 permissions:

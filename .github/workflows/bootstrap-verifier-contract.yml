@@ -11,10 +11,7 @@ on:
   push:
     branches:
       - bootstrap/zero-trust-gate
-    paths:
-      - bootstrap/verify_source_bundle.py
-      - bootstrap/test_verify_source_bundle.py
-      - .github/workflows/bootstrap-verifier-contract.yml
+      - redteam/imagelab-complete-audit-20260725-v2
   workflow_dispatch:
 
 permissions:

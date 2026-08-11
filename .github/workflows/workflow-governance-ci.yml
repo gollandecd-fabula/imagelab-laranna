@@ -7,6 +7,9 @@ on:
     paths:
       - .github/workflows/**
       - audit_tests/test_workflow_governance.py
+  push:
+    branches:
+      - redteam/imagelab-complete-audit-20260725-v2
   workflow_dispatch:
 
 permissions:

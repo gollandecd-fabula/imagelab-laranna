@@ -8,6 +8,9 @@ on:
       - recovery/source/requirements.txt
       - recovery/source/pyproject.toml
       - .github/workflows/dependency-security-audit.yml
+  push:
+    branches:
+      - redteam/imagelab-complete-audit-20260725-v2
   workflow_dispatch:
 
 permissions:
