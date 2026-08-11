@@ -29,12 +29,14 @@
     state.selectedId=project.assets?.some(asset=>asset.id===pinned)?pinned:(project.assets?.at(-1)?.id||null);
     storage.set('imagelab.activeProjectId',id);
     S.projectGeneration=(S.projectGeneration||0)+1;
+    S.committedProjectSnapshot=structuredClone(project);
     renderProject();
     await loadProjects();
     activateModule('upload');
     return true;
   }
   S.openProject=openProject;
+  S.currentRouteProjectId=()=>activeProjectId;
   S.resetActiveProjectRoute=()=>{activeProjectId=PROJECT_ID;};
   async function createProject(){const title=$('#m2aProjectTitle').value.trim();if(!title)return toast('Введите название проекта',true);const id=$('#m2aProjectId').value.trim()||`${title.toLowerCase().replace(/[^a-zа-я0-9_-]+/gi,'-').replace(/^-|-$/g,'')||'project'}-${Date.now().toString(36)}`;setBusy(true);try{await api(`/api/projects/${encodeURIComponent(id)}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title})});const opened=await openProject(id);if(opened!==false)toast('Проект создан');}catch(e){toast(e.message,true);}finally{setBusy(false);}}
   async function renameProject(){if(!state.project)return toast('Проект не открыт',true);const title=prompt('Новое название проекта',state.project.title);if(title===null)return;try{state.project=await api(`/api/projects/${encodeURIComponent(PROJECT_ID)}/title`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({title})});renderProject();await loadProjects();toast('Проект переименован');}catch(e){toast(e.message,true);}}
