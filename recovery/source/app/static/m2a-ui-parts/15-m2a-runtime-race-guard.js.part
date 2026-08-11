@@ -1,0 +1,142 @@
+(() => {
+  'use strict';
+
+  const M = window.imagelabM2A || (window.imagelabM2A = {});
+  const byId = id => document.getElementById(id);
+
+  const sizeIds = [
+    'widthMm', 'heightMm', 'improveWidthMm', 'improveHeightMm',
+    'geometryPpi', 'improvePpi', 'm2aLeading', 'm2aResample',
+    'm2aCanvasWidth', 'm2aCanvasHeight', 'm2aCanvasAnchor',
+    'm2aCanvasTop', 'm2aCanvasBottom', 'm2aCanvasLeft', 'm2aCanvasRight',
+  ];
+
+  let desiredSize = null;
+  let desiredDirty = false;
+
+  function captureDesiredSize() {
+    if (typeof M.sizeControllerValue !== 'function') return;
+    desiredSize = structuredClone(M.sizeControllerValue());
+    desiredDirty = true;
+  }
+
+  function sameSize(left, right) {
+    if (!left || !right) return false;
+    const canvasLeft = left.canvas || {};
+    const canvasRight = right.canvas || {};
+    return left.linked === right.linked &&
+      left.leading === right.leading &&
+      left.resample === right.resample &&
+      String(left.width_mm ?? '') === String(right.width_mm ?? '') &&
+      String(left.height_mm ?? '') === String(right.height_mm ?? '') &&
+      String(left.improve_width_mm ?? '') === String(right.improve_width_mm ?? '') &&
+      String(left.improve_height_mm ?? '') === String(right.improve_height_mm ?? '') &&
+      Number(left.ppi ?? 300) === Number(right.ppi ?? 300) &&
+      Number(left.improve_ppi ?? 300) === Number(right.improve_ppi ?? 300) &&
+      String(canvasLeft.width_mm ?? '') === String(canvasRight.width_mm ?? '') &&
+      String(canvasLeft.height_mm ?? '') === String(canvasRight.height_mm ?? '') &&
+      String(canvasLeft.anchor || 'center') === String(canvasRight.anchor || 'center') &&
+      Number(canvasLeft.top_mm || 0) === Number(canvasRight.top_mm || 0) &&
+      Number(canvasLeft.bottom_mm || 0) === Number(canvasRight.bottom_mm || 0) &&
+      Number(canvasLeft.left_mm || 0) === Number(canvasRight.left_mm || 0) &&
+      Number(canvasLeft.right_mm || 0) === Number(canvasRight.right_mm || 0);
+  }
+
+  function restoreDesiredSize(value) {
+    if (!value) return;
+    M.linked = value.linked !== false;
+    M.leading = value.leading || 'auto';
+    M.resample = value.resample !== false;
+    const canvas = value.canvas || {};
+    const values = {
+      widthMm: value.width_mm,
+      heightMm: value.height_mm,
+      improveWidthMm: value.improve_width_mm ?? value.width_mm,
+      improveHeightMm: value.improve_height_mm ?? value.height_mm,
+      geometryPpi: value.ppi,
+      improvePpi: value.improve_ppi ?? value.ppi,
+      m2aLeading: M.leading,
+      m2aCanvasWidth: canvas.width_mm,
+      m2aCanvasHeight: canvas.height_mm,
+      m2aCanvasAnchor: canvas.anchor || 'center',
+      m2aCanvasTop: canvas.top_mm,
+      m2aCanvasBottom: canvas.bottom_mm,
+      m2aCanvasLeft: canvas.left_mm,
+      m2aCanvasRight: canvas.right_mm,
+    };
+    Object.entries(values).forEach(([id, item]) => {
+      const node = byId(id);
+      if (node && item !== undefined && item !== null) node.value = item;
+    });
+    if (byId('m2aResample')) byId('m2aResample').checked = M.resample;
+    const legacy = byId('improvePreserveAspect');
+    if (legacy) legacy.checked = M.linked;
+    document.querySelectorAll('.m2a-chain').forEach(node => {
+      node.dataset.linked = String(M.linked);
+      node.setAttribute('aria-pressed', String(M.linked));
+      node.setAttribute('aria-label', M.linked ? 'Разъединить ширину и высоту' : 'Связать ширину и высоту');
+    });
+    if (typeof updateSizeViews === 'function') updateSizeViews();
+  }
+
+  sizeIds.forEach(id => {
+    const node = byId(id);
+    node?.addEventListener('input', captureDesiredSize);
+    node?.addEventListener('change', captureDesiredSize);
+  });
+  document.querySelectorAll('.m2a-chain').forEach(node => node.addEventListener('click', captureDesiredSize));
+
+  const previousRenderProject = renderProject;
+  renderProject = function() {
+    previousRenderProject();
+    if (!desiredDirty || !desiredSize) return;
+    const persisted = state.project?.workspace?.size_controller;
+    if (sameSize(persisted, desiredSize)) {
+      desiredDirty = false;
+      desiredSize = null;
+      return;
+    }
+    restoreDesiredSize(desiredSize);
+  };
+
+  const previousPrepareProjectSwitch = M.prepareProjectSwitch;
+  M.prepareProjectSwitch = async function() {
+    if (typeof previousPrepareProjectSwitch === 'function') await previousPrepareProjectSwitch();
+    desiredDirty = false;
+    desiredSize = null;
+  };
+
+  document.addEventListener('click', event => {
+    if (event.target.closest('#m2aPresetList [data-use]')) {
+      desiredDirty = false;
+      desiredSize = null;
+    }
+  }, true);
+
+  // Browser contracts use an opaque document with a valid <base>. Production pages
+  // are served from localhost. Keep the hardened pinned batch request compatible with
+  // both without changing its project pinning semantics.
+  const runBatch = byId('m2aRunBatch');
+  const hardenedBatchHandler = runBatch?.onclick;
+  if (runBatch && typeof hardenedBatchHandler === 'function') {
+    runBatch.onclick = async function(...args) {
+      const opaqueLocation = window.location.protocol === 'about:' || window.location.origin === 'null';
+      if (!opaqueLocation) return hardenedBatchHandler.apply(this, args);
+      const NativeURL = window.URL;
+      class BaseAwareURL extends NativeURL {
+        constructor(input, base) {
+          const effectiveBase = base === window.location.href ? document.baseURI : base;
+          super(input, effectiveBase);
+        }
+      }
+      window.URL = BaseAwareURL;
+      try {
+        return await hardenedBatchHandler.apply(this, args);
+      } finally {
+        window.URL = NativeURL;
+      }
+    };
+  }
+
+  renderProject();
+})();
