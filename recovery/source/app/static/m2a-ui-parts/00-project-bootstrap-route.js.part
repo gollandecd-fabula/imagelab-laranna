@@ -1,0 +1,14 @@
+(() => {
+  'use strict';
+
+  let persistedProjectId = null;
+  try {
+    persistedProjectId = window.localStorage.getItem('imagelab.activeProjectId');
+    if (persistedProjectId && persistedProjectId !== PROJECT_ID) {
+      window.localStorage.removeItem('imagelab.activeProjectId');
+    }
+  } catch (_) {
+    // Opaque browser-test documents already fall back to M2A memory storage.
+  }
+  window.__imagelabM2APersistedProjectId = persistedProjectId;
+})();
