@@ -1,0 +1,46 @@
+(() => {
+  'use strict';
+
+  const byId = id => document.getElementById(id);
+
+  function stagePresetPolicy(preset) {
+    const parameters = preset?.parameters || {};
+    if (!state.project || !(parameters.engine_policy || parameters.qa_policy || parameters.export_profile)) return;
+    state.project.workspace ||= {};
+    const settings = structuredClone(state.project.workspace.settings || {});
+    settings.privacy = {...(settings.privacy || {})};
+    if (parameters.engine_policy) settings.privacy.local_only = parameters.engine_policy === 'local_only';
+    if (parameters.qa_policy) settings.qa_policy = parameters.qa_policy;
+    if (parameters.export_profile) settings.export_profile = parameters.export_profile;
+    state.project.workspace.settings = settings;
+  }
+
+  function bindPolicyRestore() {
+    const presets = new Map(Object.entries(state.project?.workspace?.presets || {}));
+    document.querySelectorAll('#m2aPresetList .m2a-preset-row').forEach(row => {
+      const name = row.querySelector('strong')?.textContent || '';
+      const button = row.querySelector('[data-use]');
+      const preset = presets.get(name);
+      if (!button || !preset || typeof button.onclick !== 'function') return;
+      if (button.onclick === button.__m2aPolicyRestoreWrapper) return;
+      const prior = button.onclick;
+      const wrapper = function(event) {
+        stagePresetPolicy(preset);
+        return prior.call(this, event);
+      };
+      button.__m2aPolicyRestoreWrapper = wrapper;
+      button.onclick = wrapper;
+    });
+  }
+
+  const presetRoot = byId('m2aPresetList');
+  if (presetRoot) new MutationObserver(bindPolicyRestore).observe(presetRoot, {childList: true, subtree: true});
+
+  const previousRenderProject = renderProject;
+  renderProject = function() {
+    previousRenderProject();
+    bindPolicyRestore();
+  };
+
+  bindPolicyRestore();
+})();
