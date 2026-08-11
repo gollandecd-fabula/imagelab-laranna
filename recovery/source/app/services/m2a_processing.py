@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from PIL import Image, ImageOps
+from PIL import Image, ImageEnhance, ImageOps
 
 from app.ai.runtime import get_ai_engine
 from app.config import settings
@@ -169,9 +169,9 @@ def geometry_m2a(image: Image.Image, ppi: float, params: dict[str, Any]) -> tupl
 
 
 def process_image(asset: AssetRecord, operation: str, params: dict[str, Any]) -> AssetRecord:
-    """M2A adapter: preserve the stable processing engine and extend geometry contracts."""
+    """M2A adapter: preserve the stable engine while enforcing the shared size contract."""
     normalized = operation.strip().lower()
-    if normalized != "geometry":
+    if normalized not in {"geometry", "enhance", "reconstruct"}:
         return _legacy_process_image(asset, operation, params)
 
     engine = get_ai_engine()
@@ -184,6 +184,26 @@ def process_image(asset: AssetRecord, operation: str, params: dict[str, Any]) ->
     recorded["input_width_px"] = image.width
     recorded["input_height_px"] = image.height
     recorded["input_ppi"] = round(float(ppi), 4)
+
+    if normalized == "enhance":
+        restored, ai = engine.restore(image, scale=1, strength=None, module="improve")
+        result = legacy._enhance(restored, params)
+        result, result_ppi = geometry_m2a(result, ppi, recorded)
+        recorded["physical_size_unit"] = "mm"
+        recorded["ppi_range"] = [100, 1000]
+        ai["deterministic_postprocess"] = "brightness/contrast/saturation/sharpness"
+        return legacy._save_result(result, result_ppi, asset, normalized, recorded, ai=ai)
+
+    if normalized == "reconstruct":
+        scale = legacy._integer(params, "scale", 2, 1, 4)
+        result, ai = engine.restore(image, scale=scale, strength=None, module="improve")
+        detail = legacy._integer(params, "detail", 45, 0, 100)
+        if detail:
+            result = ImageEnhance.Sharpness(result).enhance(1 + detail / 160)
+        result, result_ppi = geometry_m2a(result, ppi, recorded)
+        recorded["physical_size_unit"] = "mm"
+        recorded["ppi_range"] = [100, 1000]
+        return legacy._save_result(result, result_ppi, asset, normalized, recorded, ai=ai)
 
     ai = engine.recommend_size(image, module="geometry")
     if legacy._bool(params, "ai_auto_crop", False):
