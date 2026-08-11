@@ -1,0 +1,574 @@
+(() => {
+  'use strict';
+
+  const M = window.imagelabM2A || (window.imagelabM2A = {});
+  const byId = id => document.getElementById(id);
+  const now = () => new Date().toISOString();
+  const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+  const clone = value => value == null ? value : structuredClone(value);
+
+  function numberField(id, fallback = 0) {
+    const value = Number(byId(id)?.value);
+    return Number.isFinite(value) ? value : fallback;
+  }
+
+  function optionalField(id) {
+    const raw = byId(id)?.value?.trim() || '';
+    if (raw === '') return '';
+    const value = Number(raw);
+    return Number.isFinite(value) ? value : '';
+  }
+
+  function canonicalSizeControllerValue() {
+    return {
+      linked: M.linked !== false,
+      leading: M.leading || byId('m2aLeading')?.value || 'auto',
+      resample: M.resample !== false,
+      width_mm: byId('widthMm')?.value || '',
+      height_mm: byId('heightMm')?.value || '',
+      improve_width_mm: byId('improveWidthMm')?.value || '',
+      improve_height_mm: byId('improveHeightMm')?.value || '',
+      ppi: numberField('geometryPpi', 300),
+      improve_ppi: numberField('improvePpi', 300),
+      canvas: {
+        width_mm: byId('m2aCanvasWidth')?.value || '',
+        height_mm: byId('m2aCanvasHeight')?.value || '',
+        anchor: byId('m2aCanvasAnchor')?.value || 'center',
+        top_mm: numberField('m2aCanvasTop'),
+        bottom_mm: numberField('m2aCanvasBottom'),
+        left_mm: numberField('m2aCanvasLeft'),
+        right_mm: numberField('m2aCanvasRight'),
+      },
+    };
+  }
+  M.sizeControllerValue = canonicalSizeControllerValue;
+
+  let canonicalSaveTimer;
+  function scheduleCanonicalSizeSave() {
+    clearTimeout(canonicalSaveTimer);
+    canonicalSaveTimer = setTimeout(() => {
+      if (!state.project || typeof M.workspacePut !== 'function') return;
+      M.workspacePut('size_controller', canonicalSizeControllerValue()).catch(error => toast(error.message, true));
+    }, 360);
+  }
+
+  function bindCanonicalSizePersistence() {
+    const ids = [
+      'widthMm', 'heightMm', 'improveWidthMm', 'improveHeightMm',
+      'geometryPpi', 'improvePpi', 'm2aLeading', 'm2aResample',
+      'm2aCanvasWidth', 'm2aCanvasHeight', 'm2aCanvasAnchor',
+      'm2aCanvasTop', 'm2aCanvasBottom', 'm2aCanvasLeft', 'm2aCanvasRight',
+    ];
+    ids.forEach(id => {
+      const node = byId(id);
+      node?.addEventListener('input', scheduleCanonicalSizeSave);
+      node?.addEventListener('change', scheduleCanonicalSizeSave);
+    });
+    document.querySelectorAll('.m2a-chain').forEach(node => node.addEventListener('click', scheduleCanonicalSizeSave));
+  }
+
+  function restoreCanonicalSize(value) {
+    if (!value || typeof value !== 'object') return;
+    M.linked = value.linked !== false;
+    M.leading = value.leading || 'auto';
+    M.resample = value.resample !== false;
+    const canvas = value.canvas || {};
+    const values = {
+      widthMm: value.width_mm,
+      heightMm: value.height_mm,
+      improveWidthMm: value.improve_width_mm ?? value.width_mm,
+      improveHeightMm: value.improve_height_mm ?? value.height_mm,
+      geometryPpi: value.ppi,
+      improvePpi: value.improve_ppi ?? value.ppi,
+      m2aLeading: M.leading,
+      m2aCanvasWidth: canvas.width_mm,
+      m2aCanvasHeight: canvas.height_mm,
+      m2aCanvasAnchor: canvas.anchor || 'center',
+      m2aCanvasTop: canvas.top_mm,
+      m2aCanvasBottom: canvas.bottom_mm,
+      m2aCanvasLeft: canvas.left_mm,
+      m2aCanvasRight: canvas.right_mm,
+    };
+    Object.entries(values).forEach(([id, item]) => {
+      const node = byId(id);
+      if (node && item !== undefined && item !== null) node.value = item;
+    });
+    if (byId('m2aResample')) byId('m2aResample').checked = M.resample;
+    const legacy = byId('improvePreserveAspect');
+    if (legacy) legacy.checked = M.linked;
+    document.querySelectorAll('.m2a-chain').forEach(node => {
+      node.dataset.linked = String(M.linked);
+      node.setAttribute('aria-pressed', String(M.linked));
+      node.setAttribute('aria-label', M.linked ? 'Разъединить ширину и высоту' : 'Связать ширину и высоту');
+    });
+    if (typeof updateSizeViews === 'function') updateSizeViews();
+  }
+
+  window.improvePhysicalParams = function() {
+    const size = canonicalSizeControllerValue();
+    if (!Number.isFinite(size.improve_ppi) || size.improve_ppi < 100 || size.improve_ppi > 1000) {
+      throw new Error('PPI должен быть от 100 до 1000');
+    }
+    return {
+      width_mm: size.improve_width_mm,
+      height_mm: size.improve_height_mm,
+      ppi: size.improve_ppi,
+      preserve_aspect: size.linked,
+      leading_side: size.leading,
+      resample: size.resample,
+    };
+  };
+
+  function projectedContentPixels(params) {
+    const asset = typeof selectedAsset === 'function' ? selectedAsset() : null;
+    let width = Number(asset?.width_px || 0);
+    let height = Number(asset?.height_px || 0);
+    if (!width || !height) return {width: 0, height: 0, ppi: Number(params.ppi || 300)};
+
+    const crop = params.crop || {};
+    const cropWidth = Number(crop.width);
+    const cropHeight = Number(crop.height);
+    if (Number.isFinite(cropWidth) && cropWidth > 0 && cropWidth <= 100) width = Math.max(1, Math.round(width * cropWidth / 100));
+    if (Number.isFinite(cropHeight) && cropHeight > 0 && cropHeight <= 100) height = Math.max(1, Math.round(height * cropHeight / 100));
+
+    const angle = Math.abs(Number(params.rotate || 0)) % 180;
+    if (angle > 0.0001) {
+      const radians = angle * Math.PI / 180;
+      const rotatedWidth = Math.abs(width * Math.cos(radians)) + Math.abs(height * Math.sin(radians));
+      const rotatedHeight = Math.abs(width * Math.sin(radians)) + Math.abs(height * Math.cos(radians));
+      width = Math.ceil(rotatedWidth);
+      height = Math.ceil(rotatedHeight);
+    }
+
+    let ppi = Number(params.ppi || 300);
+    const rawWidthMm = Number(params.width_mm);
+    const rawHeightMm = Number(params.height_mm);
+    let widthMm = Number.isFinite(rawWidthMm) && rawWidthMm > 0 ? rawWidthMm : 0;
+    let heightMm = Number.isFinite(rawHeightMm) && rawHeightMm > 0 ? rawHeightMm : 0;
+    const aspect = width / Math.max(1, height);
+
+    if (params.preserve_aspect !== false && (widthMm || heightMm)) {
+      if (widthMm && !heightMm) heightMm = widthMm / aspect;
+      else if (heightMm && !widthMm) widthMm = heightMm * aspect;
+      else if (widthMm && heightMm) {
+        if (params.leading_side === 'height') widthMm = heightMm * aspect;
+        else heightMm = widthMm / aspect;
+      }
+    }
+    if (params.resample !== false && widthMm && heightMm) {
+      width = Math.max(1, Math.round(widthMm / 25.4 * ppi));
+      height = Math.max(1, Math.round(heightMm / 25.4 * ppi));
+    } else if (params.resample === false && widthMm && heightMm) {
+      const pxPerWidth = width / Math.max(widthMm / 25.4, 1e-9);
+      const pxPerHeight = height / Math.max(heightMm / 25.4, 1e-9);
+      ppi = (pxPerWidth + pxPerHeight) / 2;
+    }
+    return {width, height, ppi};
+  }
+
+  function validateProjectedGeometry(params) {
+    const ppi = Number(params.ppi || 0);
+    if (!Number.isFinite(ppi) || ppi < 100 || ppi > 1000) throw new Error('PPI должен быть от 100 до 1000');
+    const canvas = params.canvas || {};
+    const explicitWidth = canvas.width_mm !== '' && canvas.width_mm !== undefined && canvas.width_mm !== null;
+    const explicitHeight = canvas.height_mm !== '' && canvas.height_mm !== undefined && canvas.height_mm !== null;
+    if (explicitWidth !== explicitHeight) throw new Error('Ширина и высота холста должны быть указаны вместе');
+
+    const content = projectedContentPixels(params);
+    const effectivePpi = Number.isFinite(content.ppi) && content.ppi > 0 ? content.ppi : ppi;
+    const marginPixels = {
+      left: Math.max(0, Math.round(Number(canvas.left_mm || 0) / 25.4 * effectivePpi)),
+      right: Math.max(0, Math.round(Number(canvas.right_mm || 0) / 25.4 * effectivePpi)),
+      top: Math.max(0, Math.round(Number(canvas.top_mm || 0) / 25.4 * effectivePpi)),
+      bottom: Math.max(0, Math.round(Number(canvas.bottom_mm || 0) / 25.4 * effectivePpi)),
+    };
+    let targetWidth = content.width + marginPixels.left + marginPixels.right;
+    let targetHeight = content.height + marginPixels.top + marginPixels.bottom;
+
+    if (explicitWidth && explicitHeight) {
+      const widthMm = Number(canvas.width_mm);
+      const heightMm = Number(canvas.height_mm);
+      if (!Number.isFinite(widthMm) || widthMm <= 0 || widthMm > 4000) throw new Error('Ширина холста должна быть от 0,1 до 4000 мм');
+      if (!Number.isFinite(heightMm) || heightMm <= 0 || heightMm > 4000) throw new Error('Высота холста должна быть от 0,1 до 4000 мм');
+      targetWidth = Math.max(1, Math.round(widthMm / 25.4 * effectivePpi));
+      targetHeight = Math.max(1, Math.round(heightMm / 25.4 * effectivePpi));
+      if (targetWidth < content.width + marginPixels.left + marginPixels.right ||
+          targetHeight < content.height + marginPixels.top + marginPixels.bottom) {
+        throw new Error('Размер холста меньше изображения с заданными отступами');
+      }
+    }
+
+    if (targetWidth * targetHeight > 40_000_000) throw new Error('Холст превышает безопасный лимит памяти');
+  }
+
+  const baseGeometryBuilder = M.buildGeometryParams;
+  if (typeof baseGeometryBuilder === 'function') {
+    M.buildGeometryParams = function() {
+      const params = baseGeometryBuilder();
+      validateProjectedGeometry(params);
+      return params;
+    };
+    window.geometryParams = M.buildGeometryParams;
+  }
+
+  function replaceButton(id, handler) {
+    const old = byId(id);
+    if (!old) return null;
+    const button = old.cloneNode(true);
+    old.replaceWith(button);
+    button.addEventListener('click', handler);
+    return button;
+  }
+
+  replaceButton('applyEnhance', () => {
+    try {
+      const params = {
+        preset: byId('enhancePreset')?.value || 'standard',
+        brightness: 1,
+        contrast: numberField('enhanceContrast', 100) / 100,
+        saturation: numberField('enhanceSaturation', 100) / 100,
+        sharpness: numberField('enhanceSharpness', 100) / 100,
+        denoise: numberField('enhanceDenoise', 0),
+        ai_auto: Boolean(byId('improveAiAuto')?.checked),
+        ...window.improvePhysicalParams(),
+      };
+      processSelected('enhance', params, 'Улучшение применено');
+    } catch (error) {
+      toast(error.message, true);
+    }
+  });
+
+  replaceButton('applyReconstruct', () => {
+    try {
+      const params = {
+        scale: numberField('reconstructScale', 2),
+        detail: numberField('reconstructDetail', 50),
+        denoise: numberField('enhanceDenoise', 20),
+        ai_auto: Boolean(byId('improveAiAuto')?.checked),
+        ...window.improvePhysicalParams(),
+      };
+      processSelected('reconstruct', params, 'Реконструкция завершена');
+    } catch (error) {
+      toast(error.message, true);
+    }
+  });
+
+  replaceButton('applyGeometry', () => {
+    try {
+      const params = M.buildGeometryParams ? M.buildGeometryParams() : geometryParams();
+      processSelected('geometry', params, 'Размер и геометрия применены');
+    } catch (error) {
+      toast(error.message, true);
+    }
+  });
+
+  function presetPolicy() {
+    return {
+      engine_policy: byId('m2aPrivacyLocal')?.checked === false ? 'consent_required' : 'local_only',
+      qa_policy: byId('m2aQaPolicy')?.value || 'mandatory',
+      export_profile: byId('m2aExportProfile')?.value || 'transparent_png',
+    };
+  }
+
+  function presetParameters(module) {
+    const policy = presetPolicy();
+    if (module === 'geometry' || module === 'improve') {
+      return {...policy, size_controller: canonicalSizeControllerValue()};
+    }
+    return policy;
+  }
+
+  async function savePresetHardened() {
+    const projectId = state.project?.id;
+    const name = byId('m2aPresetName')?.value.trim();
+    const module = byId('m2aPresetModule')?.value;
+    if (!projectId) return toast('Проект не открыт', true);
+    if (!name || !module) return toast('Введите название и модуль профиля', true);
+    try {
+      const response = await api(`/api/m2a/projects/${encodeURIComponent(projectId)}/presets`, {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({name, module, parameters: presetParameters(module)}),
+      });
+      if (state.project?.id === projectId) {
+        state.project = response.project;
+        renderProject();
+      }
+      toast('Профиль сохранён без секретов');
+    } catch (error) {
+      toast(error.message, true);
+    }
+  }
+
+  const presetSave = byId('m2aSavePreset');
+  if (presetSave) presetSave.onclick = savePresetHardened;
+
+  function applyPresetHardened(name, preset) {
+    const parameters = preset?.parameters || {};
+    if (parameters.engine_policy && byId('m2aPrivacyLocal')) byId('m2aPrivacyLocal').checked = parameters.engine_policy === 'local_only';
+    if (parameters.qa_policy && byId('m2aQaPolicy')) byId('m2aQaPolicy').value = parameters.qa_policy;
+    if (parameters.export_profile && byId('m2aExportProfile')) byId('m2aExportProfile').value = parameters.export_profile;
+    if (parameters.size_controller) {
+      state.project.workspace ||= {};
+      state.project.workspace.size_controller = clone(parameters.size_controller);
+      restoreCanonicalSize(parameters.size_controller);
+    }
+    activateModule(preset.module);
+    toast(`Профиль «${name}» применён`);
+  }
+
+  function hardenPresetRows() {
+    const entries = new Map(Object.entries(state.project?.workspace?.presets || {}));
+    document.querySelectorAll('#m2aPresetList .m2a-preset-row').forEach(row => {
+      const name = row.querySelector('strong')?.textContent || '';
+      const button = row.querySelector('[data-use]');
+      const preset = entries.get(name);
+      if (button && preset) button.onclick = () => applyPresetHardened(name, preset);
+    });
+  }
+  const presetRoot = byId('m2aPresetList');
+  if (presetRoot) new MutationObserver(hardenPresetRows).observe(presetRoot, {childList: true, subtree: true});
+  hardenPresetRows();
+
+  async function pinnedApi(url, options = {}) {
+    const request = new Request(new URL(url, window.location.href), {cache: 'no-store', ...options});
+    const response = await fetch(request);
+    const contentType = response.headers.get('content-type') || '';
+    let payload;
+    try {
+      payload = contentType.includes('application/json') ? await response.json() : await response.text();
+    } catch (_) {
+      throw new Error(`Сервер вернул повреждённый ответ (${response.status})`);
+    }
+    if (!response.ok) throw new Error(payload?.detail || payload || `Ошибка запроса (${response.status})`);
+    return payload;
+  }
+
+  function parametersFromPreset(operation, preset) {
+    if (!preset) {
+      if (operation === 'geometry') return {...M.buildGeometryParams(), auto_repair: false};
+      return {auto_repair: false};
+    }
+    const expectedModule = operation === 'geometry' ? 'geometry' : 'improve';
+    if (preset.module !== expectedModule) throw new Error(`Профиль ${preset.module} нельзя применить к операции ${operation}`);
+    const size = preset.parameters?.size_controller;
+    if (!size) throw new Error('Профиль не содержит полный Size Controller');
+    if (operation === 'geometry') {
+      const params = {
+        width_mm: size.width_mm,
+        height_mm: size.height_mm,
+        ppi: size.ppi,
+        preserve_aspect: size.linked !== false,
+        leading_side: size.leading || 'auto',
+        resample: size.resample !== false,
+        canvas: clone(size.canvas || {}),
+        auto_repair: false,
+      };
+      validateProjectedGeometry(params);
+      return params;
+    }
+    return {
+      width_mm: size.improve_width_mm ?? size.width_mm ?? '',
+      height_mm: size.improve_height_mm ?? size.height_mm ?? '',
+      ppi: size.improve_ppi ?? size.ppi ?? 300,
+      preserve_aspect: size.linked !== false,
+      leading_side: size.leading || 'auto',
+      resample: size.resample !== false,
+      auto_repair: false,
+    };
+  }
+
+  function renderBatchRows(batch) {
+    const root = byId('m2aBatchReport');
+    if (!root) return;
+    const items = batch?.completed || [];
+    root.innerHTML = items.length
+      ? items.map(item => `<div><span>${String(item.name || '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]))}</span><strong data-status="${String(item.status || '').replace(/[&<>"']/g, '')}">${String(item.status || '').replace(/[&<>]/g, '')}</strong></div>`).join('')
+      : '<span>Нет завершённых элементов</span>';
+  }
+
+  async function runBatchHardened() {
+    const batch = M.batch || (M.batch = {});
+    if (batch.running) return;
+    const pinnedProjectId = state.project?.id;
+    if (!pinnedProjectId) return toast('Проект не открыт', true);
+    const ids = [...document.querySelectorAll('#m2aBatchAssets input:checked')].map(node => node.value);
+    if (!ids.length) return toast('Выберите файлы', true);
+
+    const operation = byId('m2aBatchOperation')?.value || 'enhance';
+    const presetName = byId('m2aBatchPreset')?.value || '';
+    const preset = presetName ? clone(state.project?.workspace?.presets?.[presetName]) : null;
+    let parameters;
+    try {
+      parameters = parametersFromPreset(operation, preset);
+    } catch (error) {
+      return toast(error.message, true);
+    }
+
+    const sourceById = new Map((state.project?.assets || []).map(asset => [asset.id, asset]));
+    const initialReports = clone(state.project?.workspace?.batch_reports || []);
+    const projectGeneration = M.projectGeneration || 0;
+    const runGeneration = (M.batchGeneration || 0) + 1;
+    M.batchGeneration = runGeneration;
+
+    Object.assign(batch, {
+      running: true,
+      paused: false,
+      cancelled: false,
+      completed: [],
+      startedAt: Date.now(),
+      projectId: pinnedProjectId,
+      projectGeneration,
+      runGeneration,
+    });
+
+    const pause = byId('m2aBatchPause');
+    const cancel = byId('m2aBatchCancel');
+    const run = byId('m2aRunBatch');
+    if (pause) pause.disabled = false;
+    if (cancel) cancel.disabled = false;
+    if (run) run.disabled = true;
+
+    const progress = byId('m2aBatchJob')?.querySelector('progress');
+    const label = byId('m2aBatchJob')?.querySelector('span');
+    const stage = byId('m2aBatchStage');
+    const timer = setInterval(() => {
+      const elapsed = byId('m2aBatchElapsed');
+      if (elapsed) elapsed.textContent = `${Math.floor((Date.now() - batch.startedAt) / 1000)} с`;
+    }, 250);
+
+    let terminalStatus = 'PASS';
+    let failure = null;
+    let pinnedProjectSnapshot = state.project;
+
+    const uiStillPinned = () =>
+      (M.projectGeneration || 0) === projectGeneration &&
+      state.project?.id === pinnedProjectId &&
+      M.batchGeneration === runGeneration;
+
+    try {
+      for (let index = 0; index < ids.length; index += 1) {
+        while (batch.paused && !batch.cancelled) await wait(100);
+        if (batch.cancelled) {
+          terminalStatus = 'CANCELLED';
+          break;
+        }
+
+        const sourceId = ids[index];
+        const source = sourceById.get(sourceId);
+        if (label) label.textContent = `${index + 1}/${ids.length}`;
+        if (stage) stage.textContent = `этап: ${operation}`;
+        if (progress) progress.value = Math.round(index / ids.length * 100);
+
+        try {
+          const response = await pinnedApi(`/api/projects/${encodeURIComponent(pinnedProjectId)}/process`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({asset_id: sourceId, operation, parameters}),
+          });
+          pinnedProjectSnapshot = response.project;
+          batch.completed.push({
+            source_asset_id: sourceId,
+            result_asset_id: response.result.id,
+            name: source?.original_name || sourceId,
+            status: 'PASS',
+          });
+          renderBatchRows(batch);
+          if (uiStillPinned()) {
+            state.project = response.project;
+            state.selectedId = response.result.id;
+            renderProject();
+          }
+        } catch (error) {
+          failure = error;
+          terminalStatus = 'FAIL';
+          batch.completed.push({
+            source_asset_id: sourceId,
+            name: source?.original_name || sourceId,
+            status: 'FAIL',
+            detail: error.message,
+          });
+          renderBatchRows(batch);
+          break;
+        }
+        if (progress) progress.value = Math.round((index + 1) / ids.length * 100);
+        await wait(75);
+      }
+      if (batch.cancelled && terminalStatus === 'PASS') terminalStatus = 'CANCELLED';
+      if (terminalStatus === 'CANCELLED') { batch.completed.push({name: 'Оставшаяся очередь', status: 'CANCELLED'}); renderBatchRows(batch); }
+    } finally {
+      const report = {
+        id: `batch-${Date.now().toString(36)}`,
+        created_at: now(),
+        operation,
+        preset: presetName || null,
+        project_id: pinnedProjectId,
+        status: terminalStatus,
+        requested: ids.length,
+        completed: batch.completed.filter(item => item.status === 'PASS').length,
+        items: clone(batch.completed),
+      };
+      const existingReports = clone(pinnedProjectSnapshot?.workspace?.batch_reports || initialReports);
+      const reports = [...existingReports, report].slice(-50);
+      try {
+        const saved = await pinnedApi(`/api/m2a/projects/${encodeURIComponent(pinnedProjectId)}/workspace/batch_reports`, {
+          method: 'PUT',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({value: reports}),
+        });
+        pinnedProjectSnapshot = saved.project;
+        if (uiStillPinned()) {
+          state.project = saved.project;
+          renderProject();
+        }
+      } catch (reportError) {
+        failure ||= reportError;
+        terminalStatus = 'FAIL';
+      }
+
+      clearInterval(timer);
+      batch.running = false;
+      batch.paused = false;
+      if (pause) {
+        pause.disabled = true;
+        pause.textContent = 'Пауза';
+      }
+      if (cancel) cancel.disabled = true;
+      if (run) run.disabled = false;
+      if (label) label.textContent = terminalStatus === 'PASS' ? 'Готово' : terminalStatus === 'CANCELLED' ? 'Отменено' : 'Ошибка';
+      if (stage) stage.textContent = `этап: ${terminalStatus.toLowerCase()}`;
+      renderBatchRows(batch);
+    }
+
+    if (failure) toast(failure.message, true);
+    else if (terminalStatus === 'CANCELLED') toast('Пакет отменён; завершённые результаты сохранены', true);
+    else toast('Пакет завершён');
+  }
+
+  const runBatch = byId('m2aRunBatch');
+  if (runBatch) runBatch.onclick = runBatchHardened;
+
+  bindCanonicalSizePersistence();
+  restoreCanonicalSize(state.project?.workspace?.size_controller);
+
+  const closeProject = byId('m2aCloseProject');
+  if (closeProject) {
+    closeProject.onclick = () => {
+      M.resetActiveProjectRoute?.();
+      M.projectGeneration = (M.projectGeneration || 0) + 1;
+      state.project = null;
+      state.selectedId = null;
+      state.pendingSelectionId = null;
+      try { window.localStorage.removeItem('imagelab.activeProjectId'); } catch (_) { /* opaque test document */ }
+      renderProject();
+      activateModule('projects');
+    };
+  }
+
+  const previousRender = renderProject;
+  renderProject = function() {
+    previousRender();
+    hardenPresetRows();
+  };
+  renderProject();
+})();
