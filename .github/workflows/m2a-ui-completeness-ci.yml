@@ -1,6 +1,26 @@
 name: ImageLab M2A UI Completeness CI
 
 on:
+  push:
+    branches: [redteam/imagelab-complete-audit-20260725-v2]
+    paths:
+      - recovery/source/app/entry.py
+      - recovery/source/app/m2a_api.py
+      - recovery/source/app/models.py
+      - recovery/source/app/services/m2a_processing.py
+      - recovery/source/app/services/__init__.py
+      - recovery/source/app/static/m2a-ui.css
+      - recovery/source/app/static/m2a-completeness.css
+      - recovery/source/app/static/m2a-ui-parts/**
+      - recovery/source/tests/test_m2a_ui.py
+      - recovery/source/tests/test_geometry_m2a.py
+      - recovery/source/tests/test_browser_m2a.py
+      - recovery/source/tests/test_m2a_workspace.py
+      - recovery/source/tests/test_browser_m2a_matrix.py
+      - recovery/source/tests/test_m2a_closure.py
+      - recovery/source/tests/test_browser_m2a_closure.py
+      - recovery/source/docs/M2A_EXECUTION_RTM_V1_2.md
+      - .github/workflows/m2a-ui-completeness-ci.yml
   pull_request:
     branches: [bootstrap/zero-trust-gate]
     paths:
