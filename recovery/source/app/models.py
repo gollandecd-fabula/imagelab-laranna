@@ -5,7 +5,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, computed_field, field_validator
 
 
 _CONTROL_CHARACTERS = re.compile(r"[\x00-\x1f\x7f]")
@@ -114,6 +114,27 @@ class AssetRecord(BaseModel):
         return value
 
 
+class ProjectCollections(BaseModel):
+    """Typed M2A project collections derived from canonical assets/workspace state."""
+
+    sources: list[str] = Field(default_factory=list)
+    derivatives: list[str] = Field(default_factory=list)
+    masters: list[str] = Field(default_factory=list)
+    exports: list[str] = Field(default_factory=list)
+    masks: dict[str, Any] = Field(default_factory=dict)
+    presets: dict[str, Any] = Field(default_factory=dict)
+    qa_reports: list[dict[str, Any]] = Field(default_factory=list)
+
+    @field_validator("sources", "derivatives", "masters", "exports")
+    @classmethod
+    def validate_asset_ids(cls, values: list[str]) -> list[str]:
+        if len(values) != len(set(values)):
+            raise ValueError("Коллекция проекта содержит повторяющиеся идентификаторы файлов")
+        for value in values:
+            validate_asset_identifier(value)
+        return values
+
+
 class ProjectRecord(BaseModel):
     id: str
     title: str
@@ -121,6 +142,24 @@ class ProjectRecord(BaseModel):
     updated_at: str
     assets: list[AssetRecord] = Field(default_factory=list)
     workspace: dict[str, Any] = Field(default_factory=dict)
+
+    @computed_field
+    @property
+    def collections(self) -> ProjectCollections:
+        """Return a stale-proof typed view that is serialized with every project save."""
+        return ProjectCollections(
+            sources=[asset.id for asset in self.assets if asset.source_asset_id is None],
+            derivatives=[asset.id for asset in self.assets if asset.source_asset_id is not None],
+            masters=[
+                asset.id
+                for asset in self.assets
+                if asset.operation in {"master_clean", "master_card", "master_dtf"}
+            ],
+            exports=[asset.id for asset in self.assets if asset.operation == "export"],
+            masks=dict(self.workspace.get("masks") or {}),
+            presets=dict(self.workspace.get("presets") or {}),
+            qa_reports=list(self.workspace.get("qa_reports") or []),
+        )
 
     @field_validator("id")
     @classmethod

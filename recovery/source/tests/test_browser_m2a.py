@@ -100,3 +100,70 @@ def test_m2a_size_chain_preview_and_mobile_selector(browser):
     expect(page.locator('[data-pane="settings"]')).to_have_class("module-pane m2a-pane active")
     assert page.evaluate("document.documentElement.scrollWidth - window.innerWidth") <= 1
     page.close()
+
+
+
+def load_project_lifecycle(page):
+    asset = {"id":"aaaaaaaa","original_name":"source.png","stored_name":"a.png","preview_name":"a.png","size_bytes":10,"sha256":"a"*64,"mime_type":"image/png","format":"PNG","width_px":640,"height_px":480,"ppi_x":300,"ppi_y":300,"ppi_origin":"embedded","print_width_mm":54.19,"print_height_mm":40.64,"color_mode":"RGB","color_profile":"sRGB","has_alpha":False,"created_at":"x","preview_url":"/preview/a.png","checks":[],"parameters":{},"ai":{}}
+    projects = {
+        "TS-001": {"id":"TS-001","title":"Primary","created_at":"x","updated_at":"x","assets":[asset],"workspace":{"active_asset_id":"aaaaaaaa","presets":{}}},
+        "B-002": {"id":"B-002","title":"Second","created_at":"x","updated_at":"x","assets":[asset],"workspace":{"active_asset_id":"aaaaaaaa","presets":{}}},
+    }
+
+    def route_handler(route):
+        request = route.request
+        path = urlparse(request.url).path
+        method = request.method
+        if path == "/api/projects" and method == "GET":
+            body = list(projects.values())
+        elif path.startswith("/api/projects/") and path.count("/") == 3 and method == "POST":
+            project_id = path.rsplit("/", 1)[-1]
+            payload = request.post_data_json
+            body = {"id":project_id,"title":payload.get("title") or project_id,"created_at":"x","updated_at":"x","assets":[],"workspace":{"presets":{}}}
+            projects[project_id] = body
+        elif path.startswith("/api/projects/") and path.endswith("/title") and method == "PATCH":
+            project_id = path.split("/")[3]
+            projects[project_id]["title"] = request.post_data_json["title"]
+            body = projects[project_id]
+        elif path.startswith("/api/projects/") and path.count("/") == 3 and method == "GET":
+            project_id = path.rsplit("/", 1)[-1]
+            body = projects[project_id]
+        elif path == "/api/health":
+            body = {"status":"ok","version":"m2a","build_id":"M2A","install_id":"browser","scope":"M2A","host_policy":"localhost_only"}
+        elif path == "/api/ai/health":
+            body = {"status":"ready","runtime":"local","models":[]}
+        elif path.startswith("/preview/"):
+            route.fulfill(status=200, content_type="image/png", body=b"\x89PNG\r\n\x1a\n")
+            return
+        else:
+            body = {"project":projects["TS-001"],"result":asset,"results":[asset],"overall_passed":True,"checks":[]}
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(body))
+
+    page.route("**/*", route_handler)
+    page.set_content(document(), wait_until="load")
+    expect(page.locator("#projectName")).to_have_text("Primary")
+    return projects
+
+
+def test_m2a_project_lifecycle_create_select_rename_close_and_reopen(browser):
+    page = browser.new_page(viewport={"width": 1280, "height": 900})
+    projects = load_project_lifecycle(page)
+
+    page.locator('[data-module="projects"]').click()
+    page.locator("#m2aProjectTitle").fill("Third")
+    page.locator("#m2aProjectId").fill("C-003")
+    page.locator("#m2aCreateProject").click()
+    expect(page.locator("#projectName")).to_have_text("Third")
+    assert projects["C-003"]["title"] == "Third"
+    expect(page.locator("#m2aProjectList .m2a-project-row")).to_have_count(3)
+    page.evaluate("window.prompt = () => 'Third Renamed'")
+    page.evaluate("setTimeout(() => document.querySelector('#m2aRenameProject').click(), 0)")
+    expect(page.locator("#projectName")).to_have_text("Third Renamed")
+    assert projects["C-003"]["title"] == "Third Renamed"
+    page.evaluate("setTimeout(() => document.querySelector('#m2aCloseProject').click(), 0)")
+    expect(page.locator("#projectName")).to_have_text("Проект не открыт")
+    expect(page.locator("#m2aCurrentProject")).to_have_text("Проект не открыт")
+    expect(page.locator("#m2aProjectList .m2a-project-row")).to_have_count(3)
+    page.evaluate("setTimeout(() => [...document.querySelectorAll('#m2aProjectList .m2a-project-row')].find(el => el.textContent.includes('Third Renamed')).click(), 0)")
+    expect(page.locator("#projectName")).to_have_text("Third Renamed")
+    page.close()

@@ -10,6 +10,9 @@ from PIL import Image
 
 from app.config import settings
 from app.entry import app
+from app.main import store
+from app.models import AssetRecord
+from app.services.project_store import ProjectStore
 
 client = TestClient(app)
 
@@ -116,3 +119,66 @@ def test_diagnostics_report_is_privacy_bounded_and_downloadable() -> None:
     assert download.status_code == 200
     assert "attachment" in download.headers["content-disposition"]
     assert download.json() == payload
+
+
+def test_project_typed_collections_survive_save_reload() -> None:
+    project_id = _project_id("M2A-COLLECTIONS")
+    try:
+        created = client.post(f"/api/projects/{project_id}", json={"title": "typed collections"})
+        assert created.status_code == 200, created.text
+        upload = client.post(
+            f"/api/projects/{project_id}/upload",
+            files=[("files", ("source.png", _png(), "image/png"))],
+        )
+        assert upload.status_code == 200, upload.text
+        source = AssetRecord.model_validate(upload.json()["uploaded"][0])
+
+        def derived(asset_id: str, operation: str, digest: str) -> AssetRecord:
+            return source.model_copy(
+                update={
+                    "id": asset_id,
+                    "original_name": f"{operation}.png",
+                    "stored_name": f"{asset_id}.png",
+                    "preview_name": f"{asset_id}.png",
+                    "sha256": digest * 64,
+                    "source_asset_id": source.id,
+                    "operation": operation,
+                    "parameters": {"input_asset_id": source.id},
+                }
+            )
+
+        normal = derived("dddddddd", "enhance", "d")
+        master = derived("mmmmmmmm", "master_dtf", "a")
+        export = derived("eeeeeeee", "export", "e")
+        store.commit_derived_assets(project_id, source.id, [normal, master, export], active_asset_id=export.id)
+
+        mask = {source.id: {"edits": [{"tool": "add", "points": [[0.1, 0.2]]}], "inverted": False}}
+        assert client.put(
+            f"/api/m2a/projects/{project_id}/workspace/masks", json={"value": mask}
+        ).status_code == 200
+        qa_reports = [{"id": "qa-1", "status": "PASS", "asset_id": export.id}]
+        assert client.put(
+            f"/api/m2a/projects/{project_id}/workspace/qa_reports", json={"value": qa_reports}
+        ).status_code == 200
+        assert client.put(
+            f"/api/m2a/projects/{project_id}/presets",
+            json={"name": "print", "module": "geometry", "parameters": {"ppi": 300}},
+        ).status_code == 200
+
+        reopened_store = ProjectStore(settings.project_dir)
+        reloaded = reopened_store.get(project_id)
+        assert project_id in {project.id for project in reopened_store.list_projects()}
+        assert reloaded.collections.sources == [source.id]
+        assert reloaded.collections.derivatives == [normal.id, master.id, export.id]
+        assert reloaded.collections.masters == [master.id]
+        assert reloaded.collections.exports == [export.id]
+        assert reloaded.collections.masks == mask
+        assert reloaded.collections.presets == {
+            "print": {"module": "geometry", "parameters": {"ppi": 300}}
+        }
+        assert reloaded.collections.qa_reports == qa_reports
+
+        persisted = json.loads((settings.project_dir / f"{project_id}.json").read_text("utf-8"))
+        assert persisted["collections"] == reloaded.collections.model_dump()
+    finally:
+        _cleanup(project_id)
