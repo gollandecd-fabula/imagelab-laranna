@@ -19,6 +19,7 @@ on:
       - recovery/source/tests/test_browser_m2a_matrix.py
       - recovery/source/tests/test_m2a_closure.py
       - recovery/source/tests/test_browser_m2a_closure.py
+      - recovery/source/tests/test_browser_m2a_rtm_evidence.py
       - recovery/source/docs/M2A_EXECUTION_RTM_V1_2.md
       - .github/workflows/m2a-ui-completeness-ci.yml
   pull_request:
@@ -39,6 +40,7 @@ on:
       - recovery/source/tests/test_browser_m2a_matrix.py
       - recovery/source/tests/test_m2a_closure.py
       - recovery/source/tests/test_browser_m2a_closure.py
+      - recovery/source/tests/test_browser_m2a_rtm_evidence.py
       - recovery/source/docs/M2A_EXECUTION_RTM_V1_2.md
       - .github/workflows/m2a-ui-completeness-ci.yml
   workflow_dispatch:
@@ -70,7 +72,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          allowed='^(\.github/workflows/m2a-ui-completeness-ci\.yml|recovery/source/docs/M2A_EXECUTION_RTM_V1_2\.md|recovery/source/app/(entry|m2a_api|models)\.py|recovery/source/app/services/(__init__|m2a_processing)\.py|recovery/source/app/static/(m2a-ui\.css|m2a-completeness\.css)|recovery/source/app/static/m2a-ui-parts/.*|recovery/source/tests/test_(m2a_ui|geometry_m2a|browser_m2a|m2a_workspace|browser_m2a_matrix|m2a_closure|browser_m2a_closure)\.py)$'
+          allowed='^(\.github/workflows/m2a-ui-completeness-ci\.yml|recovery/source/docs/M2A_EXECUTION_RTM_V1_2\.md|recovery/source/app/(entry|m2a_api|models)\.py|recovery/source/app/services/(__init__|m2a_processing)\.py|recovery/source/app/static/(m2a-ui\.css|m2a-completeness\.css)|recovery/source/app/static/m2a-ui-parts/.*|recovery/source/tests/test_(m2a_ui|geometry_m2a|browser_m2a|m2a_workspace|browser_m2a_matrix|m2a_closure|browser_m2a_closure|browser_m2a_rtm_evidence)\.py)$'
           git diff --name-only "$M1_BASELINE_SHA"...HEAD > /tmp/m2a-files.txt
           cat /tmp/m2a-files.txt
           while IFS= read -r path; do
@@ -146,7 +148,7 @@ jobs:
           python -m playwright install --with-deps chromium
       - name: Run real-browser contracts and build screenshots
         env: {M2A_ARTIFACT_DIR: artifacts/m2a-visual}
-        run: python -m pytest tests/test_browser_m1.py tests/test_browser_m2a.py tests/test_browser_m2a_matrix.py tests/test_browser_m2a_closure.py -vv --tb=short
+        run: python -m pytest tests/test_browser_m1.py tests/test_browser_m2a.py tests/test_browser_m2a_matrix.py tests/test_browser_m2a_closure.py tests/test_browser_m2a_rtm_evidence.py -vv --tb=short
       - name: Validate required visual matrix
         run: |
           python - <<'PY'
