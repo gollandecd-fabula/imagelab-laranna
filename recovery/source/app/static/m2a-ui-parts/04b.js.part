@@ -4,6 +4,12 @@
   function renderProjects(){const root=$('#m2aProjectList');if(!root)return;root.replaceChildren();$('#m2aCurrentProject').textContent=state.project?`${state.project.title} · ${state.project.id}`:'Проект не открыт';(S.projects||[]).forEach(p=>{const b=document.createElement('button');b.className=`m2a-project-row${p.id===activeProjectId?' active':''}`;b.innerHTML=`<strong>${escapeHtml(p.title)}</strong><span>${escapeHtml(p.id)} · ${p.assets?.length||0} файлов</span>`;b.onclick=()=>openProject(p.id);root.append(b);});}
   async function openProject(id){
     const previousId=activeProjectId,previousProject=state.project,previousSelected=state.selectedId;
+    try{
+      if(typeof S.prepareProjectSwitch==='function')await S.prepareProjectSwitch();
+    }catch(e){
+      toast(e.message,true);
+      return false;
+    }
     activeProjectId=id;
     let project;
     try{
