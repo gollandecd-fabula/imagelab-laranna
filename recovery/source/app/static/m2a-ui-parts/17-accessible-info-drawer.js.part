@@ -1,0 +1,69 @@
+(() => {
+  'use strict';
+
+  const toggle = document.getElementById('m2aInfoToggle');
+  const drawer = document.querySelector('.info-sidebar');
+  if (!toggle || !drawer) return;
+
+  if (!drawer.id) drawer.id = 'm2aInfoSidebar';
+  toggle.classList.add('m2a-info-toggle');
+  toggle.setAttribute('type', 'button');
+  toggle.setAttribute('aria-controls', drawer.id);
+  toggle.setAttribute('aria-expanded', 'false');
+  toggle.setAttribute('aria-label', 'Открыть информационную панель');
+
+  const focusableSelector = [
+    'button:not([disabled])',
+    '[href]',
+    'input:not([disabled])',
+    'select:not([disabled])',
+    'textarea:not([disabled])',
+    '[tabindex]:not([tabindex="-1"])',
+  ].join(',');
+
+  function firstFocusable() {
+    return Array.from(drawer.querySelectorAll(focusableSelector))
+      .find(node => node.getClientRects().length > 0) || drawer;
+  }
+
+  function openDrawer() {
+    drawer.classList.add('m2a-open');
+    drawer.setAttribute('aria-hidden', 'false');
+    toggle.setAttribute('aria-expanded', 'true');
+    toggle.setAttribute('aria-label', 'Закрыть информационную панель');
+    if (!drawer.hasAttribute('tabindex')) drawer.setAttribute('tabindex', '-1');
+    requestAnimationFrame(() => firstFocusable().focus());
+  }
+
+  function closeDrawer({restoreFocus = true} = {}) {
+    drawer.classList.remove('m2a-open');
+    drawer.setAttribute('aria-hidden', 'true');
+    toggle.setAttribute('aria-expanded', 'false');
+    toggle.setAttribute('aria-label', 'Открыть информационную панель');
+    if (restoreFocus) toggle.focus();
+  }
+
+  toggle.onclick = () => {
+    if (drawer.classList.contains('m2a-open')) closeDrawer();
+    else openDrawer();
+  };
+
+  document.addEventListener('keydown', event => {
+    if (event.key !== 'Escape' || !drawer.classList.contains('m2a-open')) return;
+    event.preventDefault();
+    closeDrawer();
+  });
+
+  const desktopQuery = window.matchMedia('(min-width: 1181px)');
+  const syncMode = () => {
+    if (desktopQuery.matches) {
+      drawer.classList.remove('m2a-open');
+      drawer.removeAttribute('aria-hidden');
+      toggle.setAttribute('aria-expanded', 'false');
+      return;
+    }
+    if (!drawer.classList.contains('m2a-open')) drawer.setAttribute('aria-hidden', 'true');
+  };
+  desktopQuery.addEventListener?.('change', syncMode);
+  syncMode();
+})();
