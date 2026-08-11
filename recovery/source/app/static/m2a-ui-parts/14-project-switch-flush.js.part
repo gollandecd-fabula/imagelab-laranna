@@ -1,0 +1,52 @@
+(() => {
+  'use strict';
+
+  const M = window.imagelabM2A || (window.imagelabM2A = {});
+  const byId = id => document.getElementById(id);
+  let sizeEditEpoch = 0;
+
+  const markSizeDirty = () => { sizeEditEpoch += 1; };
+  [
+    'widthMm', 'heightMm', 'improveWidthMm', 'improveHeightMm',
+    'geometryPpi', 'improvePpi', 'm2aLeading', 'm2aResample',
+    'm2aCanvasWidth', 'm2aCanvasHeight', 'm2aCanvasAnchor',
+    'm2aCanvasTop', 'm2aCanvasBottom', 'm2aCanvasLeft', 'm2aCanvasRight',
+  ].forEach(id => {
+    byId(id)?.addEventListener('input', markSizeDirty);
+    byId(id)?.addEventListener('change', markSizeDirty);
+  });
+  document.querySelectorAll('.m2a-chain').forEach(node => node.addEventListener('click', markSizeDirty));
+
+  M.prepareProjectSwitch = async function() {
+    if (!sizeEditEpoch) return;
+    let observed;
+    do {
+      observed = sizeEditEpoch;
+      await new Promise(resolve => setTimeout(resolve, 520));
+    } while (observed !== sizeEditEpoch);
+    if (state.project && typeof M.workspacePut === 'function' && typeof M.sizeControllerValue === 'function') {
+      await M.workspacePut('size_controller', M.sizeControllerValue());
+    }
+    sizeEditEpoch = 0;
+  };
+
+  const closeProject = byId('m2aCloseProject');
+  if (closeProject) {
+    closeProject.onclick = async () => {
+      try {
+        await M.prepareProjectSwitch();
+      } catch (error) {
+        toast(error.message, true);
+        return;
+      }
+      M.resetActiveProjectRoute?.();
+      M.projectGeneration = (M.projectGeneration || 0) + 1;
+      state.project = null;
+      state.selectedId = null;
+      state.pendingSelectionId = null;
+      try { window.localStorage.removeItem('imagelab.activeProjectId'); } catch (_) { /* opaque test document */ }
+      renderProject();
+      activateModule('projects');
+    };
+  }
+})();
