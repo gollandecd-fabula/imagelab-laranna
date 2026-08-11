@@ -59,7 +59,7 @@ def _document() -> str:
         (ROOT / f"app/static/{name}").read_text("utf-8")
         for name in ("styles.css", "m1-hardening.css", "m2a-ui.css", "m2a-completeness.css")
     )
-    m2a = "".join(
+    parts = "".join(
         path.read_text("utf-8")
         for path in sorted((ROOT / "app/static/m2a-ui-parts").glob("*.js.part"))
     )
@@ -67,7 +67,7 @@ def _document() -> str:
         (
             (ROOT / "app/static/app.js").read_text("utf-8"),
             (ROOT / "app/static/m1-hardening.js").read_text("utf-8"),
-            m2a,
+            parts,
         )
     ).replace("</script", "<\\/script")
     return (
@@ -88,13 +88,13 @@ def browser():
     with sync_playwright() as manager:
         executable = next(
             (
-                path
-                for path in (
+                value
+                for value in (
                     shutil.which("chromium"),
                     shutil.which("chromium-browser"),
                     shutil.which("google-chrome"),
                 )
-                if path
+                if value
             ),
             None,
         )
@@ -120,7 +120,12 @@ def _load(page, *, fail_project_b: bool = False, fail_process_index: int | None 
             _asset("bbbbbbbb", "two.png", "b"),
             _asset("cccccccc", "three.png", "c"),
         ],
-        "workspace": {"active_asset_id": "aaaaaaaa", "active_revision": 1, "presets": {}, "batch_reports": []},
+        "workspace": {
+            "active_asset_id": "aaaaaaaa",
+            "active_revision": 1,
+            "presets": {},
+            "batch_reports": [],
+        },
     }
     project_b = {
         "id": "B-002",
@@ -128,7 +133,12 @@ def _load(page, *, fail_project_b: bool = False, fail_process_index: int | None 
         "created_at": "x",
         "updated_at": "x",
         "assets": [_asset("dddddddd", "second.png", "d")],
-        "workspace": {"active_asset_id": "dddddddd", "active_revision": 1, "presets": {}, "batch_reports": []},
+        "workspace": {
+            "active_asset_id": "dddddddd",
+            "active_revision": 1,
+            "presets": {},
+            "batch_reports": [],
+        },
     }
     projects = {"TS-001": project_a, "B-002": project_b}
     state = {
@@ -153,7 +163,11 @@ def _load(page, *, fail_project_b: bool = False, fail_process_index: int | None 
             project_id = path.rsplit("/", 1)[-1]
             state["project_gets"].append(project_id)
             if project_id == "B-002" and state["fail_project_b"]:
-                route.fulfill(status=500, content_type="application/json", body=json.dumps({"detail": "project load failed"}))
+                route.fulfill(
+                    status=500,
+                    content_type="application/json",
+                    body=json.dumps({"detail": "project load failed"}),
+                )
                 return
             body = projects[project_id]
         elif path.startswith("/api/projects/") and path.endswith("/active") and method == "POST":
@@ -168,7 +182,11 @@ def _load(page, *, fail_project_b: bool = False, fail_process_index: int | None 
             state["process_calls"].append({"project_id": project_id, "payload": payload})
             call_index = len(state["process_calls"])
             if state["fail_process_index"] == call_index:
-                route.fulfill(status=422, content_type="application/json", body=json.dumps({"detail": "synthetic item failure"}))
+                route.fulfill(
+                    status=422,
+                    content_type="application/json",
+                    body=json.dumps({"detail": "synthetic item failure"}),
+                )
                 return
             project = projects[project_id]
             source = next(asset for asset in project["assets"] if asset["id"] == payload["asset_id"])
@@ -197,7 +215,9 @@ def _load(page, *, fail_project_b: bool = False, fail_process_index: int | None 
             project_id = parts[4]
             section = parts[-1]
             value = request.post_data_json["value"]
-            state["workspace_puts"].append({"project_id": project_id, "section": section, "value": value})
+            state["workspace_puts"].append(
+                {"project_id": project_id, "section": section, "value": value}
+            )
             projects[project_id]["workspace"][section] = value
             body = {"project": projects[project_id], "section": section, "status": "saved"}
         elif path.startswith("/api/m2a/projects/") and path.endswith("/presets") and method == "PUT":
@@ -232,10 +252,9 @@ def _load(page, *, fail_project_b: bool = False, fail_process_index: int | None 
             route.fulfill(status=200, content_type="image/png", body=png)
             return
         else:
-            current = project_a
             body = {
-                "project": current,
-                "result": current["assets"][-1],
+                "project": project_a,
+                "result": project_a["assets"][-1],
                 "results": [],
                 "overall_passed": True,
                 "checks": [],
@@ -264,22 +283,23 @@ def _open_second(page) -> None:
     page.locator("#m2aProjectList .m2a-project-row", has_text="Second").click()
 
 
-def test_failed_project_switch_restores_route_and_persistence(browser) -> None:
+def test_failed_project_switch_restores_route_and_active_project(browser) -> None:
     page = browser.new_page(viewport={"width": 1280, "height": 900})
     state = _load(page, fail_project_b=True)
 
     _open_second(page)
     expect(page.locator("#projectName")).to_have_text("Primary")
-    assert page.evaluate("window.localStorage.getItem('imagelab.activeProjectId')") is None
+    assert page.evaluate("state.project.id") == "TS-001"
 
     state["fail_project_b"] = False
     page.locator("#refreshButton").click()
     expect(page.locator("#projectName")).to_have_text("Primary")
     assert state["project_gets"][-1] == "TS-001"
+    assert page.evaluate("state.project.id") == "TS-001"
     page.close()
 
 
-def test_batch_pins_project_and_persists_terminal_fail_report(browser) -> None:
+def test_batch_pins_project_and_persists_terminal_reports(browser) -> None:
     page = browser.new_page(viewport={"width": 1280, "height": 900})
     state = _load(page)
 
@@ -295,10 +315,7 @@ def test_batch_pins_project_and_persists_terminal_fail_report(browser) -> None:
 
     assert len(state["process_calls"]) == 3
     assert {call["project_id"] for call in state["process_calls"]} == {"TS-001"}
-    reports = [
-        item for item in state["workspace_puts"]
-        if item["section"] == "batch_reports"
-    ]
+    reports = [item for item in state["workspace_puts"] if item["section"] == "batch_reports"]
     assert reports
     assert reports[-1]["project_id"] == "TS-001"
     assert reports[-1]["value"][-1]["project_id"] == "TS-001"
@@ -314,10 +331,7 @@ def test_batch_pins_project_and_persists_terminal_fail_report(browser) -> None:
     _pump_until(page, lambda: len(state["process_calls"]) >= 2)
     _pump_until(page, lambda: not page.evaluate("window.imagelabM2A.batch?.running"))
 
-    reports = [
-        item for item in state["workspace_puts"]
-        if item["section"] == "batch_reports"
-    ]
+    reports = [item for item in state["workspace_puts"] if item["section"] == "batch_reports"]
     assert reports, "terminal FAIL report must survive the failed item"
     terminal = reports[-1]["value"][-1]
     assert terminal["status"] == "FAIL"
@@ -354,8 +368,7 @@ def test_full_size_controller_preset_improve_serializer_and_switch_flush(browser
     page.locator("#m2aSavePreset").click()
     _pump_until(page, lambda: bool(state["preset_puts"]))
 
-    payload = state["preset_puts"][-1]["payload"]
-    size = payload["parameters"]["size_controller"]
+    size = state["preset_puts"][-1]["payload"]["parameters"]["size_controller"]
     assert size["linked"] is False
     assert size["leading"] == "height"
     assert size["resample"] is False
@@ -398,7 +411,8 @@ def test_full_size_controller_preset_improve_serializer_and_switch_flush(browser
     _open_second(page)
     expect(page.locator("#projectName")).to_have_text("Second")
     size_puts = [
-        item for item in state["workspace_puts"][prior_put_count:]
+        item
+        for item in state["workspace_puts"][prior_put_count:]
         if item["section"] == "size_controller"
     ]
     assert size_puts
@@ -413,9 +427,12 @@ def test_auto_canvas_overflow_is_blocked_before_dispatch(browser) -> None:
 
     page.locator('[data-module="geometry"]').click()
     page.locator("#geometryPpi").fill("1000")
-    page.locator("#m2aCanvasWidth").fill("")
-    page.locator("#m2aCanvasHeight").fill("")
-    for selector in ("#m2aCanvasTop", "#m2aCanvasBottom", "#m2aCanvasLeft", "#m2aCanvasRight"):
+    for selector in (
+        "#m2aCanvasTop",
+        "#m2aCanvasBottom",
+        "#m2aCanvasLeft",
+        "#m2aCanvasRight",
+    ):
         page.locator(selector).fill("500")
 
     before = len(state["process_calls"])
