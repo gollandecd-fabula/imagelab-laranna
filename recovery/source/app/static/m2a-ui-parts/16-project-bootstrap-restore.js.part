@@ -1,0 +1,38 @@
+(() => {
+  'use strict';
+
+  const M = window.imagelabM2A || (window.imagelabM2A = {});
+  const baseRenderProject = renderProject;
+
+  renderProject = function() {
+    const routeId = typeof M.currentRouteProjectId === 'function' ? M.currentRouteProjectId() : null;
+    if (routeId && state.project?.id === routeId) {
+      M.committedProjectSnapshot = structuredClone(state.project);
+    } else if (routeId && M.committedProjectSnapshot?.id === routeId) {
+      state.project = structuredClone(M.committedProjectSnapshot);
+      const pinned = state.project.workspace?.active_asset_id;
+      state.selectedId = state.project.assets?.some(asset => asset.id === pinned)
+        ? pinned
+        : (state.project.assets?.at(-1)?.id || null);
+    }
+    baseRenderProject();
+  };
+
+  renderProject();
+
+  const desiredProjectId = window.__imagelabM2APersistedProjectId;
+  delete window.__imagelabM2APersistedProjectId;
+  if (!desiredProjectId || desiredProjectId === PROJECT_ID || typeof M.openProject !== 'function') return;
+
+  (async () => {
+    const wasBusy = Boolean(state.busy);
+    if (!wasBusy) setBusy(true);
+    M.bootstrapRestoring = true;
+    try {
+      await M.openProject(desiredProjectId);
+    } finally {
+      M.bootstrapRestoring = false;
+      if (!wasBusy) setBusy(false);
+    }
+  })();
+})();
