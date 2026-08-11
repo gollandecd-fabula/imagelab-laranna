@@ -63,6 +63,28 @@ def test_m2a_opaque_storage_navigation_and_source_button(browser):
     page.close()
 
 
+def test_m2a_1024_info_drawer_keyboard_focus_return(browser):
+    page = browser.new_page(viewport={"width": 1024, "height": 800})
+    load(page)
+    toggle = page.locator("#m2aInfoToggle")
+    drawer = page.locator(".info-sidebar")
+
+    expect(toggle).to_be_visible()
+    expect(toggle).to_have_attribute("aria-expanded", "false")
+    toggle.focus()
+    page.keyboard.press("Enter")
+    expect(drawer).to_have_class("info-sidebar m2a-open")
+    expect(toggle).to_have_attribute("aria-expanded", "true")
+    assert page.evaluate("document.activeElement !== document.getElementById('m2aInfoToggle')")
+    assert page.evaluate("document.querySelector('.info-sidebar').contains(document.activeElement) || document.activeElement === document.querySelector('.info-sidebar')")
+
+    page.keyboard.press("Escape")
+    expect(drawer).to_have_class("info-sidebar")
+    expect(toggle).to_have_attribute("aria-expanded", "false")
+    assert page.evaluate("document.activeElement === document.getElementById('m2aInfoToggle')")
+    page.close()
+
+
 def test_m2a_size_chain_preview_and_mobile_selector(browser):
     page = browser.new_page(viewport={"width": 800, "height": 900})
     load(page)
