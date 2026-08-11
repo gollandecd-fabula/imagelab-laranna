@@ -24,6 +24,23 @@ _ALLOWED_WORKSPACE_SECTIONS = {
     "qa_reports",
     "autopilot",
 }
+_ALLOWED_PRESET_MODULES = {
+    "improve",
+    "extract",
+    "selection",
+    "background",
+    "cleanup",
+    "color",
+    "palette",
+    "halftone",
+    "vector",
+    "geometry",
+    "dtf",
+    "masters",
+    "logo",
+    "export",
+    "cardlab",
+}
 _SECRET_KEY = re.compile(r"(?:password|passwd|secret|token|api[_-]?key|credential|private[_-]?key|authorization)", re.I)
 _MAX_WORKSPACE_BYTES = 256 * 1024
 _MAX_DEPTH = 8
@@ -174,8 +191,11 @@ def register_m2a_routes(app: FastAPI, store: ProjectStore) -> None:
     original_set_preset = store.set_preset
 
     def guarded_set_preset(project_id: str, name: str, module: str, parameters: dict):
+        normalized_module = module.strip().lower()
+        if normalized_module not in _ALLOWED_PRESET_MODULES:
+            raise ProjectStoreError("Модуль профиля не разрешён в M2A")
         _bounded_json(parameters)
-        return original_set_preset(project_id, name, module, parameters)
+        return original_set_preset(project_id, name, normalized_module, parameters)
 
     store.set_preset = guarded_set_preset
 
@@ -198,8 +218,11 @@ def register_m2a_routes(app: FastAPI, store: ProjectStore) -> None:
     @app.put("/api/m2a/projects/{project_id}/presets")
     def put_m2a_preset(project_id: str, payload: M2APresetPayload) -> dict[str, Any]:
         try:
+            normalized_module = payload.module.strip().lower()
+            if normalized_module not in _ALLOWED_PRESET_MODULES:
+                raise ProjectStoreError("Модуль профиля не разрешён в M2A")
             _bounded_json(payload.parameters)
-            project = store.set_preset(project_id, payload.name.strip(), payload.module.strip().lower(), payload.parameters)
+            project = store.set_preset(project_id, payload.name.strip(), normalized_module, payload.parameters)
             return {"project": project.model_dump(), "status": "saved"}
         except (ValueError, ProjectStoreError) as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
