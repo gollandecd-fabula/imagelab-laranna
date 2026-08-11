@@ -9,6 +9,9 @@ on:
       - bootstrap/**
       - AGENTS.md
       - .github/workflows/**
+  push:
+    branches:
+      - redteam/imagelab-complete-audit-20260725-v2
   workflow_dispatch:
 
 permissions:
