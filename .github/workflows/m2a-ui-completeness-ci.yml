@@ -21,6 +21,7 @@ on:
       - recovery/source/tests/test_browser_m2a_closure.py
       - recovery/source/tests/test_browser_m2a_rtm_evidence.py
       - recovery/source/docs/M2A_EXECUTION_RTM_V1_2.md
+      - recovery/source/docs/v1_4_4/IMAGELAB_V1_4_4_G0_CONTROL_PLANE.json
       - .github/workflows/m2a-ui-completeness-ci.yml
       - .github/workflows/full-audit-source-snapshot.yml
       - .github/workflows/workflow-governance-ci.yml
@@ -47,6 +48,7 @@ on:
       - recovery/source/tests/test_browser_m2a_closure.py
       - recovery/source/tests/test_browser_m2a_rtm_evidence.py
       - recovery/source/docs/M2A_EXECUTION_RTM_V1_2.md
+      - recovery/source/docs/v1_4_4/IMAGELAB_V1_4_4_G0_CONTROL_PLANE.json
       - .github/workflows/m2a-ui-completeness-ci.yml
       - .github/workflows/full-audit-source-snapshot.yml
       - .github/workflows/workflow-governance-ci.yml
@@ -82,7 +84,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          allowed='^(\.github/workflows/(m2a-ui-completeness-ci|full-audit-source-snapshot|workflow-governance-ci|bootstrap-verifier-contract|dependency-security-audit|codex-evidence-hardening-ci)\.yml|recovery/source/docs/M2A_EXECUTION_RTM_V1_2\.md|recovery/source/app/(entry|m2a_api|models)\.py|recovery/source/app/services/(__init__|m2a_processing)\.py|recovery/source/app/static/(m2a-ui\.css|m2a-completeness\.css)|recovery/source/app/static/m2a-ui-parts/.*|recovery/source/tests/test_(m2a_ui|geometry_m2a|browser_m2a|m2a_workspace|browser_m2a_matrix|m2a_closure|browser_m2a_closure|browser_m2a_rtm_evidence)\.py)$'
+          allowed='^(\.github/workflows/(m2a-ui-completeness-ci|full-audit-source-snapshot|workflow-governance-ci|bootstrap-verifier-contract|dependency-security-audit|codex-evidence-hardening-ci)\.yml|recovery/source/docs/M2A_EXECUTION_RTM_V1_2\.md|recovery/source/docs/v1_4_4/IMAGELAB_V1_4_4_G0_CONTROL_PLANE\.json|recovery/source/app/(entry|m2a_api|models)\.py|recovery/source/app/services/(__init__|m2a_processing)\.py|recovery/source/app/static/(m2a-ui\.css|m2a-completeness\.css)|recovery/source/app/static/m2a-ui-parts/.*|recovery/source/tests/test_(m2a_ui|geometry_m2a|browser_m2a|m2a_workspace|browser_m2a_matrix|m2a_closure|browser_m2a_closure|browser_m2a_rtm_evidence)\.py)$'
           git diff --name-only "$M1_BASELINE_SHA"...HEAD > /tmp/m2a-files.txt
           cat /tmp/m2a-files.txt
           while IFS= read -r path; do
