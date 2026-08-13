@@ -8,6 +8,7 @@ on:
       - recovery/source/app/m2a_api.py
       - recovery/source/app/models.py
       - recovery/source/app/services/m2a_processing.py
+      - recovery/source/app/services/repair_service.py
       - recovery/source/app/services/__init__.py
       - recovery/source/app/static/m2a-ui.css
       - recovery/source/app/static/m2a-completeness.css
@@ -35,6 +36,7 @@ on:
       - recovery/source/app/m2a_api.py
       - recovery/source/app/models.py
       - recovery/source/app/services/m2a_processing.py
+      - recovery/source/app/services/repair_service.py
       - recovery/source/app/services/__init__.py
       - recovery/source/app/static/m2a-ui.css
       - recovery/source/app/static/m2a-completeness.css
@@ -84,7 +86,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          allowed='^(\.github/workflows/(m2a-ui-completeness-ci|full-audit-source-snapshot|workflow-governance-ci|bootstrap-verifier-contract|dependency-security-audit|codex-evidence-hardening-ci)\.yml|recovery/source/docs/M2A_EXECUTION_RTM_V1_2\.md|recovery/source/docs/v1_4_4/.*|recovery/source/app/(entry|m2a_api|models)\.py|recovery/source/app/services/(__init__|m2a_processing)\.py|recovery/source/app/static/(m2a-ui\.css|m2a-completeness\.css)|recovery/source/app/static/m2a-ui-parts/.*|recovery/source/tests/test_(m2a_ui|geometry_m2a|browser_m2a|m2a_workspace|browser_m2a_matrix|m2a_closure|browser_m2a_closure|browser_m2a_rtm_evidence)\.py)$'
+          allowed='^(\.github/workflows/(m2a-ui-completeness-ci|full-audit-source-snapshot|workflow-governance-ci|bootstrap-verifier-contract|dependency-security-audit|codex-evidence-hardening-ci)\.yml|recovery/source/docs/M2A_EXECUTION_RTM_V1_2\.md|recovery/source/docs/v1_4_4/.*|recovery/source/app/(entry|m2a_api|models)\.py|recovery/source/app/services/(__init__|m2a_processing|repair_service)\.py|recovery/source/app/static/(m2a-ui\.css|m2a-completeness\.css)|recovery/source/app/static/m2a-ui-parts/.*|recovery/source/tests/test_(m2a_ui|geometry_m2a|browser_m2a|m2a_workspace|browser_m2a_matrix|m2a_closure|browser_m2a_closure|browser_m2a_rtm_evidence)\.py)$'
           git diff --name-only "$M1_BASELINE_SHA"...HEAD > /tmp/m2a-files.txt
           cat /tmp/m2a-files.txt
           while IFS= read -r path; do
@@ -121,7 +123,7 @@ jobs:
           python -m pip install -q --requirement requirements.txt
           python -m pip install -q pytest==8.4.2 httpx==0.28.1
       - name: Compile M2A Python surface
-        run: python -m compileall -q app/entry.py app/m2a_api.py app/services/m2a_processing.py tests/test_m2a_ui.py tests/test_geometry_m2a.py tests/test_m2a_workspace.py tests/test_m2a_closure.py tests/test_browser_m2a_closure.py
+        run: python -m compileall -q app/entry.py app/m2a_api.py app/services/m2a_processing.py app/services/repair_service.py tests/test_m2a_ui.py tests/test_geometry_m2a.py tests/test_m2a_workspace.py tests/test_m2a_closure.py tests/test_browser_m2a_closure.py
       - name: Validate concatenated JavaScript syntax
         run: |
           cat app/static/m2a-ui-parts/*.js.part > /tmp/m2a-ui.js

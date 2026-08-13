@@ -252,7 +252,6 @@ def record_continual_learning(attempts: list[AssetRecord], operation: str) -> di
     engine = get_ai_engine()
     stored = 0
     skipped = 0
-    rows_before = len(engine.feedback.list(module))
     for asset in attempts:
         features = _ai_features(asset.ai)
         if not features:
@@ -276,13 +275,14 @@ def record_continual_learning(attempts: list[AssetRecord], operation: str) -> di
         except AIFeedbackError:
             skipped += 1
     rows_after = len(engine.feedback.list(module))
-    training: dict[str, Any] = {"status": "not_triggered"}
-    if rows_after >= 8 and rows_after != rows_before and rows_after % 4 == 0:
-        try:
-            candidate = engine.feedback.train(module)
-            training = {"status": "promoted" if candidate.get("promoted") else "candidate_rejected", "candidate": candidate}
-        except AIFeedbackError as exc:
-            training = {"status": "not_trainable", "reason": str(exc)}
+    # v1.4.4 permits evidence/feedback capture but forbids runtime training or
+    # model promotion. Keep the pre-existing response status compatible while
+    # recording the policy reason explicitly; no engine.feedback.train call is
+    # reachable from the production runtime.
+    training: dict[str, Any] = {
+        "status": "not_triggered",
+        "reason": "runtime_training_promotion_forbidden_v1_4_4",
+    }
     return {
         "module": module,
         "stored": stored,

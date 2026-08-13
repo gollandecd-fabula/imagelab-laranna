@@ -11,9 +11,18 @@ from app.m2a_api import register_m2a_routes
 
 
 # app.main exports the request-size wrapper; its ``app`` attribute is the
-# configured FastAPI instance. Register M2A routes on that instance so the
-# existing host/origin/body-limit security chain remains authoritative.
-register_m2a_routes(getattr(core_app, "app", core_app), store)
+# configured FastAPI instance. v1.4.4 forbids runtime model training/promotion,
+# so the authoritative entrypoint removes the legacy train/rollback routes
+# before any M2A routes are registered. Feedback capture remains available;
+# promotion may only return under a later explicitly approved specification.
+fastapi_app = getattr(core_app, "app", core_app)
+_PROHIBITED_RUNTIME_AI_ROUTES = {"/api/ai/train", "/api/ai/rollback"}
+fastapi_app.router.routes[:] = [
+    route
+    for route in fastapi_app.router.routes
+    if getattr(route, "path", None) not in _PROHIBITED_RUNTIME_AI_ROUTES
+]
+register_m2a_routes(fastapi_app, store)
 
 
 class UIHardeningEntry:
