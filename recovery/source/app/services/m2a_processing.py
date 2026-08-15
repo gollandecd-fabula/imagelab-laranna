@@ -128,14 +128,23 @@ def geometry_m2a(image: Image.Image, ppi: float, params: dict[str, Any]) -> tupl
         if anchor not in _CANVAS_ANCHORS:
             raise legacy.ProcessingError("Неизвестная точка привязки холста")
 
+        # Convert each axis as one physical span first, then distribute the
+        # discrete pixels between the two sides. Rounding each side independently
+        # can add or lose one pixel (for example 2 mm + 2 mm at 300 PPI), making
+        # the binary canvas read-back disagree with the requested total size.
+        px_per_mm = target_ppi / 25.4
+        horizontal_total = int(round((left_mm + right_mm) * px_per_mm))
+        vertical_total = int(round((top_mm + bottom_mm) * px_per_mm))
+        left_px = int(round(left_mm * px_per_mm))
+        top_px = int(round(top_mm * px_per_mm))
         pads = {
-            "top": int(round(top_mm / 25.4 * target_ppi)),
-            "bottom": int(round(bottom_mm / 25.4 * target_ppi)),
-            "left": int(round(left_mm / 25.4 * target_ppi)),
-            "right": int(round(right_mm / 25.4 * target_ppi)),
+            "top": top_px,
+            "bottom": vertical_total - top_px,
+            "left": left_px,
+            "right": horizontal_total - left_px,
         }
-        minimum_width = out.width + pads["left"] + pads["right"]
-        minimum_height = out.height + pads["top"] + pads["bottom"]
+        minimum_width = out.width + horizontal_total
+        minimum_height = out.height + vertical_total
         target_width = minimum_width
         target_height = minimum_height
         if canvas_width_mm is not None and canvas_height_mm is not None:
