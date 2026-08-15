@@ -1,0 +1,66 @@
+(() => {
+  'use strict';
+
+  const M = window.imagelabM2A || (window.imagelabM2A = {});
+  const byId = id => document.getElementById(id);
+  let draft = null;
+
+  function currentProjectId() {
+    return state.project?.id || null;
+  }
+
+  function readPolicy() {
+    return {
+      project_id: currentProjectId(),
+      engine_policy: byId('m2aPrivacyLocal')?.checked === false ? 'consent_required' : 'local_only',
+      qa_policy: byId('m2aQaPolicy')?.value || 'mandatory',
+      export_profile: byId('m2aExportProfile')?.value || 'transparent_png',
+    };
+  }
+
+  function captureDraft() {
+    if (!currentProjectId()) return;
+    draft = readPolicy();
+    M.presetPolicyDraft = structuredClone(draft);
+  }
+
+  function clearDraft() {
+    draft = null;
+    M.presetPolicyDraft = null;
+  }
+
+  function applyDraft() {
+    if (!draft || !currentProjectId() || draft.project_id !== currentProjectId()) return;
+    const local = byId('m2aPrivacyLocal');
+    const qa = byId('m2aQaPolicy');
+    const profile = byId('m2aExportProfile');
+    if (local) local.checked = draft.engine_policy === 'local_only';
+    if (qa) qa.value = draft.qa_policy;
+    if (profile) profile.value = draft.export_profile;
+  }
+
+  ['m2aPrivacyLocal', 'm2aQaPolicy', 'm2aExportProfile'].forEach(id => {
+    byId(id)?.addEventListener('change', captureDraft);
+  });
+
+  // Applying a stored preset intentionally replaces any unsaved policy draft.
+  document.addEventListener('click', event => {
+    if (event.target.closest('#m2aPresetList [data-use]')) clearDraft();
+  }, true);
+
+  const previousRenderProject = renderProject;
+  renderProject = function() {
+    const beforeProjectId = currentProjectId();
+    previousRenderProject();
+    const afterProjectId = currentProjectId();
+    if (draft && (!afterProjectId || draft.project_id !== afterProjectId || beforeProjectId !== afterProjectId)) {
+      clearDraft();
+      return;
+    }
+    // Earlier M2A compatibility layers restore persisted Settings on every
+    // render. Reapply the current same-project draft so navigation or unrelated
+    // workspace writes cannot silently change the policy that the user is
+    // about to store in a preset.
+    applyDraft();
+  };
+})();
