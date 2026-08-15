@@ -8,6 +8,7 @@ from app.ai.runtime import get_ai_engine
 from app.config import settings
 from app.models import AssetRecord
 from app.services import image_processing as legacy
+from app.services import vector_fidelity
 
 _legacy_process_image = legacy.process_image
 _CANVAS_ANCHORS = {
@@ -180,6 +181,8 @@ def geometry_m2a(image: Image.Image, ppi: float, params: dict[str, Any]) -> tupl
 def process_image(asset: AssetRecord, operation: str, params: dict[str, Any]) -> AssetRecord:
     """M2A adapter: preserve the stable engine while enforcing the shared size contract."""
     normalized = operation.strip().lower()
+    if normalized == "vectorize":
+        return vector_fidelity.process_vector(asset, params)
     if normalized not in {"geometry", "enhance", "reconstruct"}:
         return _legacy_process_image(asset, operation, params)
 
