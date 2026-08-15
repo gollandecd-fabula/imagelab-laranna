@@ -1,6 +1,25 @@
-# ImageLab v1.2 — M2A EXECUTION RTM
+# ImageLab v1.2 — M2A EXECUTION RTM (LEGACY STATUS SURFACE)
 
-## Authorization and source of truth
+## v1.4.4 supersession and M2A closure reconciliation
+
+This repository path is retained for compatibility with the existing GLAZ ImageLab profile and as the historical v1.2 execution record. For current execution, `ImageLab_FINAL_EXECUTION_SPEC_v1.4.4_APPROVED(3).docx` and the authoritative v1.4.4 execution RTM supersede the historical v1.2 statuses below. Historical rows are preserved as history and are **not** silently relabelled PASS.
+
+Current evidence-bound M2A closure candidate: `78d746d9d59d7d578f6e8b3391df70cb7a8e1397`.
+
+Closure evidence on the same frozen candidate proves: all current v1.4.4 M2A rows PASS; mandatory real-browser interaction PASS; screenshot matrix PASS at 800/1024/1280/1440/1920; mandatory exact-head workflows PASS; diff scope contains no M2B–M7 implementation or release authorization; M2B remains NOT_STARTED and release remains BLOCKED. Candidate-specific GLAZ evidence is bound to the same SHA with connector PASS, monitor RUNNING and no candidate drift.
+
+Current compatibility markers:
+
+```text
+M2A_CLOSED
+M2B_NOT_STARTED
+M2C_NOT_STARTED
+PROTOCOL_IMPLEMENTATION_INCOMPLETE
+MILESTONE_NOT_COMPLETE
+RELEASE_BLOCKED
+```
+
+## Historical v1.2 authorization (superseded by v1.4.4 for current execution)
 
 - Approved specification: `ImageLab_FINAL_EXECUTION_SPEC_v1.2_APPROVED.docx`.
 - User authorization: M2A `Scope и UI completeness` only.
@@ -24,7 +43,7 @@
 
 A row may become `PASS` only when all listed implementation, automated test, browser evidence and artifact criteria are satisfied on one frozen M2A code SHA. Static presence alone is not PASS. Visual review is mandatory for VIS/PV/SZ surface requirements. Claims cannot exceed evidence.
 
-## Traceability matrix
+## Historical v1.2 traceability matrix (preserved; not current v1.4.4 status)
 
 | Requirement | M2A action | Test | Evidence | Artifact | PASS criterion | Status |
 |---|---|---|---|---|---|---|
@@ -85,7 +104,7 @@ A row may become `PASS` only when all listed implementation, automated test, bro
 | SET-003 | Prohibit text-to-image and blank-canvas modes | Static/browser prohibited-surface test | DOM/source scan | Test log | No such entry point exists | IN PROGRESS |
 | SET-004 | Generate safe diagnostics report | API/download test | Report content scan | Diagnostics JSON artifact | Report excludes image bytes/content and secrets | IN PROGRESS |
 
-## M2A completion gate
+## Historical v1.2 completion gate (superseded by v1.4.4 closure evidence)
 
 M2A may be marked complete only when:
 
@@ -101,7 +120,7 @@ Current stage status:
 ```text
 M0_COMPLETE
 M1_COMPLETE
-M2A_IN_PROGRESS
+M2A_CLOSED
 M2B_NOT_STARTED
 M2C_NOT_STARTED
 PROTOCOL_IMPLEMENTATION_INCOMPLETE
