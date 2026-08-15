@@ -1,0 +1,280 @@
+
+(() => {
+  'use strict';
+
+  const q = (selector, root = document) => root.querySelector(selector);
+  const qa = (selector, root = document) => [...root.querySelectorAll(selector)];
+  const sidebar = q('.sidebar');
+  const controls = q('.controls-column');
+  if (!sidebar || !controls || sidebar.dataset.v144Canonical === 'true') return;
+
+  // Capture the existing responsive selector BEFORE replacing sidebar children.
+  // The failed predecessor ee5e3b9 removed this node and broke 800–1023 px.
+  const mobile = q('.m2a-mobile-nav');
+  sidebar.dataset.v144Canonical = 'true';
+
+  const genericIcon = '<svg class="nav-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14v14H5zM8 8h8v8H8z"></path></svg>';
+
+  function relabel(button, label) {
+    if (!button) return null;
+    const svg = q('svg', button);
+    button.innerHTML = `${svg ? svg.outerHTML : genericIcon}<span class="m2a-nav-label">${label}</span>`;
+    button.setAttribute('aria-label', label);
+    button.title = label;
+    return button;
+  }
+
+  function customButton(kind, key, label) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'nav-item';
+    button.dataset[kind] = key;
+    button.innerHTML = `${genericIcon}<span class="m2a-nav-label">${label}</span>`;
+    button.setAttribute('aria-label', label);
+    button.title = label;
+    return button;
+  }
+
+  function group(label, className) {
+    const node = document.createElement('div');
+    node.className = `m2a-nav-group ${className}`;
+    node.setAttribute('role', 'group');
+    node.setAttribute('aria-label', label);
+    const heading = document.createElement('div');
+    heading.className = 'nav-group-title';
+    heading.textContent = label;
+    node.append(heading);
+    return node;
+  }
+
+  function existing(module) {
+    return q(`[data-module="${module}"]`, sidebar);
+  }
+
+  function setTitle(number, name, subtitle) {
+    const numberNode = q('#moduleNumber');
+    const titleNode = q('#moduleTitle');
+    const subtitleNode = q('#moduleSubtitle');
+    if (numberNode) numberNode.textContent = number;
+    if (titleNode) titleNode.textContent = name;
+    if (subtitleNode) subtitleNode.textContent = subtitle;
+  }
+
+  const contextStore = group('Контекстные возможности', 'm2a-context-module-store');
+  contextStore.dataset.surface = 'contextual';
+  const contextSections = [
+    ['Извлечение / Фон', ['selection', 'cleanup']],
+    ['Улучшить · Advanced', ['color', 'palette']],
+    ['Экспорт · Production', ['dtf', 'masters', 'logo', 'cardlab']],
+  ];
+  for (const [label, modules] of contextSections) {
+    const section = document.createElement('div');
+    section.className = 'm2a-context-scope';
+    section.dataset.contextScope = label;
+    const heading = document.createElement('div');
+    heading.className = 'nav-group-title';
+    heading.textContent = label;
+    section.append(heading);
+    for (const module of modules) {
+      const button = existing(module);
+      if (!button) continue;
+      button.dataset.contextualOnly = 'true';
+      section.append(button);
+    }
+    contextStore.append(section);
+  }
+
+  const primary = group('Обработка', 'm2a-primary-actions');
+  const primarySpec = [
+    ['improve', 'Улучшить'],
+    ['restore', 'Восстановить'],
+    ['extract', 'Извлечь принт'],
+    ['background', 'Удалить фон'],
+    ['geometry', 'Подготовить размер'],
+    ['halftone', 'Полутона'],
+    ['vector', 'Векторизовать'],
+    ['design', 'Изменить дизайн'],
+    ['export', 'Экспорт'],
+  ];
+  const primaryButtons = new Map();
+  for (const [key, label] of primarySpec) {
+    let button;
+    if (key === 'restore' || key === 'design') {
+      button = customButton('canonicalAction', key, label);
+    } else {
+      button = relabel(existing(key), label);
+      if (button) button.dataset.canonicalAction = key;
+    }
+    if (!button) continue;
+    primaryButtons.set(key, button);
+    primary.append(button);
+  }
+
+  const support = group('Проект и система', 'm2a-support-actions');
+  const supportSpec = [
+    ['upload', 'Добавить файл'],
+    ['projects', 'Проекты'],
+    ['history', 'История'],
+    ['presets', 'Пресеты'],
+    ['batch', 'Пакет'],
+    ['settings', 'Настройки'],
+    ['diagnostics', 'Диагностика'],
+  ];
+  for (const [key, label] of supportSpec) {
+    let button;
+    if (key === 'history' || key === 'diagnostics') {
+      button = customButton('canonicalSupport', key, label);
+    } else {
+      button = relabel(existing(key), label);
+      if (button) button.dataset.canonicalSupport = key;
+    }
+    if (button) support.append(button);
+  }
+
+  // Preserve responsive navigation instead of deleting it.
+  const sidebarChildren = [primary, support, contextStore];
+  if (mobile) sidebarChildren.push(mobile);
+  sidebar.replaceChildren(...sidebarChildren);
+
+  const restorePane = document.createElement('div');
+  restorePane.className = 'module-pane m2a-pane';
+  restorePane.dataset.pane = 'restore';
+  restorePane.innerHTML =
+    '<div class="m2a-card"><strong>Восстановить изображение</strong>' +
+    '<p>Реконструкция текущего изображения существующим локальным движком. Внешний engine не подключён.</p></div>';
+  [
+    q('#reconstructScale')?.closest('label'),
+    q('#reconstructDetail')?.closest('label'),
+    q('#applyReconstruct'),
+  ].filter(Boolean).forEach(node => restorePane.append(node));
+  controls.append(restorePane);
+
+  const designPane = document.createElement('div');
+  designPane.className = 'module-pane m2a-pane';
+  designPane.dataset.pane = 'design';
+  designPane.dataset.m4Gated = 'true';
+  designPane.innerHTML = `
+    <div class="m2a-card"><strong>Изменить дизайн</strong>
+      <p>Управление степенью визуального преобразования исходного изображения. Production engine выбирается только после M4 frozen benchmark.</p>
+    </div>
+    <label class="range-row"><span>Степень преобразования</span>
+      <input id="m2aDesignStrength" type="range" min="0" max="100" value="0"><output>0%</output>
+    </label>
+    <div class="m2a-status blocked" id="m2aDesignStatus"><strong>BLOCKED · M4</strong><span>Нет утверждённого production engine</span></div>
+    <button class="primary-button wide" id="m2aDesignApply" type="button" disabled>Недоступно до M4 benchmark</button>`;
+  controls.append(designPane);
+  q('#m2aDesignStrength')?.addEventListener('input', event => {
+    const output = event.currentTarget.closest('label')?.querySelector('output');
+    if (output) output.textContent = `${event.currentTarget.value}%`;
+  });
+
+  function activatePrimary(button) {
+    qa('.m2a-primary-actions .nav-item').forEach(node => node.classList.remove('active'));
+    button?.classList.add('active');
+  }
+
+  function openCustomPane(name, number, heading, subtitle, button) {
+    qa('.module-pane').forEach(pane => pane.classList.remove('active'));
+    q(`[data-pane="${name}"]`)?.classList.add('active');
+    setTitle(number, heading, subtitle);
+    activatePrimary(button);
+  }
+
+  primaryButtons.get('restore')?.addEventListener('click', () => {
+    openCustomPane('restore', '2.', 'Восстановить изображение',
+      'Реконструкция и восстановление деталей', primaryButtons.get('restore'));
+  });
+  primaryButtons.get('design')?.addEventListener('click', () => {
+    openCustomPane('design', '8.', 'Изменить дизайн',
+      'M4-gated управление степенью преобразования', primaryButtons.get('design'));
+  });
+  for (const key of ['improve', 'extract', 'background', 'geometry', 'halftone', 'vector', 'export']) {
+    primaryButtons.get(key)?.addEventListener('click', () => activatePrimary(primaryButtons.get(key)));
+  }
+
+  function contextualProxy(parentModule, module, label) {
+    const pane = q(`[data-pane="${parentModule}"]`);
+    const original = q(`.m2a-context-module-store [data-module="${module}"]`);
+    if (!pane || !original) return;
+    let row = q('.m2a-contextual-actions', pane);
+    if (!row) {
+      row = document.createElement('div');
+      row.className = 'm2a-contextual-actions row-actions';
+      row.setAttribute('aria-label', 'Контекстные инструменты');
+      pane.append(row);
+    }
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'secondary-button';
+    button.dataset.contextModule = module;
+    button.textContent = label;
+    button.addEventListener('click', () => {
+      original.click();
+      activatePrimary(primaryButtons.get(parentModule));
+    });
+    row.append(button);
+  }
+
+  contextualProxy('extract', 'selection', 'Уточнить маску');
+  contextualProxy('extract', 'cleanup', 'Очистить принт');
+  contextualProxy('background', 'selection', 'Уточнить маску');
+  contextualProxy('background', 'cleanup', 'Очистить края');
+  contextualProxy('improve', 'color', 'Цвет · Advanced');
+  contextualProxy('improve', 'palette', 'Палитра · Advanced');
+  contextualProxy('export', 'dtf', 'DTF Preflight');
+  contextualProxy('export', 'masters', 'Masters');
+  contextualProxy('export', 'logo', 'Logo');
+  contextualProxy('export', 'cardlab', 'CardLab handoff');
+
+  const historyButton = q('[data-canonical-support="history"]');
+  historyButton?.addEventListener('click', () => {
+    q('.history-panel')?.scrollIntoView({block: 'nearest'});
+    q('#historyStrip')?.setAttribute('tabindex', '-1');
+    q('#historyStrip')?.focus({preventScroll: true});
+  });
+
+  const diagnosticsButton = q('[data-canonical-support="diagnostics"]');
+  diagnosticsButton?.addEventListener('click', () => {
+    q('[data-module="settings"]')?.click();
+    q('#m2aDiagnostics')?.scrollIntoView({block: 'nearest'});
+    q('#m2aRefreshDiagnostics')?.focus();
+  });
+
+  q('#downloadButton')?.addEventListener('click', event => {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    primaryButtons.get('export')?.click();
+  }, true);
+
+  if (mobile) {
+    const options = [
+      ...primarySpec.map(([value, text]) => [value, text]),
+      ...supportSpec.map(([value, text]) => [value, text]),
+    ];
+    mobile.replaceChildren(...options.map(([value, text]) => {
+      const option = document.createElement('option');
+      option.value = value;
+      option.textContent = text;
+      return option;
+    }));
+    mobile.addEventListener('change', event => {
+      const value = event.currentTarget.value;
+      if (value === 'restore') {
+        primaryButtons.get('restore')?.click();
+        event.stopImmediatePropagation();
+      } else if (value === 'design') {
+        primaryButtons.get('design')?.click();
+        event.stopImmediatePropagation();
+      } else if (value === 'history') {
+        historyButton?.click();
+        event.stopImmediatePropagation();
+      } else if (value === 'diagnostics') {
+        diagnosticsButton?.click();
+        event.stopImmediatePropagation();
+      }
+    }, true);
+  }
+
+  const activePrimary = q('.m2a-primary-actions [data-module].active');
+  if (activePrimary) activatePrimary(activePrimary);
+})();

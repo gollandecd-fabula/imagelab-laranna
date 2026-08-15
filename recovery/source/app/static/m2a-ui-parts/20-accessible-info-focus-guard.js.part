@@ -1,0 +1,29 @@
+(() => {
+  'use strict';
+
+  const toggle = document.getElementById('m2aInfoToggle');
+  const drawer = document.querySelector('.info-sidebar');
+  if (!toggle || !drawer) return;
+
+  const focusableSelector = [
+    'button:not([disabled])',
+    '[href]',
+    'input:not([disabled])',
+    'select:not([disabled])',
+    'textarea:not([disabled])',
+    '[tabindex]:not([tabindex="-1"])',
+  ].join(',');
+
+  function focusInsideWhenOpen() {
+    if (!drawer.classList.contains('m2a-open')) return;
+    if (!drawer.hasAttribute('tabindex')) drawer.setAttribute('tabindex', '-1');
+    const target = Array.from(drawer.querySelectorAll(focusableSelector))
+      .find(node => node.getClientRects().length > 0) || drawer;
+    target.focus();
+  }
+
+  // 17-accessible-info-drawer owns open/close semantics. This later guard only
+  // makes the already-required focus transfer synchronous after its click
+  // handler, avoiding a requestAnimationFrame race after the canonical DOM move.
+  toggle.addEventListener('click', focusInsideWhenOpen);
+})();
