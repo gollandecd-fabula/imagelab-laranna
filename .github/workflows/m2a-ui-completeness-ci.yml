@@ -8,6 +8,7 @@ on:
       - recovery/source/app/m2a_api.py
       - recovery/source/app/models.py
       - recovery/source/app/services/m2a_processing.py
+      - recovery/source/app/services/restore_fidelity.py
       - recovery/source/app/services/halftone_fidelity.py
       - recovery/source/app/services/background_fidelity.py
       - recovery/source/app/services/extract_fidelity.py
@@ -19,6 +20,7 @@ on:
       - recovery/source/app/static/m2a-ui-parts/**
       - recovery/source/tests/test_m2a_ui.py
       - recovery/source/tests/test_geometry_m2a.py
+      - recovery/source/tests/test_m2b_restore.py
       - recovery/source/tests/test_m2b_halftone.py
       - recovery/source/tests/test_m2b_background.py
       - recovery/source/tests/test_m2b_extract.py
@@ -45,6 +47,7 @@ on:
       - recovery/source/app/m2a_api.py
       - recovery/source/app/models.py
       - recovery/source/app/services/m2a_processing.py
+      - recovery/source/app/services/restore_fidelity.py
       - recovery/source/app/services/halftone_fidelity.py
       - recovery/source/app/services/background_fidelity.py
       - recovery/source/app/services/extract_fidelity.py
@@ -56,6 +59,7 @@ on:
       - recovery/source/app/static/m2a-ui-parts/**
       - recovery/source/tests/test_m2a_ui.py
       - recovery/source/tests/test_geometry_m2a.py
+      - recovery/source/tests/test_m2b_restore.py
       - recovery/source/tests/test_m2b_halftone.py
       - recovery/source/tests/test_m2b_background.py
       - recovery/source/tests/test_m2b_extract.py
@@ -104,7 +108,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          allowed='^(\.github/workflows/(m2a-ui-completeness-ci|full-audit-source-snapshot|workflow-governance-ci|bootstrap-verifier-contract|dependency-security-audit|codex-evidence-hardening-ci)\.yml|recovery/source/docs/M2A_EXECUTION_RTM_V1_2\.md|recovery/source/docs/v1_4_4/.*|recovery/source/app/(entry|m2a_api|models)\.py|recovery/source/app/services/(__init__|m2a_processing|background_fidelity|extract_fidelity|halftone_fidelity|vector_fidelity|repair_service)\.py|recovery/source/app/static/(m2a-ui\.css|m2a-completeness\.css)|recovery/source/app/static/m2a-ui-parts/.*|recovery/source/tests/test_(m2a_ui|geometry_m2a|m2b_background|m2b_extract|m2b_halftone|m2b_vector|browser_m2a|m2a_workspace|browser_m2a_matrix|m2a_closure|browser_m2a_closure|browser_m2a_rtm_evidence|browser_m2a_prj_closure)\.py)$'
+          allowed='^(\.github/workflows/(m2a-ui-completeness-ci|full-audit-source-snapshot|workflow-governance-ci|bootstrap-verifier-contract|dependency-security-audit|codex-evidence-hardening-ci)\.yml|recovery/source/docs/M2A_EXECUTION_RTM_V1_2\.md|recovery/source/docs/v1_4_4/.*|recovery/source/app/(entry|m2a_api|models)\.py|recovery/source/app/services/(__init__|m2a_processing|background_fidelity|extract_fidelity|halftone_fidelity|restore_fidelity|vector_fidelity|repair_service)\.py|recovery/source/app/static/(m2a-ui\.css|m2a-completeness\.css)|recovery/source/app/static/m2a-ui-parts/.*|recovery/source/tests/test_(m2a_ui|geometry_m2a|m2b_background|m2b_extract|m2b_halftone|m2b_restore|m2b_vector|browser_m2a|m2a_workspace|browser_m2a_matrix|m2a_closure|browser_m2a_closure|browser_m2a_rtm_evidence|browser_m2a_prj_closure)\.py)$'
           git diff --name-only "$M1_BASELINE_SHA"...HEAD > /tmp/m2a-files.txt
           cat /tmp/m2a-files.txt
           while IFS= read -r path; do
@@ -141,13 +145,13 @@ jobs:
           python -m pip install -q --requirement requirements.txt
           python -m pip install -q pytest==8.4.2 httpx==0.28.1
       - name: Compile M2A/M2B Python surface
-        run: python -m compileall -q app/entry.py app/m2a_api.py app/services/m2a_processing.py app/services/background_fidelity.py app/services/extract_fidelity.py app/services/halftone_fidelity.py app/services/vector_fidelity.py app/services/repair_service.py tests/test_m2a_ui.py tests/test_geometry_m2a.py tests/test_m2b_background.py tests/test_m2b_extract.py tests/test_m2b_halftone.py tests/test_m2b_vector.py tests/test_m2a_workspace.py tests/test_m2a_closure.py tests/test_browser_m2a_closure.py tests/test_browser_m2a_prj_closure.py
+        run: python -m compileall -q app/entry.py app/m2a_api.py app/services/m2a_processing.py app/services/background_fidelity.py app/services/extract_fidelity.py app/services/halftone_fidelity.py app/services/restore_fidelity.py app/services/vector_fidelity.py app/services/repair_service.py tests/test_m2a_ui.py tests/test_geometry_m2a.py tests/test_m2b_background.py tests/test_m2b_extract.py tests/test_m2b_halftone.py tests/test_m2b_restore.py tests/test_m2b_vector.py tests/test_m2a_workspace.py tests/test_m2a_closure.py tests/test_browser_m2a_closure.py tests/test_browser_m2a_prj_closure.py
       - name: Validate concatenated JavaScript syntax
         run: |
           cat app/static/m2a-ui-parts/*.js.part > /tmp/m2a-ui.js
           node --check /tmp/m2a-ui.js
       - name: Run focused M2A/M2B contracts
-        run: python -m pytest tests/test_m2a_ui.py tests/test_geometry_m2a.py tests/test_m2b_background.py tests/test_m2b_extract.py tests/test_m2b_halftone.py tests/test_m2b_vector.py tests/test_m2a_workspace.py tests/test_m2a_closure.py -vv --tb=short
+        run: python -m pytest tests/test_m2a_ui.py tests/test_geometry_m2a.py tests/test_m2b_background.py tests/test_m2b_extract.py tests/test_m2b_halftone.py tests/test_m2b_restore.py tests/test_m2b_vector.py tests/test_m2a_workspace.py tests/test_m2a_closure.py -vv --tb=short
       - name: Run complete source suite
         run: |
           python -m pytest -q > m2a-full-suite.log 2>&1

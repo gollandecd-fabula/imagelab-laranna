@@ -8,7 +8,7 @@ from app.ai.runtime import get_ai_engine
 from app.config import settings
 from app.models import AssetRecord
 from app.services import image_processing as legacy
-from app.services import vector_fidelity
+from app.services import restore_fidelity, vector_fidelity
 
 _legacy_process_image = legacy.process_image
 _CANVAS_ANCHORS = {
@@ -207,11 +207,7 @@ def process_image(asset: AssetRecord, operation: str, params: dict[str, Any]) ->
         return legacy._save_result(result, result_ppi, asset, normalized, recorded, ai=ai)
 
     if normalized == "reconstruct":
-        scale = legacy._integer(params, "scale", 2, 1, 4)
-        result, ai = engine.restore(image, scale=scale, strength=None, module="improve")
-        detail = legacy._integer(params, "detail", 45, 0, 100)
-        if detail:
-            result = ImageEnhance.Sharpness(result).enhance(1 + detail / 160)
+        result, ai = restore_fidelity.restore_with_diagnostics(image, params, engine)
         result, result_ppi = geometry_m2a(result, ppi, recorded)
         recorded["physical_size_unit"] = "mm"
         recorded["ppi_range"] = [100, 1000]
