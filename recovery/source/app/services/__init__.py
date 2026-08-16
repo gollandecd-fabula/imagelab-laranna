@@ -5,6 +5,7 @@ from __future__ import annotations
 from app.services import image_processing as _legacy_processing
 from app.services import halftone_fidelity as _halftone_fidelity
 from app.services import background_fidelity as _background_fidelity
+from app.services import extract_fidelity as _extract_fidelity
 from app.services.m2a_processing import process_image as _m2a_process_image
 
 
@@ -14,6 +15,8 @@ def _m2b_process_image(asset, operation: str, params):
         return _halftone_fidelity.process_halftone(asset, params)
     if normalized == "background" and str(params.get("action", "remove")).strip().lower() == "remove":
         return _background_fidelity.process_background(asset, params)
+    if normalized == "extract_print":
+        return _extract_fidelity.process_extract(asset, params)
     return _m2a_process_image(asset, operation, params)
 
 
