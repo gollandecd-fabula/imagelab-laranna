@@ -1,0 +1,10 @@
+{
+  "external_pretrained_weights": false,
+  "external_training_assets": false,
+  "generator": "provenance/train_builtin_ai_v2.py",
+  "generator_sha256": "4037d37c6e9dbfcd4e10e0e3bd13eb774fae32fca54a00ea88f3cc859d2c648c",
+  "network_required_for_generation": false,
+  "run_a_vs_run_b": "PASS_BYTE_EQUAL_12_OF_12",
+  "schema": 1,
+  "seed": 20260817
+}

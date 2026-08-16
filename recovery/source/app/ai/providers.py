@@ -102,3 +102,26 @@ class ProviderRegistry:
             }
             for item in sorted(self._providers.values(), key=lambda value: value.provider_id)
         ]
+
+PRODUCTION_BUILTIN_PROVIDER = ProviderDescriptor(
+    provider_id="builtin-numpy-local",
+    runtime="numpy-linear-ml",
+    tasks=("segmentation", "classification", "quality", "recommendation", "restoration", "qa"),
+    hardware=HardwarePolicy(
+        min_ram_mb=512,
+        min_vram_mb=0,
+        min_disk_mb=32,
+        max_runtime_seconds=60,
+        cpu_required=True,
+        gpu_optional=True,
+    ),
+    local_only=True,
+    allows_network=False,
+    supports_cpu=True,
+    supports_gpu=False,
+)
+
+
+def production_provider_registry() -> ProviderRegistry:
+    """Return the fixed local-only provider registry for the bundled M3 production pack."""
+    return ProviderRegistry((PRODUCTION_BUILTIN_PROVIDER,))

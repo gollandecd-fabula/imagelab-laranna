@@ -1,0 +1,186 @@
+{
+  "binary_provenance": {
+    "evidence": "provenance/security-review.json",
+    "kind": "no_native_binary"
+  },
+  "claim_boundary": "Fresh deterministic synthetic pack; no legacy v1 weights or external training assets/pretrained weights are used.",
+  "code_license": {
+    "attribution": "NONE_REQUIRED_BY_MIT-0",
+    "commercial_use": "allowed",
+    "evidence": "provenance/LICENSE-CODE-MIT-0.txt",
+    "identifier": "MIT-0",
+    "verified": true
+  },
+  "files": [
+    {
+      "path": "content_classifier_v2.json",
+      "sha256": "d6824759f469b097acecc496800e7873ea773a32e5e30c7b1a3a72b1b7eab5c3",
+      "size": 2841
+    },
+    {
+      "path": "export_recommender_v2.json",
+      "sha256": "14a54d3eb6ea9da3f335ea605db42e5b5855d0fd3d3e2b6aef2ce79c2781bc56",
+      "size": 2895
+    },
+    {
+      "path": "halftone_recommender_v2.json",
+      "sha256": "e413e6c79da19e446d483d63bb477c7931685c551380bb679650998def818d52",
+      "size": 3012
+    },
+    {
+      "path": "manifest.json",
+      "sha256": "b9d8315e8247ad0928e14b8e9d8a82d07feee9c898e8ea257163ba9abc6f29d6",
+      "size": 4061
+    },
+    {
+      "path": "pixel_print_v2.json",
+      "sha256": "e10da5aea543d17e76ae57ecd55acf2332d18018015b20474e00ca534bcd0f08",
+      "size": 1355
+    },
+    {
+      "path": "pixel_subject_v2.json",
+      "sha256": "5a917cf7975671f1d0d9454b848e3ad84ead1396a14b1a0c032fe8b044ab1031",
+      "size": 1362
+    },
+    {
+      "path": "provenance/LICENSE-CODE-MIT-0.txt",
+      "sha256": "cab90fc4f5ade5d321326311f6cb6dbb75ef6e425d71785549bda737a6f266a7",
+      "size": 938
+    },
+    {
+      "path": "provenance/LICENSE-WEIGHTS-MIT-0.txt",
+      "sha256": "cab90fc4f5ade5d321326311f6cb6dbb75ef6e425d71785549bda737a6f266a7",
+      "size": 938
+    },
+    {
+      "path": "provenance/license-verification.json",
+      "sha256": "bcf94fbcc986404b23f77da7a545e81211402616286edc3e755ffea29376af51",
+      "size": 1691
+    },
+    {
+      "path": "provenance/reproducibility.json",
+      "sha256": "7cae2a90a20c42f5115911aa014b8a95c56edbc75b743f4f3bd809b7757f6222",
+      "size": 349
+    },
+    {
+      "path": "provenance/security-review.json",
+      "sha256": "6beb911d4f3c1eaef8303261ce6a8532d767a16f7da14067970db9a747d43ee2",
+      "size": 583
+    },
+    {
+      "path": "provenance/train_builtin_ai_v2.py",
+      "sha256": "4037d37c6e9dbfcd4e10e0e3bd13eb774fae32fca54a00ea88f3cc859d2c648c",
+      "size": 19695
+    },
+    {
+      "path": "qa_anomaly_v2.json",
+      "sha256": "a69c0352e4aa3e89ae5094cb03d6407a9695c40b14350c4ad478ac3ee8720e08",
+      "size": 2085
+    },
+    {
+      "path": "quality_risk_v2.json",
+      "sha256": "0c976ee092273d15538ad1e5ea29df2b9ebc8ff4d6a22487790a3767d4fbeb28",
+      "size": 7508
+    },
+    {
+      "path": "restoration_profile_v2.json",
+      "sha256": "f97f63e911b4ba2e945050d69423d5d74cf4e363697b03d7355d6784a067906a",
+      "size": 4021
+    },
+    {
+      "path": "sbom.json",
+      "sha256": "2e7f83302979d4fcc780132f21d088428e2d025fb839e0b3193ee8b135f6e699",
+      "size": 5370
+    },
+    {
+      "path": "size_assistant_v2.json",
+      "sha256": "233ee0ec1c293a073e2be796df10a42a17d49e251912ba389e9289f9df994970",
+      "size": 3412
+    },
+    {
+      "path": "tiny_restorer_v2.json",
+      "sha256": "72e8ff6b66f3e9131a65b293952ce93102caa14d93325feb2b2d796948ff18ee",
+      "size": 3587
+    },
+    {
+      "path": "vector_recommender_v2.json",
+      "sha256": "3be930fa082b08429802cfb908b02f705fe7bd1df9231cfa74220f1df5fd4a8f",
+      "size": 2345
+    }
+  ],
+  "hardware": {
+    "cpu_required": true,
+    "gpu_optional": true,
+    "max_runtime_seconds": 60,
+    "min_disk_mb": 32,
+    "min_ram_mb": 512,
+    "min_vram_mb": 0
+  },
+  "install_policy": {
+    "checksum_bypass": false,
+    "hidden_cloud_fallback": false,
+    "offline_only": true,
+    "runtime_auto_download": false,
+    "silent_telemetry": false
+  },
+  "nested_dependencies": [
+    {
+      "license": "BSD-3-Clause",
+      "name": "numpy",
+      "sha256": "784db1dcdab56bf0517743e746dfb0f885fc68d948aba86eeec2cba234bdf1c0",
+      "source": "pypi:numpy-2.3.5.tar.gz",
+      "version": "2.3.5"
+    },
+    {
+      "license": "Apache-2.0-core+MIT-wrapper+third-party-notices",
+      "name": "opencv-python-headless",
+      "sha256": "77a82fe35ddcec0f62c15f2ba8a12ecc2ed4207c17b0902c7a3151ae29f37fb6",
+      "source": "pypi:opencv_python_headless-4.13.0.92-cp37-abi3-win_amd64.whl",
+      "version": "4.13.0.92"
+    }
+  ],
+  "pack_id": "imagelab-builtin-clean",
+  "provider": {
+    "id": "builtin-numpy-local",
+    "runtime": "numpy-linear-ml",
+    "tasks": [
+      "segmentation",
+      "classification",
+      "quality",
+      "recommendation",
+      "restoration",
+      "qa"
+    ]
+  },
+  "rollback": {
+    "strategy": "previous_active_pack"
+  },
+  "sbom": {
+    "path": "sbom.json",
+    "sha256": "2e7f83302979d4fcc780132f21d088428e2d025fb839e0b3193ee8b135f6e699"
+  },
+  "schema": 1,
+  "security_review": {
+    "evidence": "provenance/security-review.json",
+    "status": "pass"
+  },
+  "source": {
+    "base_candidate": "114e4cfa416739883f2ee9aadcad276aa16c3f02",
+    "repository": "gollandecd-fabula/imagelab-laranna",
+    "revision": "generator-sha256:4037d37c6e9dbfcd4e10e0e3bd13eb774fae32fca54a00ea88f3cc859d2c648c"
+  },
+  "version": "2.0.0",
+  "weights_license": {
+    "attribution": "NONE_REQUIRED_BY_MIT-0",
+    "commercial_use": "allowed",
+    "evidence": "provenance/LICENSE-WEIGHTS-MIT-0.txt",
+    "identifier": "MIT-0",
+    "verified": true
+  },
+  "windows": {
+    "compatible": true,
+    "long_paths": "bounded",
+    "spaces_paths": true,
+    "unicode_paths": true
+  }
+}

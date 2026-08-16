@@ -1,0 +1,249 @@
+{
+  "bomFormat": "CycloneDX",
+  "components": [
+    {
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "d6824759f469b097acecc496800e7873ea773a32e5e30c7b1a3a72b1b7eab5c3"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT-0"
+          }
+        }
+      ],
+      "name": "content_classifier_v2",
+      "type": "machine-learning-model",
+      "version": "2.0.0"
+    },
+    {
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "14a54d3eb6ea9da3f335ea605db42e5b5855d0fd3d3e2b6aef2ce79c2781bc56"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT-0"
+          }
+        }
+      ],
+      "name": "export_recommender_v2",
+      "type": "machine-learning-model",
+      "version": "2.0.0"
+    },
+    {
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "e413e6c79da19e446d483d63bb477c7931685c551380bb679650998def818d52"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT-0"
+          }
+        }
+      ],
+      "name": "halftone_recommender_v2",
+      "type": "machine-learning-model",
+      "version": "2.0.0"
+    },
+    {
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "e10da5aea543d17e76ae57ecd55acf2332d18018015b20474e00ca534bcd0f08"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT-0"
+          }
+        }
+      ],
+      "name": "pixel_print_v2",
+      "type": "machine-learning-model",
+      "version": "2.0.0"
+    },
+    {
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "5a917cf7975671f1d0d9454b848e3ad84ead1396a14b1a0c032fe8b044ab1031"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT-0"
+          }
+        }
+      ],
+      "name": "pixel_subject_v2",
+      "type": "machine-learning-model",
+      "version": "2.0.0"
+    },
+    {
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "a69c0352e4aa3e89ae5094cb03d6407a9695c40b14350c4ad478ac3ee8720e08"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT-0"
+          }
+        }
+      ],
+      "name": "qa_anomaly_v2",
+      "type": "machine-learning-model",
+      "version": "2.0.0"
+    },
+    {
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "0c976ee092273d15538ad1e5ea29df2b9ebc8ff4d6a22487790a3767d4fbeb28"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT-0"
+          }
+        }
+      ],
+      "name": "quality_risk_v2",
+      "type": "machine-learning-model",
+      "version": "2.0.0"
+    },
+    {
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "f97f63e911b4ba2e945050d69423d5d74cf4e363697b03d7355d6784a067906a"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT-0"
+          }
+        }
+      ],
+      "name": "restoration_profile_v2",
+      "type": "machine-learning-model",
+      "version": "2.0.0"
+    },
+    {
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "233ee0ec1c293a073e2be796df10a42a17d49e251912ba389e9289f9df994970"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT-0"
+          }
+        }
+      ],
+      "name": "size_assistant_v2",
+      "type": "machine-learning-model",
+      "version": "2.0.0"
+    },
+    {
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "72e8ff6b66f3e9131a65b293952ce93102caa14d93325feb2b2d796948ff18ee"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT-0"
+          }
+        }
+      ],
+      "name": "tiny_restorer_v2",
+      "type": "machine-learning-model",
+      "version": "2.0.0"
+    },
+    {
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "3be930fa082b08429802cfb908b02f705fe7bd1df9231cfa74220f1df5fd4a8f"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT-0"
+          }
+        }
+      ],
+      "name": "vector_recommender_v2",
+      "type": "machine-learning-model",
+      "version": "2.0.0"
+    },
+    {
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "784db1dcdab56bf0517743e746dfb0f885fc68d948aba86eeec2cba234bdf1c0"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "BSD-3-Clause"
+          }
+        }
+      ],
+      "name": "numpy",
+      "type": "library",
+      "version": "2.3.5"
+    },
+    {
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "77a82fe35ddcec0f62c15f2ba8a12ecc2ed4207c17b0902c7a3151ae29f37fb6"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "Apache-2.0 core; MIT wrapper; bundled third-party notices"
+          }
+        }
+      ],
+      "name": "opencv-python-headless",
+      "type": "library",
+      "version": "4.13.0.92"
+    }
+  ],
+  "metadata": {
+    "component": {
+      "name": "ImageLab Built-in AI Clean Pack",
+      "type": "machine-learning-model",
+      "version": "2.0.0"
+    }
+  },
+  "serialNumber": "urn:uuid:imagelab-m3-clean-pack-2-0-0",
+  "specVersion": "1.5",
+  "version": 1
+}

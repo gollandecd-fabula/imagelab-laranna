@@ -1,114 +1,119 @@
 {
-  "schema": 1,
-  "suite": "ImageLab Built-in AI",
-  "version": "1.0.0",
-  "training_seed": 20260723,
-  "models": [
-    {
-      "id": "pixel_subject",
-      "version": "1.0.0",
-      "task": "segmentation",
-      "filename": "pixel_subject_v1.json",
-      "sha256": "0096d4265e81e16931e531193a7fc6fa56b98507cadebaf6ace87c1b415a8781",
-      "runtime": "numpy-linear-ml"
-    },
-    {
-      "id": "pixel_print",
-      "version": "1.0.0",
-      "task": "segmentation",
-      "filename": "pixel_print_v1.json",
-      "sha256": "504da94a3b3ea5a37d69c35c6ac476a04e56c0767f19b7e9cfc4627ef58cd466",
-      "runtime": "numpy-linear-ml"
-    },
-    {
-      "id": "content_classifier",
-      "version": "1.0.0",
-      "task": "classification",
-      "filename": "content_classifier_v1.json",
-      "sha256": "c47ade80b4d318f73637e4b352afa7543fa56681acb4fbc4acf32cfa7aa7c89e",
-      "runtime": "numpy-linear-ml"
-    },
-    {
-      "id": "quality_risk",
-      "version": "1.0.0",
-      "task": "quality",
-      "filename": "quality_risk_v1.json",
-      "sha256": "4f7a1cf77abc5480c7a77cab91e4dc37aa1e8035661f42b8ea56857489305e86",
-      "runtime": "numpy-linear-ml"
-    },
-    {
-      "id": "restoration_profile",
-      "version": "1.0.0",
-      "task": "recommendation",
-      "filename": "restoration_profile_v1.json",
-      "sha256": "efbac722318d162f826e818bad5886f86de7e1da31ede6b0ed262bd491c4046b",
-      "runtime": "numpy-linear-ml"
-    },
-    {
-      "id": "tiny_restorer",
-      "version": "1.0.0",
-      "task": "restoration",
-      "filename": "tiny_restorer_v1.json",
-      "sha256": "3268f75549e3a5dffae016d054007ec3dd65bf0717903925437774701a460c66",
-      "runtime": "numpy-linear-ml"
-    },
-    {
-      "id": "halftone_recommender",
-      "version": "1.0.0",
-      "task": "recommendation",
-      "filename": "halftone_recommender_v1.json",
-      "sha256": "59a7837b429cc89889b6947076fc1605a530e22d04a4205ead3cdb0ed2f01ca6",
-      "runtime": "numpy-linear-ml"
-    },
-    {
-      "id": "vector_recommender",
-      "version": "1.0.0",
-      "task": "recommendation",
-      "filename": "vector_recommender_v1.json",
-      "sha256": "7b2ed26f6ad72df61807c460d6dddb55b2e8b7776fbf9e88d0003fe5b85a51df",
-      "runtime": "numpy-linear-ml"
-    },
-    {
-      "id": "export_recommender",
-      "version": "1.0.0",
-      "task": "recommendation",
-      "filename": "export_recommender_v1.json",
-      "sha256": "c9722b0f405a1e3b52ccc14868100ff16412264d2a226c9eaae31b9f4c322c53",
-      "runtime": "numpy-linear-ml"
-    },
-    {
-      "id": "size_assistant",
-      "version": "1.0.0",
-      "task": "recommendation",
-      "filename": "size_assistant_v1.json",
-      "sha256": "e959c5a08da6d04d2616938ea6a49be6e821ade9fce40107dc6be1398915dc47",
-      "runtime": "numpy-linear-ml"
-    },
-    {
-      "id": "qa_anomaly",
-      "version": "1.0.0",
-      "task": "qa",
-      "filename": "qa_anomaly_v1.json",
-      "sha256": "0dcd6abf6937bbcb92a6fc269042a9451e4733d0c43bddc140db4915df6a18e0",
-      "runtime": "numpy-linear-ml"
-    }
+  "limitations": [
+    "Compact non-neural local models trained only on deterministic synthetic scenes.",
+    "Synthetic metrics do not prove equivalent accuracy on arbitrary real photographs.",
+    "No runtime auto-download or cloud inference."
   ],
   "metrics": {
-    "pixel_subject_train_accuracy": 0.9695061728395061,
-    "pixel_print_train_accuracy": 0.8323425925925926,
     "content_train_accuracy": 1.0,
-    "quality_blur_accuracy": 0.885,
+    "export_train_accuracy": 0.993333333,
+    "halftone_train_accuracy": 1.0,
+    "pixel_print_train_accuracy": 0.999537037,
+    "pixel_subject_train_accuracy": 0.998685185,
+    "qa_anomaly_train_accuracy": 1.0,
+    "quality_blur_accuracy": 0.976,
+    "quality_compression_accuracy": 0.709333333,
+    "quality_low_contrast_accuracy": 1.0,
     "quality_noise_accuracy": 1.0,
-    "quality_low_contrast_accuracy": 0.95,
-    "quality_compression_accuracy": 0.7583333333333333,
-    "restoration_profile_train_accuracy": 0.8116666666666666,
-    "halftone_train_accuracy": 0.9716666666666667,
-    "export_train_accuracy": 0.8933333333333333,
-    "tiny_restorer_training_mse": 0.0024178640451282263,
-    "qa_anomaly_train_accuracy": 1.0
+    "restoration_profile_train_accuracy": 0.970666667,
+    "size_train_mae": 1.506578451,
+    "tiny_restorer_training_mse": 6.3e-05,
+    "vector_train_mae": 0.118666063
   },
-  "limitations": [
-    "Built-in compact models are trained on synthetic garment/product scenes.",
-    "They provide offline AI assistance and require user verification on complex real photographs."
-  ]
+  "models": [
+    {
+      "filename": "pixel_subject_v2.json",
+      "id": "pixel_subject",
+      "runtime": "numpy-linear-ml",
+      "sha256": "5a917cf7975671f1d0d9454b848e3ad84ead1396a14b1a0c032fe8b044ab1031",
+      "task": "segmentation",
+      "version": "2.0.0"
+    },
+    {
+      "filename": "pixel_print_v2.json",
+      "id": "pixel_print",
+      "runtime": "numpy-linear-ml",
+      "sha256": "e10da5aea543d17e76ae57ecd55acf2332d18018015b20474e00ca534bcd0f08",
+      "task": "segmentation",
+      "version": "2.0.0"
+    },
+    {
+      "filename": "content_classifier_v2.json",
+      "id": "content_classifier",
+      "runtime": "numpy-linear-ml",
+      "sha256": "d6824759f469b097acecc496800e7873ea773a32e5e30c7b1a3a72b1b7eab5c3",
+      "task": "classification",
+      "version": "2.0.0"
+    },
+    {
+      "filename": "quality_risk_v2.json",
+      "id": "quality_risk",
+      "runtime": "numpy-linear-ml",
+      "sha256": "0c976ee092273d15538ad1e5ea29df2b9ebc8ff4d6a22487790a3767d4fbeb28",
+      "task": "quality",
+      "version": "2.0.0"
+    },
+    {
+      "filename": "restoration_profile_v2.json",
+      "id": "restoration_profile",
+      "runtime": "numpy-linear-ml",
+      "sha256": "f97f63e911b4ba2e945050d69423d5d74cf4e363697b03d7355d6784a067906a",
+      "task": "recommendation",
+      "version": "2.0.0"
+    },
+    {
+      "filename": "tiny_restorer_v2.json",
+      "id": "tiny_restorer",
+      "runtime": "numpy-linear-ml",
+      "sha256": "72e8ff6b66f3e9131a65b293952ce93102caa14d93325feb2b2d796948ff18ee",
+      "task": "restoration",
+      "version": "2.0.0"
+    },
+    {
+      "filename": "halftone_recommender_v2.json",
+      "id": "halftone_recommender",
+      "runtime": "numpy-linear-ml",
+      "sha256": "e413e6c79da19e446d483d63bb477c7931685c551380bb679650998def818d52",
+      "task": "recommendation",
+      "version": "2.0.0"
+    },
+    {
+      "filename": "vector_recommender_v2.json",
+      "id": "vector_recommender",
+      "runtime": "numpy-linear-ml",
+      "sha256": "3be930fa082b08429802cfb908b02f705fe7bd1df9231cfa74220f1df5fd4a8f",
+      "task": "recommendation",
+      "version": "2.0.0"
+    },
+    {
+      "filename": "export_recommender_v2.json",
+      "id": "export_recommender",
+      "runtime": "numpy-linear-ml",
+      "sha256": "14a54d3eb6ea9da3f335ea605db42e5b5855d0fd3d3e2b6aef2ce79c2781bc56",
+      "task": "recommendation",
+      "version": "2.0.0"
+    },
+    {
+      "filename": "size_assistant_v2.json",
+      "id": "size_assistant",
+      "runtime": "numpy-linear-ml",
+      "sha256": "233ee0ec1c293a073e2be796df10a42a17d49e251912ba389e9289f9df994970",
+      "task": "recommendation",
+      "version": "2.0.0"
+    },
+    {
+      "filename": "qa_anomaly_v2.json",
+      "id": "qa_anomaly",
+      "runtime": "numpy-linear-ml",
+      "sha256": "a69c0352e4aa3e89ae5094cb03d6407a9695c40b14350c4ad478ac3ee8720e08",
+      "task": "qa",
+      "version": "2.0.0"
+    }
+  ],
+  "schema": 1,
+  "suite": "ImageLab Built-in AI",
+  "training_data": "deterministic procedural synthetic feature/image scenes only; no external datasets or pretrained weights",
+  "training_generator": "provenance/train_builtin_ai_v2.py",
+  "training_seed": 20260817,
+  "version": "2.0.0"
 }

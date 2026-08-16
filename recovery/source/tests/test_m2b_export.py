@@ -53,7 +53,7 @@ def _source_asset(*, transparent: bool = True):
     asset = inspect_upload(_png_source(transparent=transparent), "f09-source.png")
     # Raster source Technical QA requires recorded model evidence; this is provenance,
     # not a processing-engine verdict and does not replace the independent QA layers.
-    asset.ai = {"source_evidence": {"model_id": "qa_anomaly", "model_version": "1.0.0"}}
+    asset.ai = {"source_evidence": {"model_id": "qa_anomaly", "model_version": "2.0.0"}}
     return asset
 
 
@@ -97,7 +97,7 @@ def test_f09_raster_formats_write_controlled_output_manifest_and_binary_reread(i
     assert manifest["result_sha256"] == result.sha256
     assert manifest["operation"] == "export"
     assert manifest["engine"]["model_id"] == "export_recommender"
-    assert manifest["engine"]["model_version"] == "1.0.0"
+    assert manifest["engine"]["model_version"] == "2.0.0"
     assert manifest["parameters"]["format"] == fmt
     assert manifest["qa"]["pre_create_source"]["effective_gate"]["passed"] is True
     assert manifest["qa"]["export_production_preflight"]["status"] == "PASS"

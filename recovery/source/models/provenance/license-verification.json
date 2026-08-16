@@ -1,0 +1,43 @@
+{
+  "claim_boundary": "Verification records published license/provenance facts for this newly generated pack only; no license is inferred for legacy v1 weights.",
+  "code_license": {
+    "attribution": "none_required_by_license",
+    "commercial_use": "allowed",
+    "identifier": "MIT-0",
+    "license_file": "provenance/LICENSE-CODE-MIT-0.txt",
+    "sha256": "cab90fc4f5ade5d321326311f6cb6dbb75ef6e425d71785549bda737a6f266a7",
+    "source": "https://opensource.org/license/mit-0",
+    "verified": true
+  },
+  "dependencies": [
+    {
+      "artifact": "numpy-2.3.5.tar.gz",
+      "commercial_use": "allowed",
+      "license": "BSD-3-Clause",
+      "name": "numpy",
+      "sha256": "784db1dcdab56bf0517743e746dfb0f885fc68d948aba86eeec2cba234bdf1c0",
+      "source": "https://pypi.org/project/numpy/2.3.5/",
+      "version": "2.3.5"
+    },
+    {
+      "artifact": "opencv_python_headless-4.13.0.92-cp37-abi3-win_amd64.whl",
+      "commercial_use": "allowed",
+      "license": "Apache-2.0 core; MIT wrapper; bundled third-party notices",
+      "name": "opencv-python-headless",
+      "sha256": "77a82fe35ddcec0f62c15f2ba8a12ecc2ed4207c17b0902c7a3151ae29f37fb6",
+      "source": "https://pypi.org/project/opencv-python-headless/4.13.0.92/",
+      "version": "4.13.0.92"
+    }
+  ],
+  "reviewed_at_utc": "2026-08-16T19:15:00Z",
+  "schema": 1,
+  "weights_license": {
+    "attribution": "none_required_by_license",
+    "commercial_use": "allowed",
+    "identifier": "MIT-0",
+    "license_file": "provenance/LICENSE-WEIGHTS-MIT-0.txt",
+    "sha256": "cab90fc4f5ade5d321326311f6cb6dbb75ef6e425d71785549bda737a6f266a7",
+    "source": "https://opensource.org/license/mit-0",
+    "verified": true
+  }
+}

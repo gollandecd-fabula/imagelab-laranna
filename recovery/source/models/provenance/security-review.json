@@ -1,0 +1,18 @@
+{
+  "checks": {
+    "checksum_bypass": false,
+    "hidden_cloud_fallback": false,
+    "json_only_weights": true,
+    "license_files_sha256_bound": true,
+    "model_file_sha256_bound": true,
+    "no_executable_model_payload": true,
+    "no_native_binary_in_pack": true,
+    "runtime_auto_download": false,
+    "sbom_required": true,
+    "silent_telemetry": false
+  },
+  "residual": "Host runtime dependencies remain governed by the exact ImageLab dependency lock and mandatory dependency-security workflow.",
+  "schema": 1,
+  "scope": "M3 clean JSON model pack",
+  "status": "PASS"
+}

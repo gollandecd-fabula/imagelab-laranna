@@ -11,6 +11,8 @@ from typing import Any
 import numpy as np
 
 from app.ai.linear_models import BinaryLogisticModel, LinearRegressionModel, SoftmaxModel
+from app.ai.model_manager import ModelManager, ModelPackError
+from app.ai.providers import production_provider_registry
 from app.config import settings
 
 
@@ -21,7 +23,8 @@ class AIModelError(RuntimeError):
 # Trusted root for the built-in suite shipped with this source tree. This protects
 # against accidental or partial replacement of both a model and the mutable
 # manifest. It is not a defence against an attacker who can also modify code.
-EXPECTED_MANIFEST_SHA256 = "a1733ffae825ce29098aa14a358af3551d946d0f21f271e7dede464ddaa85efe"
+EXPECTED_MANIFEST_SHA256 = "b9d8315e8247ad0928e14b8e9d8a82d07feee9c898e8ea257163ba9abc6f29d6"
+EXPECTED_MODEL_PACK_SHA256 = "604aae52d0f81b16aaca4b261dc23ccc92f16591ae1b4c3922e14c5991314a1f"
 EXPECTED_MODEL_IDS = {
     "pixel_subject",
     "pixel_print",
@@ -74,6 +77,19 @@ class AIModelRegistry:
         return path
 
     def _load_manifest(self) -> dict[str, Any]:
+        pack_path = settings.ai_model_dir / "model-pack.json"
+        if not pack_path.exists():
+            raise AIModelError("Манифест production model-pack отсутствует")
+        if self._sha256(pack_path) != EXPECTED_MODEL_PACK_SHA256:
+            raise AIModelError("Production model-pack изменён: доверенный SHA-256 не совпадает")
+        try:
+            manager = ModelManager(settings.ai_model_dir / ".runtime-state", production_provider_registry())
+            pack = manager.load_manifest(settings.ai_model_dir)
+        except ModelPackError as exc:
+            raise AIModelError(f"Production model-pack не прошёл M3 validation: {exc}") from exc
+        if pack.pack_id != "imagelab-builtin-clean" or pack.version != "2.0.0":
+            raise AIModelError("Неожиданный production model-pack")
+
         path = settings.ai_model_dir / "manifest.json"
         if not path.exists():
             raise AIModelError("Манифест встроенных AI-моделей отсутствует")
