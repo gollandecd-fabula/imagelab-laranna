@@ -5,11 +5,12 @@ import re
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, Field, computed_field, field_validator
+from pydantic import BaseModel, Field, computed_field, field_validator, model_validator
 
 
 _CONTROL_CHARACTERS = re.compile(r"[\x00-\x1f\x7f]")
 _WINDOWS_RESERVED_PROJECT_IDS = {"CON", "PRN", "AUX", "NUL", *{f"COM{i}" for i in range(1, 10)}, *{f"LPT{i}" for i in range(1, 10)}}
+PROJECT_SCHEMA_VERSION = 1
 
 
 def sanitize_original_filename(value: str) -> str:
@@ -36,6 +37,42 @@ def validate_project_identifier(value: str) -> str:
     if value.upper() in _WINDOWS_RESERVED_PROJECT_IDS:
         raise ValueError("Идентификатор проекта зарезервирован операционной системой")
     return value
+
+
+def _migrate_project_v0_to_v1(payload: dict[str, Any]) -> dict[str, Any]:
+    """Bind an unversioned legacy project to schema v1 in memory only."""
+    migrated = dict(payload)
+    migrated["schema_version"] = 1
+    return migrated
+
+
+_PROJECT_MIGRATIONS = {0: _migrate_project_v0_to_v1}
+
+
+def migrate_project_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """Return a deterministic current-schema payload or fail closed."""
+    migrated = dict(payload)
+    raw_version = migrated.get("schema_version", 0)
+    if isinstance(raw_version, bool) or not isinstance(raw_version, int):
+        raise ValueError("Некорректная версия схемы проекта")
+    if raw_version < 0:
+        raise ValueError("Некорректная версия схемы проекта")
+    if raw_version > PROJECT_SCHEMA_VERSION:
+        raise ValueError("Версия схемы проекта новее поддерживаемой")
+
+    version = raw_version
+    while version < PROJECT_SCHEMA_VERSION:
+        migration = _PROJECT_MIGRATIONS.get(version)
+        if migration is None:
+            raise ValueError(
+                f"Нет безопасной миграции схемы проекта {version}->{version + 1}"
+            )
+        migrated = migration(migrated)
+        next_version = migrated.get("schema_version")
+        if next_version != version + 1:
+            raise ValueError("Миграция проекта нарушила последовательность схемы")
+        version = next_version
+    return migrated
 
 
 class CheckItem(BaseModel):
@@ -136,12 +173,20 @@ class ProjectCollections(BaseModel):
 
 
 class ProjectRecord(BaseModel):
+    schema_version: int = PROJECT_SCHEMA_VERSION
     id: str
     title: str
     created_at: str
     updated_at: str
     assets: list[AssetRecord] = Field(default_factory=list)
     workspace: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="before")
+    @classmethod
+    def migrate_schema(cls, value: Any) -> Any:
+        if isinstance(value, dict):
+            return migrate_project_payload(value)
+        return value
 
     @computed_field
     @property
@@ -160,6 +205,15 @@ class ProjectRecord(BaseModel):
             presets=dict(self.workspace.get("presets") or {}),
             qa_reports=list(self.workspace.get("qa_reports") or []),
         )
+
+    @field_validator("schema_version", mode="before")
+    @classmethod
+    def validate_schema_version(cls, value: int) -> int:
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise ValueError("Некорректная версия схемы проекта")
+        if value != PROJECT_SCHEMA_VERSION:
+            raise ValueError("Неподдерживаемая версия схемы проекта")
+        return value
 
     @field_validator("id")
     @classmethod
