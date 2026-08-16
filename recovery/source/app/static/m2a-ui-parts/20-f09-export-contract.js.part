@@ -1,0 +1,55 @@
+(() => {
+  const pane = document.querySelector('.module-pane[data-pane="export"]');
+  const ppi = document.getElementById('exportPpi');
+  if (!pane || !ppi || document.getElementById('exportFilename')) return;
+
+  const field = (labelText, control) => {
+    const label = document.createElement('label');
+    label.append(document.createTextNode(labelText));
+    label.append(control);
+    return label;
+  };
+  const input = (id, maxLength, aria) => {
+    const node = document.createElement('input');
+    node.id = id; node.type = 'text'; node.maxLength = maxLength; node.setAttribute('aria-label', aria);
+    return node;
+  };
+  const select = (id, options) => {
+    const node = document.createElement('select'); node.id = id;
+    options.forEach(([value, text]) => { const option=document.createElement('option'); option.value=value; option.textContent=text; node.append(option); });
+    return node;
+  };
+
+  ppi.closest('label').before(
+    field('Имя файла', input('exportFilename', 100, 'Имя файла без расширения')),
+    field('Папка внутри ImageLab Export', input('exportFolder', 240, 'Относительная папка внутри ImageLab Export')),
+  );
+  const alpha = document.getElementById('exportAlpha');
+  const alphaLabel = alpha?.closest('label');
+  const insertion = alphaLabel || document.getElementById('exportAiAuto')?.closest('label');
+  const controls = [
+    field('Прозрачность', select('exportTransparency', [['preserve','Сохранить'],['flatten','На белый фон']])),
+    field('Цветовой профиль', select('exportColorProfile', [['preserve','Сохранить исходный'],['srgb','Преобразовать в sRGB'],['strip','Удалить профиль']])),
+    field('Метаданные', select('exportMetadataPolicy', [['minimal','Минимальные технические'],['strip','Удалить']])),
+    field('Logo output', select('exportLogoMode', [['original','Original'],['black','Black'],['gray','Gray']])),
+  ];
+  controls.forEach((node) => insertion.before(node));
+  alphaLabel?.remove();
+
+  const oldExport = document.getElementById('applyExport');
+  const exportButton = oldExport.cloneNode(true); oldExport.replaceWith(exportButton);
+  exportButton.addEventListener('click', async () => {
+    if (await divertCheckOnly('Экспорт')) return;
+    const asset = requireAsset(); if (!asset || state.busy) return; setBusy(true);
+    try {
+      const result = await api(`/api/projects/${PROJECT_ID}/export`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({asset_id:asset.id,format:state.exportFormat,parameters:{filename:document.getElementById('exportFilename').value,folder:document.getElementById('exportFolder').value,ppi:number('#exportPpi',300),quality:number('#exportQuality',92),transparency:document.getElementById('exportTransparency').value,color_profile:document.getElementById('exportColorProfile').value,metadata_policy:document.getElementById('exportMetadataPolicy').value,logo_variant:document.getElementById('exportLogoMode').value,ai_auto:document.getElementById('exportAiAuto').checked}})});
+      if (result.source_asset_id !== asset.id) throw new Error('Сервер экспортировал не выбранный файл; операция заблокирована');
+      state.project=result.project; state.selectedId=result.result.id; renderProject(); toast('Экспортный файл создан');
+    } catch (error) { toast(error.message, true); } finally { setBusy(false); }
+  });
+
+  const oldLogo = document.getElementById('logoPrepareButton');
+  const logoButton = oldLogo.cloneNode(true); oldLogo.replaceWith(logoButton);
+  logoButton.addEventListener('click', () => processSelected('logo',{remove_background:true,color_mode:document.getElementById('exportLogoMode').value,binary_alpha:false},'Логотип подготовлен'));
+  syncLocks();
+})();
