@@ -21,3 +21,9 @@ def _m2b_process_image(asset, operation: str, params):
 
 
 _legacy_processing.process_image = _m2b_process_image
+
+# v1.4.4 QA-9.1 separation adapter. Package initialization runs before callers
+# import qa_service/repair_service, so all runtime consumers receive the same
+# four-layer QA contract without changing processing engines.
+from app.services import qa_contract as _qa_contract
+_qa_contract.install()
