@@ -198,12 +198,37 @@ def process_image(asset: AssetRecord, operation: str, params: dict[str, Any]) ->
     recorded["input_ppi"] = round(float(ppi), 4)
 
     if normalized == "enhance":
-        restored, ai = engine.restore(image, scale=1, strength=None, module="improve")
-        result = legacy._enhance(restored, params)
+        # F01 Improve is a conservative, user-controlled enhancement. The
+        # restoration engine is a separate F02 action and must never be run
+        # silently as part of Improve. AI may analyse the source and recommend
+        # Restore, but the recommendation is advisory only.
+        advisory_enabled = legacy._bool(params, "ai_auto", True)
+        advisory: dict[str, Any] = {
+            "enabled": advisory_enabled,
+            "applied_restoration": False,
+            "recommend_restore": False,
+            "recommended_action": None,
+        }
+        if advisory_enabled:
+            recommendation = engine.recommend_restoration(image, module="improve")
+            details = recommendation.get("details", {}) if isinstance(recommendation, dict) else {}
+            profile = str(details.get("profile", "")).strip().lower()
+            recommend_restore = profile in {"deblur", "denoise", "compression"}
+            advisory.update({
+                "recommendation": recommendation,
+                "profile": profile or None,
+                "recommend_restore": recommend_restore,
+                "recommended_action": "reconstruct" if recommend_restore else None,
+            })
+
+        result = legacy._enhance(image, params)
         result, result_ppi = geometry_m2a(result, ppi, recorded)
         recorded["physical_size_unit"] = "mm"
         recorded["ppi_range"] = [100, 1000]
-        ai["deterministic_postprocess"] = "brightness/contrast/saturation/sharpness"
+        ai = {
+            "improve_advisory": advisory,
+            "deterministic_postprocess": "brightness/contrast/saturation/sharpness/denoise",
+        }
         return legacy._save_result(result, result_ppi, asset, normalized, recorded, ai=ai)
 
     if normalized == "reconstruct":

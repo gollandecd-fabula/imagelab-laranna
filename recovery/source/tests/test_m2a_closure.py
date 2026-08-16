@@ -110,3 +110,140 @@ def test_continual_learning_records_feedback_without_training(monkeypatch) -> No
         "reason": "runtime_training_promotion_forbidden_v1_4_4",
     }
     assert feedback.train_calls == 0
+
+
+# v1.4.4 F01 Improve: advisory Restore recommendation must never become a
+# hidden restoration mutation.
+def test_f01_improve_is_conservative_and_restore_is_advisory_only(monkeypatch) -> None:
+    import io
+    import numpy as np
+    from PIL import Image
+    from app.config import settings
+    from app.services import m2a_processing
+    from app.services.file_inspector import inspect_upload
+
+    class AdvisoryEngine:
+        def __init__(self, profile: str) -> None:
+            self.profile = profile
+            self.recommend_calls = 0
+            self.restore_calls = 0
+
+        def recommend_restoration(self, image, *, module="improve"):
+            self.recommend_calls += 1
+            return {
+                "task": "restoration_profile",
+                "model_id": "test-restoration-profile",
+                "model_version": "1",
+                "confidence": 0.9,
+                "details": {"profile": self.profile, "features": [0.0]},
+            }
+
+        def restore(self, *args, **kwargs):
+            self.restore_calls += 1
+            raise AssertionError("F01 Improve must not call the restoration mutation")
+
+    image = Image.new("RGBA", (24, 18), (0, 0, 0, 0))
+    for y in range(2, 16):
+        for x in range(3, 21):
+            image.putpixel((x, y), ((x * 9) % 255, (y * 13) % 255, ((x + y) * 7) % 255, 255))
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG", dpi=(300, 300))
+    source = inspect_upload(buffer.getvalue(), "f01-source.png")
+    result = None
+    engine = AdvisoryEngine("denoise")
+    monkeypatch.setattr(m2a_processing, "get_ai_engine", lambda: engine)
+    try:
+        result = m2a_processing.process_image(
+            source,
+            "enhance",
+            {
+                "preset": "custom",
+                "brightness": 1.0,
+                "contrast": 1.0,
+                "saturation": 1.0,
+                "sharpness": 1.0,
+                "denoise": 0,
+                "ai_auto": True,
+                "ppi": source.ppi_x or 300,
+            },
+        )
+        assert engine.restore_calls == 0
+        assert engine.recommend_calls == 1
+        assert result.operation == "enhance"
+        advisory = result.ai["improve_advisory"]
+        assert advisory["applied_restoration"] is False
+        assert advisory["recommend_restore"] is True
+        assert advisory["recommended_action"] == "reconstruct"
+
+        with Image.open(settings.upload_dir / source.stored_name) as opened:
+            original = np.asarray(opened.convert("RGBA"))
+        with Image.open(settings.upload_dir / result.stored_name) as opened:
+            improved = np.asarray(opened.convert("RGBA"))
+        assert np.array_equal(improved, original)
+    finally:
+        for asset in (result, source):
+            if asset is None:
+                continue
+            for path in (
+                settings.upload_dir / asset.stored_name,
+                settings.preview_dir / asset.preview_name,
+            ):
+                if path.exists():
+                    path.unlink()
+
+
+def test_f01_improve_advisory_can_be_disabled(monkeypatch) -> None:
+    import io
+    from PIL import Image
+    from app.config import settings
+    from app.services import m2a_processing
+    from app.services.file_inspector import inspect_upload
+
+    class NoRestoreEngine:
+        recommend_calls = 0
+        restore_calls = 0
+
+        def recommend_restoration(self, image, *, module="improve"):
+            self.recommend_calls += 1
+            raise AssertionError("disabled advisory must not invoke analysis")
+
+        def restore(self, *args, **kwargs):
+            self.restore_calls += 1
+            raise AssertionError("F01 Improve must not call restoration")
+
+    image = Image.new("RGBA", (20, 16), (90, 120, 150, 255))
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG", dpi=(300, 300))
+    source = inspect_upload(buffer.getvalue(), "f01-no-ai.png")
+    result = None
+    engine = NoRestoreEngine()
+    monkeypatch.setattr(m2a_processing, "get_ai_engine", lambda: engine)
+    try:
+        result = m2a_processing.process_image(
+            source,
+            "enhance",
+            {"preset": "custom", "contrast": 1, "saturation": 1, "sharpness": 1, "denoise": 0, "ai_auto": False},
+        )
+        assert engine.recommend_calls == 0
+        assert engine.restore_calls == 0
+        assert result.ai["improve_advisory"]["enabled"] is False
+        assert result.ai["improve_advisory"]["applied_restoration"] is False
+    finally:
+        for asset in (result, source):
+            if asset is None:
+                continue
+            for path in (
+                settings.upload_dir / asset.stored_name,
+                settings.preview_dir / asset.preview_name,
+            ):
+                if path.exists():
+                    path.unlink()
+
+
+def test_f01_ui_restore_recommendation_never_auto_navigates() -> None:
+    from pathlib import Path
+    script = (Path(__file__).parents[1] / "app/static/m2a-ui-parts/22-f01-improve-contract.js.part").read_text("utf-8")
+    assert "AI-анализ качества" in script
+    assert "переход выполняется только вручную" in script
+    assert "applied_restoration: false" in script
+    assert "primaryButtons.get('restore')?.click()" not in script

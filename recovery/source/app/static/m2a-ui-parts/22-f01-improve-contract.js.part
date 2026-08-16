@@ -1,0 +1,46 @@
+(() => {
+  'use strict';
+
+  // v1.4.4 F01: AI can advise that Restore may be appropriate, but Improve
+  // itself never runs restoration or silently changes the active operation.
+  const improvePane = document.querySelector('[data-pane="improve"]');
+  if (improvePane) {
+    const aiBar = improvePane.querySelector('.ai-module-bar[data-ai-scope="improve"]');
+    const strong = aiBar?.querySelector('strong');
+    const small = aiBar?.querySelector('small');
+    if (strong) strong.textContent = 'AI-анализ качества';
+    if (small) small.textContent = 'AI может рекомендовать «Восстановить», но не запускает восстановление автоматически.';
+
+    const advisoryToggle = document.getElementById('improveAiAuto');
+    const label = advisoryToggle?.closest('label');
+    if (label) {
+      const textNode = [...label.childNodes].find(node => node.nodeType === Node.TEXT_NODE);
+      if (textNode) textNode.textContent = ' Показывать AI-рекомендацию «Восстановить»';
+    }
+  }
+
+  const previousProcessSelected = processSelected;
+  processSelected = async function(operation, parameters, message) {
+    const result = await previousProcessSelected(operation, parameters, message);
+    if (operation !== 'enhance' || !result) return result;
+
+    const advisory = result.ai?.improve_advisory;
+    if (!advisory?.enabled) return result;
+
+    const explanation = document.getElementById('aiExplanation');
+    if (explanation) {
+      explanation.textContent = JSON.stringify({
+        improve_advisory: {
+          profile: advisory.profile || null,
+          recommend_restore: Boolean(advisory.recommend_restore),
+          applied_restoration: false,
+          recommended_action: advisory.recommended_action || null,
+        },
+      }, null, 2);
+    }
+    if (advisory.recommend_restore) {
+      toast('Обычного улучшения может быть недостаточно. Рекомендуется «Восстановить» — переход выполняется только вручную.');
+    }
+    return result;
+  };
+})();
