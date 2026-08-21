@@ -158,7 +158,7 @@ function Get-ImageLabDataInventory {
         [Parameter(Mandatory=$true)][string]$DataRoot
     )
 
-    $listed = @(Invoke-ImageLabRest -Stage 'inventory-project-list' -Method Get -Uri "$BaseUrl/api/projects" -TimeoutSec 30 -Headers @{ 'Cache-Control'='no-cache' })
+    $listed = @((Invoke-ImageLabRest -Stage 'inventory-project-list' -Method Get -Uri "$BaseUrl/api/projects" -TimeoutSec 30 -Headers @{ 'Cache-Control'='no-cache' }) | Write-Output)
     $projects = @()
     foreach ($item in @($listed | Sort-Object id)) {
         $projects += Get-ImageLabProjectInventory -BaseUrl $BaseUrl -DataRoot $DataRoot -ProjectId ([string]$item.id)
