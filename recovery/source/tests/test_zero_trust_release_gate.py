@@ -926,6 +926,12 @@ def test_update_gate_uses_full_multi_project_inventory() -> None:
     assert "assets.Count -ne 1" not in source
 
 
+def test_update_gate_explicitly_enumerates_rest_project_list() -> None:
+    source = (ROOT / "release_gate" / "run_update_rollback_gate.ps1").read_text("utf-8")
+    line = next(x.strip() for x in source.splitlines() if "inventory-project-list" in x)
+    assert line.startswith("$listed = @((Invoke-ImageLabRest") and line.endswith("| Write-Output)")
+
+
 def test_ui_gate_supports_edge_and_independent_bundled_chromium() -> None:
     source = (ROOT / "release_gate" / "ui_gate.py").read_text("utf-8")
     assert 'choices=("bundled", "msedge")' in source
