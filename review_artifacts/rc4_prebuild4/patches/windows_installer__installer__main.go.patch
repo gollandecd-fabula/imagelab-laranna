@@ -1,0 +1,11 @@
+--- PREBUILD2/windows_installer/installer/main.go
++++ PREBUILD4/windows_installer/installer/main.go
+@@ -30,7 +30,7 @@
+ const (
+ 	appName                     = "ImageLab by LarannA"
+ 	appVersion                  = "1.4.9-recovery-candidate"
+-	buildID                     = "A28-PROJECT-HARDEN-20260905-RC4-PREBUILD2"
++	buildID                     = "A28-PROJECT-HARDEN-20260906-RC4-PREBUILD4"
+ 	pythonRuntimeURL            = "https://www.python.org/ftp/python/3.13.14/python-3.13.14-amd64.zip"
+ 	pythonRuntimeSHA256         = "f73b6535281b58eee6bcfb3403af2bcfac711ea1463d8340c47c3047248eddf7"
+ 	pythonLegacyInstallerSHA256 = "c54d9b9bbb8a36e6489363ddd01139707fd781d72f1f9e90c7ec65d0061368e0"
