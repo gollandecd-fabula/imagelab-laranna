@@ -1,0 +1,167 @@
+--- PREBUILD/tests/test_project_process_hardening_rc4_prebuild2_20260906.py
++++ PREBUILD2/tests/test_project_process_hardening_rc4_prebuild2_20260906.py
+@@ -0,0 +1,164 @@
++from __future__ import annotations
++
++import hashlib
++import importlib.util
++import json
++import os
++import subprocess
++import sys
++import zipfile
++from pathlib import Path
++
++import pytest
++
++ROOT = Path(__file__).resolve().parents[1]
++
++
++def _load(name: str, path: Path):
++    spec = importlib.util.spec_from_file_location(name, path)
++    assert spec is not None and spec.loader is not None
++    module = importlib.util.module_from_spec(spec)
++    sys.modules[name] = module
++    spec.loader.exec_module(module)
++    return module
++
++
++def _fake_wheel(path: Path, *, dist: str, version: str, module_name: str) -> str:
++    dist_info = f"{dist.replace('-', '_')}-{version}.dist-info"
++    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zf:
++        zf.writestr(f"{module_name}/__init__.py", f"__version__ = {version!r}\n")
++        zf.writestr(f"{dist_info}/METADATA", f"Metadata-Version: 2.1\nName: {dist}\nVersion: {version}\n")
++        zf.writestr(f"{dist_info}/WHEEL", "Wheel-Version: 1.0\nTag: py3-none-any\n")
++    return hashlib.sha256(path.read_bytes()).hexdigest()
++
++
++def test_l3_dependency_intake_binds_exact_wheel_sha_and_metadata(tmp_path: Path) -> None:
++    module = _load("imagelab_l3_intake_test", ROOT / "scripts" / "l3_dependency_intake.py")
++    wheel = tmp_path / "alpha_pkg-1.2.3-py3-none-any.whl"
++    digest = _fake_wheel(wheel, dist="alpha-pkg", version="1.2.3", module_name="alpha_pkg")
++    expected = {
++        "alpha_pkg": module.WheelRequirement(
++            import_name="alpha_pkg",
++            distribution="alpha-pkg",
++            version="1.2.3",
++            filename=wheel.name,
++            sha256=digest,
++        )
++    }
++    runtime = tmp_path / "runtime"
++    receipt = module.build_verified_runtime(wheel_dir=tmp_path, runtime_dir=runtime, requirements=expected)
++    assert receipt["status"] == "PASS"
++    assert (runtime / ".verified_wheels" / wheel.name).read_bytes() == wheel.read_bytes()
++    assert module.validate_verified_runtime(runtime_dir=runtime, requirements=expected)["status"] == "PASS"
++
++    (runtime / ".verified_wheels" / wheel.name).write_bytes(wheel.read_bytes() + b"tamper")
++    with pytest.raises(RuntimeError, match="SHA-256"):
++        module.validate_verified_runtime(runtime_dir=runtime, requirements=expected)
++
++
++def test_l3_dependency_intake_rejects_wrong_metadata_even_when_filename_matches(tmp_path: Path) -> None:
++    module = _load("imagelab_l3_intake_metadata", ROOT / "scripts" / "l3_dependency_intake.py")
++    wheel = tmp_path / "alpha_pkg-1.2.3-py3-none-any.whl"
++    digest = _fake_wheel(wheel, dist="wrong-name", version="1.2.3", module_name="alpha_pkg")
++    expected = {
++        "alpha_pkg": module.WheelRequirement(
++            import_name="alpha_pkg",
++            distribution="alpha-pkg",
++            version="1.2.3",
++            filename=wheel.name,
++            sha256=digest,
++        )
++    }
++    with pytest.raises(RuntimeError, match="METADATA"):
++        module.build_verified_runtime(wheel_dir=tmp_path, runtime_dir=tmp_path / "runtime", requirements=expected)
++
++
++def test_preflight_verified_runtime_uses_real_subprocess_import(tmp_path: Path) -> None:
++    intake = _load("imagelab_l3_intake_preflight", ROOT / "scripts" / "l3_dependency_intake.py")
++    preflight = _load("imagelab_preflight_prebuild2", ROOT / "scripts" / "release_capability_preflight.py")
++    wheel = tmp_path / "alpha_pkg-1.2.3-py3-none-any.whl"
++    digest = _fake_wheel(wheel, dist="alpha-pkg", version="1.2.3", module_name="alpha_pkg")
++    expected = {
++        "alpha_pkg": intake.WheelRequirement("alpha_pkg", "alpha-pkg", "1.2.3", wheel.name, digest)
++    }
++    runtime = tmp_path / "runtime"
++    intake.build_verified_runtime(wheel_dir=tmp_path, runtime_dir=runtime, requirements=expected)
++    result = preflight.probe_import("alpha_pkg", extra_runtime=runtime)
++    assert result["status"] == "ready"
++    (runtime / "alpha_pkg" / "__init__.py").write_text("raise RuntimeError('broken binary/runtime')\n", "utf-8")
++    result = preflight.probe_import("alpha_pkg", extra_runtime=runtime)
++    assert result["status"] == "unavailable"
++
++
++def test_source_gate_hash_includes_release_relevant_paths(tmp_path: Path) -> None:
++    module = _load("imagelab_source_gate_hash", ROOT / "scripts" / "source_release_gate.py")
++    for rel in [
++        "app/a.py", "scripts/b.py", "tests/c.py", "vendor/d.txt",
++        ".github/workflows/x.yml", "docs/r.md", "release_gate/g.py", "artifacts/a.json",
++    ]:
++        path = tmp_path / rel
++        path.parent.mkdir(parents=True, exist_ok=True)
++        path.write_text(rel, "utf-8")
++    before = module.compute_source_tree(tmp_path)
++    assert before["file_count"] == 8
++    for rel in [".github/workflows/x.yml", "docs/r.md", "release_gate/g.py", "artifacts/a.json"]:
++        path = tmp_path / rel
++        old = path.read_text("utf-8")
++        path.write_text(old + " changed", "utf-8")
++        after = module.compute_source_tree(tmp_path)
++        assert after["sha256"] != before["sha256"]
++        path.write_text(old, "utf-8")
++
++
++def test_build_script_requires_verified_runtime_and_source_gate_before_mutation() -> None:
++    source = (ROOT / "scripts" / "build_zero_trust_candidate.py").read_text("utf-8")
++    assert "--l3-runtime" in source
++    assert "--source-gate-receipt" in source
++    assert "validate_source_gate_receipt" in source
++    main = source[source.index("def main()") :]
++    gate_pos = main.index("validate_source_gate_receipt")
++    assert gate_pos < main.index("output_dir.mkdir")
++    assert gate_pos < main.index("build_go(")
++
++
++def test_source_gate_receipt_invalidates_after_source_change(tmp_path: Path) -> None:
++    module = _load("imagelab_source_gate_receipt", ROOT / "scripts" / "source_release_gate.py")
++    root = tmp_path / "root"
++    runtime = tmp_path / "runtime"
++    root.mkdir(); runtime.mkdir()
++    (root / "app").mkdir(); (root / "app" / "a.py").write_text("x=1\n", "utf-8")
++    (runtime / "module.py").write_text("x=1\n", "utf-8")
++    receipt_path = tmp_path / "receipt.json"
++    module.write_pass_receipt_for_test(
++        root=root,
++        runtime_dir=runtime,
++        receipt_path=receipt_path,
++        tests_total=5,
++        tests_passed=5,
++    )
++    assert module.validate_source_gate_receipt(receipt_path=receipt_path, root=root, runtime_dir=runtime)["status"] == "PASS"
++    (root / "app" / "a.py").write_text("x=2\n", "utf-8")
++    with pytest.raises(RuntimeError, match="source tree hash"):
++        module.validate_source_gate_receipt(receipt_path=receipt_path, root=root, runtime_dir=runtime)
++
++
++def test_current_builder_still_fails_before_output_when_runtime_is_incomplete(tmp_path: Path) -> None:
++    output = tmp_path / "candidate"
++    completed = subprocess.run(
++        [sys.executable, str(ROOT / "scripts" / "build_zero_trust_candidate.py"), "--output-dir", str(output)],
++        cwd=ROOT,
++        text=True,
++        capture_output=True,
++    )
++    assert completed.returncode != 0
++    assert not output.exists()
++    assert not (ROOT / ".zero_trust_build").exists()
++
++
++def test_source_gate_rejects_verified_runtime_inside_source_tree(tmp_path: Path) -> None:
++    module = _load("imagelab_source_gate_runtime_location", ROOT / "scripts" / "source_release_gate.py")
++    root = tmp_path / "root"
++    runtime = root / "nested-runtime"
++    root.mkdir(); runtime.mkdir()
++    with pytest.raises(RuntimeError, match="outside source root"):
++        module.assert_runtime_outside_source(root=root, runtime_dir=runtime)
