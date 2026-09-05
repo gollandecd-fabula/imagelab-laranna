@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "build_id": "A28-PROJECT-HARDEN-20260906-RC4-PREBUILD6-R1",
+  "source_tree_sha256": "8f5b45292612a1ba12857b6c2fbcd62306dc539125fa169270cf946496f4a4e9",
+  "runtime_tree_sha256": "6b14436f3ed63349592f073369d72f2d128474843b4e03b9a93a3ca022b90827",
+  "full_source_gate": {"tests": 428, "passed": 428, "failures": 0, "errors": 0, "skipped": 0},
+  "reproducibility": {
+    "installer_byte_equal": true,
+    "installer_sha256": "ca5d259d22038ab2752355f20ca448d784a3e4ecdc158c0140dedd668329281f",
+    "source_zip_byte_equal": true,
+    "source_zip_sha256": "945d665c5a5e93b9fd198690d1dffa4aa9512e468277813c772c54560505a464"
+  },
+  "packaged_selftest": {"status": "PASS", "cases": {"eps_import":"PASS","resize_ppi":"PASS","background":"PASS","halftone":"PASS","vector":"PASS","history_lineage":"PASS","export":"PASS"}},
+  "glaz_l2": {"halo_overshoot_max":5,"ab_delta_p99":1.0,"brightness_lab_L_delta":-0.32916666666667993,"laplacian_variance_source":0.8041666666666667,"laplacian_variance_result":6.279166666666667,"detail_gain":7.808290155440415},
+  "release_authorized": false,
+  "physical_l5": false
+}
