@@ -6,10 +6,34 @@
   "passed": 411,
   "failed": 4,
   "skipped": 1,
-  "browser": {"total": 33, "passed": 33, "failed": 0, "skipped": 0},
-  "independent_nonbrowser": {"total": 372, "passed": 372, "failed": 0, "skipped": 0},
-  "psd_psb_file": {"total": 10, "passed": 6, "failed": 3, "skipped": 1, "cause": "psd_tools missing", "log": "RC4_PREBUILD2_PSD_PSB_BLOCKER_FINAL.txt"},
-  "heif_e2e": {"total": 1, "passed": 0, "failed": 1, "skipped": 0, "cause": "pillow_heif missing", "log": "RC4_PREBUILD2_HEIF_BLOCKER_FINAL.txt"},
+  "browser": {
+    "total": 33,
+    "passed": 33,
+    "failed": 0,
+    "skipped": 0
+  },
+  "independent_nonbrowser": {
+    "total": 372,
+    "passed": 372,
+    "failed": 0,
+    "skipped": 0
+  },
+  "psd_psb_file": {
+    "total": 10,
+    "passed": 6,
+    "failed": 3,
+    "skipped": 1,
+    "cause": "psd_tools missing",
+    "log": "RC4_PREBUILD2_PSD_PSB_BLOCKER_FINAL.txt"
+  },
+  "heif_e2e": {
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "skipped": 0,
+    "cause": "pillow_heif missing",
+    "log": "RC4_PREBUILD2_HEIF_BLOCKER_FINAL.txt"
+  },
   "other_failures": 0,
   "claim": "FAIL_CLOSED_NOT_FULL_PASS"
 }
