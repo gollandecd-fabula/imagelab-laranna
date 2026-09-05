@@ -1,0 +1,66 @@
+name: ImageLab PREBUILD6 exact Linux wheel transport
+
+on:
+  push:
+    branches:
+      - transport/prebuild6-linux-wheels-20260906
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  exact-linux-wheels:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.13'
+      - name: Download exact public wheels
+        run: |
+          python -m pip download --only-binary=:all: --no-deps --dest wheels pillow-heif==1.6.0 psd-tools==1.19.0
+      - name: Verify filenames SHA-256 and METADATA
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib, json, zipfile
+          expected = {
+            'pillow_heif-1.6.0-cp313-cp313-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl': ('1629b5d5aaf484d5901297be024228abf8182c671e6c31dbbadf280faf1115c2', 'pillow-heif', '1.6.0'),
+            'psd_tools-1.19.0-cp313-abi3-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl': ('36e9057f6c1e8e1092b83b6974f221577d8df0e49455f50cebaeca61bcbb4c69', 'psd-tools', '1.19.0'),
+          }
+          files = {p.name:p for p in Path('wheels').glob('*.whl')}
+          if set(files) != set(expected):
+              raise SystemExit(f'wheel filename set mismatch: expected={sorted(expected)}, got={sorted(files)}')
+          receipt={'schema':1,'status':'PASS','wheels':[]}
+          for name,(sha,want_name,want_ver) in expected.items():
+              path=files[name]
+              got=hashlib.sha256(path.read_bytes()).hexdigest()
+              if got != sha:
+                  raise SystemExit(f'{name} SHA mismatch expected={sha} got={got}')
+              with zipfile.ZipFile(path) as z:
+                  bad=z.testzip()
+                  if bad:
+                      raise SystemExit(f'{name} corrupt member {bad}')
+                  metadata_names=[n for n in z.namelist() if n.endswith('.dist-info/METADATA')]
+                  if len(metadata_names)!=1:
+                      raise SystemExit(f'{name} METADATA count {len(metadata_names)}')
+                  meta=z.read(metadata_names[0]).decode('utf-8','strict')
+              fields={}
+              for line in meta.splitlines():
+                  if ': ' in line:
+                      k,v=line.split(': ',1)
+                      fields.setdefault(k,v)
+              norm=fields.get('Name','').lower().replace('_','-')
+              if norm != want_name or fields.get('Version') != want_ver:
+                  raise SystemExit(f'{name} metadata mismatch Name={fields.get("Name")} Version={fields.get("Version")}')
+              receipt['wheels'].append({'filename':name,'sha256':got,'size_bytes':path.stat().st_size,'name':fields.get('Name'),'version':fields.get('Version')})
+          Path('wheels/VERIFIED_WHEELS.json').write_text(json.dumps(receipt,indent=2),'utf-8')
+          print(json.dumps(receipt,indent=2))
+          PY
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        with:
+          name: ImageLab-PREBUILD6-exact-linux-wheels
+          path: wheels/
+          retention-days: 7
+          if-no-files-found: error
