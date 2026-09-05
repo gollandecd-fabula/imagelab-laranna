@@ -1,0 +1,44 @@
+{
+  "schema": "imagelab.github-review-delivery.v1",
+  "local_build": "A28-PROJECT-HARDEN-20260906-RC4-PREBUILD4",
+  "source_tree_sha256": "3d5055966628e006b7e21462a427ecef31e1ac3687ba9e47f8249a624e496e71",
+  "patch_count": 11,
+  "entries": [
+    {
+      "source_patch": "scripts__build_zero_trust_candidate.py.patch",
+      "delivery": "chunks",
+      "full_sha256": "4386d2b655e33acbd17e3b7a23fbf4d2b4f25d8399d8e7eeeb6bd1765069b37b",
+      "full_size": 20513,
+      "chunks": [
+        {"path":"review_chunks/scripts__build_zero_trust_candidate.py.patch.part01","sha256":"367722a213c7f998097931d2658611a40ba5e83d17001045fcaac2f755e74f85","size":3643,"start_line":1,"end_line":80},
+        {"path":"review_chunks/scripts__build_zero_trust_candidate.py.patch.part02","sha256":"4c712a54309a0ab8e760ff76169284aaf3349bd1b4a85f023d4ca11fae83c4f3","size":3109,"start_line":81,"end_line":160},
+        {"path":"review_chunks/scripts__build_zero_trust_candidate.py.patch.part03","sha256":"e63939c4e23d9123e175ff021f2e053ebcc489c21cd092d021166a540e159663","size":4100,"start_line":161,"end_line":240},
+        {"path":"review_chunks/scripts__build_zero_trust_candidate.py.patch.part04","sha256":"f2b153490d533d971eb7e350aa95c828de569488ec177272066eb67ab047708d","size":3942,"start_line":241,"end_line":320},
+        {"path":"review_chunks/scripts__build_zero_trust_candidate.py.patch.part05","sha256":"67e167a85a1a223a9f5a5e983554770f931fa074bc01585ee6db8c247b247fa4","size":4675,"start_line":321,"end_line":400},
+        {"path":"review_chunks/scripts__build_zero_trust_candidate.py.patch.part06","sha256":"e918acc1e02d6d74bba22e60aac2860aae05445c9d5b35d0bacf0399ce4fdbb2","size":1044,"start_line":401,"end_line":421}
+      ]
+    },
+    {
+      "source_patch": "release_gate__pytest_collection_manifest.txt.patch",
+      "delivery": "chunks",
+      "full_sha256": "f15903307de59ba86dedd38dae96e13abdffa0f46d1de2dc0e224a0bb7a7e6fe",
+      "full_size": 37485,
+      "chunks": [
+        {"path":"review_chunks/release_gate__pytest_collection_manifest.txt.patch.part01","sha256":"b4d312df3fb52cfe1c30311a02249be1faff81b4e9dd5e366e61fe076335f60d","size":8969,"start_line":1,"end_line":110},
+        {"path":"review_chunks/release_gate__pytest_collection_manifest.txt.patch.part02","sha256":"11e507678c986aab7a9e5e6fccbde862e9ef479d36e48b200deb09572b0acfcf","size":9173,"start_line":111,"end_line":220},
+        {"path":"review_chunks/release_gate__pytest_collection_manifest.txt.patch.part03","sha256":"c259748aad741054dd93ce96cd171f6b6ca7c5a85aa16111167719cb263d2d59","size":10583,"start_line":221,"end_line":330},
+        {"path":"review_chunks/release_gate__pytest_collection_manifest.txt.patch.part04","sha256":"e279f4efeed3127aaeeb7d5e3698a2bc0f08db9ea2db8e9142ab770ad29a67e2","size":8760,"start_line":331,"end_line":426}
+      ]
+    },
+    {"source_patch":"app__config.py.patch","source_path":"app/config.py","delivery":"full","path":"patches/app__config.py.patch","sha256":"140052eaed5403c33848a6b4bb8d03eb516070a0a885dcfc516b6457b98f98ac","size":467},
+    {"source_patch":"scripts__l3_dependency_intake.py.patch","source_path":"scripts/l3_dependency_intake.py","delivery":"full","path":"patches/scripts__l3_dependency_intake.py.patch","sha256":"367f037637022b020d97a58f381dc57e3ccb4675d8fdb85fd871f522adf12fe7","size":2922},
+    {"source_patch":"scripts__release_capability_preflight.py.patch","source_path":"scripts/release_capability_preflight.py","delivery":"full","path":"patches/scripts__release_capability_preflight.py.patch","sha256":"ad08bbd552647fc47a682dbbaf0f4472f183c43c7e374c02b3316f9ad9d93fd0","size":3292},
+    {"source_patch":"scripts__source_release_gate.py.patch","source_path":"scripts/source_release_gate.py","delivery":"full","path":"patches/scripts__source_release_gate.py.patch","sha256":"0b60e264ad787bae6d56a10040a6016491ced2a383d9574561bcd1a040137161","size":10576},
+    {"source_patch":"tests__test_project_process_hardening_rc4_prebuild2_20260906.py.patch","source_path":"tests/test_project_process_hardening_rc4_prebuild2_20260906.py","delivery":"full","path":"patches/tests__test_project_process_hardening_rc4_prebuild2_20260906.py.patch","sha256":"33ac3ef1d9bd764ed981dd4fd82caac8ef9c148249da2b37e8f61da74317e9c7","size":3675},
+    {"source_patch":"tests__test_project_process_hardening_rc4_prebuild4_20260906.py.patch","source_path":"tests/test_project_process_hardening_rc4_prebuild4_20260906.py","delivery":"full","path":"patches/tests__test_project_process_hardening_rc4_prebuild4_20260906.py.patch","sha256":"e54b9a65df2f4970b9c466c8529447b2d36db7c546b2208efb31f71f42df54a5","size":4171},
+    {"source_patch":"tests__test_windows_packaging_config.py.patch","source_path":"tests/test_windows_packaging_config.py","delivery":"full","path":"patches/tests__test_windows_packaging_config.py.patch","sha256":"79870044ac7c3b4104af9bc2c3ea64e84f271a7a5ad0b5582992f086e1a12e91","size":1236},
+    {"source_patch":"windows_installer__installer__main.go.patch","source_path":"windows_installer/installer/main.go","delivery":"full","path":"patches/windows_installer__installer__main.go.patch","sha256":"22aea9c6bd869ec3c77d40c9534d6dd51f4b79a880f71dd73df5ba6c07c6a2b8","size":691},
+    {"source_patch":"windows_installer__launcher__main.go.patch","source_path":"windows_installer/launcher/main.go","delivery":"full","path":"patches/windows_installer__launcher__main.go.patch","sha256":"607abed2bbba966aa5e0d6bde8151c61e2eb82db7ba3f3adf2f28d966d67c2b6","size":363}
+  ],
+  "combined_patch_local_only": {"sha256":"ea248617d91b334db0cf9016138a10dbcfc71b8bf91640295ccf69f5ac7169c0","size":85391,"uploaded":false}
+}
