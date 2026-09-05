@@ -1,0 +1,126 @@
+{
+  "changed_count": 11,
+  "files": [
+    {
+      "path": "app/config.py",
+      "status": "MODIFIED",
+      "pre2_sha256": "677c5b32ced87f9441e87289238208e40308e87f9a6bccbc91a382b28abbc35e",
+      "pre4_sha256": "264193140b2db05018311071f09b0c4b9cac744f55750be7f452b38e4e4c4007",
+      "pre2_size": 1514,
+      "pre4_size": 1514,
+      "patch_file": "app__config.py.patch",
+      "patch_sha256": "140052eaed5403c33848a6b4bb8d03eb516070a0a885dcfc516b6457b98f98ac",
+      "patch_size": 467
+    },
+    {
+      "path": "release_gate/pytest_collection_manifest.txt",
+      "status": "ADDED",
+      "pre2_sha256": null,
+      "pre4_sha256": "47d91c82e20348542be5a9ba4f9be9819e1aeac791dcf97035b77ab5e386db70",
+      "pre2_size": null,
+      "pre4_size": 36928,
+      "patch_file": "release_gate__pytest_collection_manifest.txt.patch",
+      "patch_sha256": "f15903307de59ba86dedd38dae96e13abdffa0f46d1de2dc0e224a0bb7a7e6fe",
+      "patch_size": 37485
+    },
+    {
+      "path": "scripts/build_zero_trust_candidate.py",
+      "status": "MODIFIED",
+      "pre2_sha256": "ad2d6265e01fd22202bb23885d85c44baace00921765a4bb7eefe2e968c88f5a",
+      "pre4_sha256": "0db0c59ce19c5228915ea985f41033c2da677248f88c233ddab6eecc9c5b4957",
+      "pre2_size": 11721,
+      "pre4_size": 14570,
+      "patch_file": "scripts__build_zero_trust_candidate.py.patch",
+      "patch_sha256": "4386d2b655e33acbd17e3b7a23fbf4d2b4f25d8399d8e7eeeb6bd1765069b37b",
+      "patch_size": 20513
+    },
+    {
+      "path": "scripts/l3_dependency_intake.py",
+      "status": "MODIFIED",
+      "pre2_sha256": "852c206560be93590cc4f9660f57b39b915df5c5d3e419aeaf3851200f4022b2",
+      "pre4_sha256": "420c70fda4d95d23cb77486bf63afc38aab36b44483ebca201784ec10b00b275",
+      "pre2_size": 8697,
+      "pre4_size": 10001,
+      "patch_file": "scripts__l3_dependency_intake.py.patch",
+      "patch_sha256": "367f037637022b020d97a58f381dc57e3ccb4675d8fdb85fd871f522adf12fe7",
+      "patch_size": 2922
+    },
+    {
+      "path": "scripts/release_capability_preflight.py",
+      "status": "MODIFIED",
+      "pre2_sha256": "ada9320ce89505e0dd58c4f6600da21ca52b2e1e297ecea51b4099320ef5d79c",
+      "pre4_sha256": "301394aac0ffc023245e4b97eba34e9e96a1627d085ac87b37c5f3eaf7c70d41",
+      "pre2_size": 4158,
+      "pre4_size": 5643,
+      "patch_file": "scripts__release_capability_preflight.py.patch",
+      "patch_sha256": "ad08bbd552647fc47a682dbbaf0f4472f183c43c7e374c02b3316f9ad9d93fd0",
+      "patch_size": 3292
+    },
+    {
+      "path": "scripts/source_release_gate.py",
+      "status": "MODIFIED",
+      "pre2_sha256": "abdbd3b613b2306b8fd678c24912c2f760e05a78b30e296cff09149d217a9c9b",
+      "pre4_sha256": "e38b25ad071e72116ee8cf0244e33e4b4ba0947f172cb83891659a91df4e4841",
+      "pre2_size": 8028,
+      "pre4_size": 12724,
+      "patch_file": "scripts__source_release_gate.py.patch",
+      "patch_sha256": "0b60e264ad787bae6d56a10040a6016491ced2a383d9574561bcd1a040137161",
+      "patch_size": 10576
+    },
+    {
+      "path": "tests/test_project_process_hardening_rc4_prebuild2_20260906.py",
+      "status": "MODIFIED",
+      "pre2_sha256": "75fce6c3b5ed18040e6721f34e1b9e12ac6b91a55c8d5496557a93493d477672",
+      "pre4_sha256": "c09d0e136445211e00c51950f7adb75b9295cb14213baac256bcfcdccf4c826a",
+      "pre2_size": 7411,
+      "pre4_size": 9970,
+      "patch_file": "tests__test_project_process_hardening_rc4_prebuild2_20260906.py.patch",
+      "patch_sha256": "33ac3ef1d9bd764ed981dd4fd82caac8ef9c148249da2b37e8f61da74317e9c7",
+      "patch_size": 3675
+    },
+    {
+      "path": "tests/test_project_process_hardening_rc4_prebuild4_20260906.py",
+      "status": "ADDED",
+      "pre2_sha256": null,
+      "pre4_sha256": "74064891d6ae5024567e7b406ec4e873d712dd8025a42b69cb8ddfeed01c883e",
+      "pre2_size": null,
+      "pre4_size": 3910,
+      "patch_file": "tests__test_project_process_hardening_rc4_prebuild4_20260906.py.patch",
+      "patch_sha256": "e54b9a65df2f4970b9c466c8529447b2d36db7c546b2208efb31f71f42df54a5",
+      "patch_size": 4171
+    },
+    {
+      "path": "tests/test_windows_packaging_config.py",
+      "status": "MODIFIED",
+      "pre2_sha256": "f4956c695e97c2c70e44cbfd372df28fda57beed485cb5c3dd9f171b5edb4bf3",
+      "pre4_sha256": "c984929b3d1f5acd83c0b3ec546f8520d73b6f801c3d2281794e7da8111dfddc",
+      "pre2_size": 7031,
+      "pre4_size": 7091,
+      "patch_file": "tests__test_windows_packaging_config.py.patch",
+      "patch_sha256": "79870044ac7c3b4104af9bc2c3ea64e84f271a7a5ad0b5582992f086e1a12e91",
+      "patch_size": 1236
+    },
+    {
+      "path": "windows_installer/installer/main.go",
+      "status": "MODIFIED",
+      "pre2_sha256": "ac9d2e56738becd5094ec543e04e41684ee6bcd4173a60e28a14b1cec849273c",
+      "pre4_sha256": "51a73ad8c1454cfbfae9aef7d6edfb4f792882ffe1e558ce65dc6860d2434478",
+      "pre2_size": 36469,
+      "pre4_size": 36469,
+      "patch_file": "windows_installer__installer__main.go.patch",
+      "patch_sha256": "22aea9c6bd869ec3c77d40c9534d6dd51f4b79a880f71dd73df5ba6c07c6a2b8",
+      "patch_size": 691
+    },
+    {
+      "path": "windows_installer/launcher/main.go",
+      "status": "MODIFIED",
+      "pre2_sha256": "b08f1682b95caebdb785398f946455228fe2fbf5ece7f9f0af92d1ec80c8e194",
+      "pre4_sha256": "95fb8cdb1f560adf6cf1735f4500921966327ea79c19be35ed31c393e5cfaaf0",
+      "pre2_size": 11280,
+      "pre4_size": 11280,
+      "patch_file": "windows_installer__launcher__main.go.patch",
+      "patch_sha256": "607abed2bbba966aa5e0d6bde8151c61e2eb82db7ba3f3adf2f28d966d67c2b6",
+      "patch_size": 363
+    }
+  ]
+}
