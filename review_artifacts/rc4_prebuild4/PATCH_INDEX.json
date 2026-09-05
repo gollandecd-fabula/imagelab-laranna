@@ -1,0 +1,70 @@
+{
+  "patches": [
+    {
+      "source_path": "app/config.py",
+      "patch_file": "app__config.py.patch",
+      "sha256": "140052eaed5403c33848a6b4bb8d03eb516070a0a885dcfc516b6457b98f98ac",
+      "size": 467
+    },
+    {
+      "source_path": "release_gate/pytest_collection_manifest.txt",
+      "patch_file": "release_gate__pytest_collection_manifest.txt.patch",
+      "sha256": "f15903307de59ba86dedd38dae96e13abdffa0f46d1de2dc0e224a0bb7a7e6fe",
+      "size": 37485
+    },
+    {
+      "source_path": "scripts/build_zero_trust_candidate.py",
+      "patch_file": "scripts__build_zero_trust_candidate.py.patch",
+      "sha256": "4386d2b655e33acbd17e3b7a23fbf4d2b4f25d8399d8e7eeeb6bd1765069b37b",
+      "size": 20513
+    },
+    {
+      "source_path": "scripts/l3_dependency_intake.py",
+      "patch_file": "scripts__l3_dependency_intake.py.patch",
+      "sha256": "367f037637022b020d97a58f381dc57e3ccb4675d8fdb85fd871f522adf12fe7",
+      "size": 2922
+    },
+    {
+      "source_path": "scripts/release_capability_preflight.py",
+      "patch_file": "scripts__release_capability_preflight.py.patch",
+      "sha256": "ad08bbd552647fc47a682dbbaf0f4472f183c43c7e374c02b3316f9ad9d93fd0",
+      "size": 3292
+    },
+    {
+      "source_path": "scripts/source_release_gate.py",
+      "patch_file": "scripts__source_release_gate.py.patch",
+      "sha256": "0b60e264ad787bae6d56a10040a6016491ced2a383d9574561bcd1a040137161",
+      "size": 10576
+    },
+    {
+      "source_path": "tests/test_project_process_hardening_rc4_prebuild2_20260906.py",
+      "patch_file": "tests__test_project_process_hardening_rc4_prebuild2_20260906.py.patch",
+      "sha256": "33ac3ef1d9bd764ed981dd4fd82caac8ef9c148249da2b37e8f61da74317e9c7",
+      "size": 3675
+    },
+    {
+      "source_path": "tests/test_project_process_hardening_rc4_prebuild4_20260906.py",
+      "patch_file": "tests__test_project_process_hardening_rc4_prebuild4_20260906.py.patch",
+      "sha256": "e54b9a65df2f4970b9c466c8529447b2d36db7c546b2208efb31f71f42df54a5",
+      "size": 4171
+    },
+    {
+      "source_path": "tests/test_windows_packaging_config.py",
+      "patch_file": "tests__test_windows_packaging_config.py.patch",
+      "sha256": "79870044ac7c3b4104af9bc2c3ea64e84f271a7a5ad0b5582992f086e1a12e91",
+      "size": 1236
+    },
+    {
+      "source_path": "windows_installer/installer/main.go",
+      "patch_file": "windows_installer__installer__main.go.patch",
+      "sha256": "22aea9c6bd869ec3c77d40c9534d6dd51f4b79a880f71dd73df5ba6c07c6a2b8",
+      "size": 691
+    },
+    {
+      "source_path": "windows_installer/launcher/main.go",
+      "patch_file": "windows_installer__launcher__main.go.patch",
+      "sha256": "607abed2bbba966aa5e0d6bde8151c61e2eb82db7ba3f3adf2f28d966d67c2b6",
+      "size": 363
+    }
+  ]
+}
