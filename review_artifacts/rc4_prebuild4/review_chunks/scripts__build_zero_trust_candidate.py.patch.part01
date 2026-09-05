@@ -1,0 +1,80 @@
+--- PREBUILD2/scripts/build_zero_trust_candidate.py
++++ PREBUILD4/scripts/build_zero_trust_candidate.py
+@@ -8,20 +8,22 @@
+ import struct
+ import subprocess
+ import sys
++import tempfile
+ import zipfile
+ from pathlib import Path
+ 
+ from release_capability_preflight import assert_source_test_runtime_capability
+-from source_release_gate import validate_source_gate_receipt
++from source_release_gate import compute_source_tree, run_full_source_gate
++from l3_dependency_intake import compute_runtime_tree
+ 
+ ROOT = Path(__file__).resolve().parents[1]
+-BUNDLED_PILLOW_HEIF_WHEEL = ROOT / "vendor" / "wheels" / "pillow_heif-1.6.0-cp313-cp313-win_amd64.whl"
++BUNDLED_PILLOW_HEIF_REL = Path("vendor/wheels/pillow_heif-1.6.0-cp313-cp313-win_amd64.whl")
+ BUNDLED_PILLOW_HEIF_SHA256 = "ed1e176cb73d245f58a2134129e8673023aefba89ff566fd65467048e4390ad5"
+-BUNDLED_PSD_TOOLS_WHEEL = ROOT / "vendor" / "wheels" / "psd_tools-1.19.0-cp313-cp313-win_amd64.whl"
++BUNDLED_PSD_TOOLS_REL = Path("vendor/wheels/psd_tools-1.19.0-cp313-cp313-win_amd64.whl")
+ BUNDLED_PSD_TOOLS_SHA256 = "da103a304a23842aaddd5b99563a7e4f5660376b713f9fc70f38dba49ab8c20a"
+-BUNDLED_STET_EXE = ROOT / "vendor" / "tools" / "stet" / "stet.exe"
++BUNDLED_STET_EXE_REL = Path("vendor/tools/stet/stet.exe")
+ BUNDLED_STET_SHA256 = "3ad883e898386fba1b4e81a182c32da9ce437b4c5a2322530788e6159c76d30f"
+-BUNDLED_STET_LINUX = ROOT / "vendor" / "tools" / "stet" / "stet-linux-x64"
++BUNDLED_STET_LINUX_REL = Path("vendor/tools/stet/stet-linux-x64")
+ BUNDLED_STET_LINUX_SHA256 = "9561cf9f4cb887c9cdf4213cf13fe24924d67d17625ca6126e2278d3e53fb4fa"
+ FIXED_TIME = (2026, 7, 24, 0, 0, 0)
+ EXCLUDED_PARTS = {
+@@ -51,25 +53,27 @@
+             archive_file.writestr(info, data)
+ 
+ 
+-def payload_file(path: Path) -> bool:
+-    rel = path.relative_to(ROOT)
++def payload_file(path: Path, root: Path = ROOT) -> bool:
++    root = root.resolve()
++    rel = path.relative_to(root)
+     if any(part in EXCLUDED_PARTS for part in rel.parts) or path.suffix in {".pyc", ".pyo"}:
+         return False
+     return path.is_file() and (
+         (rel.parts and rel.parts[0] in {"app", "models"})
+         or rel.parts[:2] == ("vendor", "wheels")
+-        or (rel.parts[:2] == ("vendor", "tools") and rel != Path("vendor/tools/stet/stet-linux-x64"))
++        or (rel.parts[:2] == ("vendor", "tools") and rel != BUNDLED_STET_LINUX_REL)
+         or rel in {Path("bootstrap.py"), Path("requirements.txt"), Path("README.md")}
+     )
+ 
+ 
+-def source_file(path: Path) -> bool:
+-    rel = path.relative_to(ROOT)
++def source_file(path: Path, root: Path = ROOT) -> bool:
++    root = root.resolve()
++    rel = path.relative_to(root)
+     if any(part in EXCLUDED_PARTS for part in rel.parts):
+         return False
+     if path.suffix in {".pyc", ".pyo"} or path.name == ".coverage":
+         return False
+-    if path.suffix == ".exe" and rel != Path("vendor/tools/stet/stet.exe"):
++    if path.suffix == ".exe" and rel != BUNDLED_STET_EXE_REL:
+         return False
+     if rel.parts and rel.parts[0] == "data":
+         return False
+@@ -78,6 +82,58 @@
+     if rel.parts and rel.parts[0].startswith("evidence"):
+         return False
+     return path.is_file()
++
++
++def copy_source_snapshot(source_root: Path, snapshot_root: Path) -> dict[str, object]:
++    source_root = source_root.resolve()
++    snapshot_root = snapshot_root.resolve()
++    before = compute_source_tree(source_root)
++    for path in source_root.rglob("*"):
++        if not source_file(path, source_root):
++            continue
++        rel = path.relative_to(source_root)
++        target = snapshot_root / rel
++        target.parent.mkdir(parents=True, exist_ok=True)
