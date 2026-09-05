@@ -1,0 +1,16 @@
+{
+  "schema": "imagelab.prebuild5-binary-objects.v1",
+  "count": 10,
+  "objects": [
+    {"path":"artifacts/m2a-visual/m2a-1024.png","size":124889,"sha256":"3319fc086d359e856736545e2af4875802f701c2d463c9c0a98a767cfaef3b93","git_blob_sha1":"928d001d80abb4fb70eb1c2525d60de119f94a02"},
+    {"path":"artifacts/m2a-visual/m2a-1280.png","size":138097,"sha256":"2c7ae41903dd4a569ca783163d8db5c76011bcb45a36e4083977f6ddc79a5f53","git_blob_sha1":"d1d6cf625a4e1407c53aba5d6bddf014dbe31898"},
+    {"path":"artifacts/m2a-visual/m2a-1440.png","size":143933,"sha256":"5bc564cd24f978196081a8a262fc641913373f1935fe8c37465288698f218580","git_blob_sha1":"acd9ab94faafaa899850323b952de129a8666d08"},
+    {"path":"artifacts/m2a-visual/m2a-1920.png","size":146034,"sha256":"4d8d2f26906657424ebd748b8e0f1d3d7bacd096f49324005a7f8c6eeee37402","git_blob_sha1":"df6a69b9a5de2efa67fdd8afd15119f5bf539646"},
+    {"path":"artifacts/m2a-visual/m2a-800.png","size":170381,"sha256":"7727ef261c3b8a08e03755a609e28749aed5eafb8425856f35d2ae3a435e44b7","git_blob_sha1":"821a6cd2d6ffb66f8050821981b553b366394c3c"},
+    {"path":"tests/fixtures_iz017.png","size":159531,"sha256":"cab4e5e48164cd8b8cb3d7fa9fedf82575acccd813a77e21cb54c4351ef9cb70","git_blob_sha1":"e01e8c364b7f7c41dfb04df082de3bbfc207b648"},
+    {"path":"vendor/tools/stet/stet-linux-x64","size":19853728,"sha256":"9561cf9f4cb887c9cdf4213cf13fe24924d67d17625ca6126e2278d3e53fb4fa","git_blob_sha1":"1cc72fd8d80209d43b2c28bb4783c1ae90beb81d"},
+    {"path":"vendor/tools/stet/stet.exe","size":23826432,"sha256":"3ad883e898386fba1b4e81a182c32da9ce437b4c5a2322530788e6159c76d30f","git_blob_sha1":"6ecb6470e7fe66e49fb82d4636a22b9841d5a4aa"},
+    {"path":"vendor/wheels/pillow_heif-1.6.0-cp313-cp313-win_amd64.whl","size":6576609,"sha256":"ed1e176cb73d245f58a2134129e8673023aefba89ff566fd65467048e4390ad5","git_blob_sha1":"7d405af6f9f4af4a2d63abe7d737cc647d2b93e5"},
+    {"path":"vendor/wheels/psd_tools-1.19.0-cp313-cp313-win_amd64.whl","size":627867,"sha256":"da103a304a23842aaddd5b99563a7e4f5660376b713f9fc70f38dba49ab8c20a","git_blob_sha1":"d961dd5cdcd7084d03091798baa2fce0d8800686"}
+  ]
+}
