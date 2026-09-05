@@ -18,6 +18,9 @@
 -    ".zero_trust_build", "dist", ".venv", "venv",
 +    ".zero_trust_build", "dist", ".venv", "venv", ".verified_l3_runtime",
  }
+ 
+ 
+ def sha256(path: Path) -> str:
 @@ -117,14 +118,26 @@
  def main() -> int:
      parser = argparse.ArgumentParser()
