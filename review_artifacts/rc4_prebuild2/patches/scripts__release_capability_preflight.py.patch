@@ -1,0 +1,118 @@
+--- PREBUILD/scripts/release_capability_preflight.py
++++ PREBUILD2/scripts/release_capability_preflight.py
+@@ -1,8 +1,12 @@
+ from __future__ import annotations
+ 
++import argparse
+ import importlib.util
+ import json
++import os
++import subprocess
++import sys
+ from pathlib import Path
+ from typing import Callable, Any
+ 
+ REQUIRED_SOURCE_TEST_MODULES = {
+@@ -14,32 +18,80 @@
+     "psd_tools": ["PSD/PSB import/export tests"],
+ }
+ 
+ 
+-def check_source_test_runtime_capability(*, find_spec: Callable[[str], Any] = importlib.util.find_spec) -> dict[str, object]:
++def probe_import(module: str, *, extra_runtime: Path | None = None) -> dict[str, object]:
++    env = dict(os.environ)
++    if extra_runtime is not None:
++        runtime = str(Path(extra_runtime).resolve())
++        env["PYTHONPATH"] = runtime + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
++    code = (
++        "import importlib, json; "
++        f"m=importlib.import_module({module!r}); "
++        "print(json.dumps({'module': m.__name__, 'file': str(getattr(m, '__file__', ''))}))"
++    )
++    completed = subprocess.run([sys.executable, "-c", code], text=True, capture_output=True, env=env)
++    return {
++        "status": "ready" if completed.returncode == 0 else "unavailable",
++        "returncode": completed.returncode,
++        "stdout": completed.stdout.strip(),
++        "stderr": completed.stderr.strip(),
++    }
++
++
++def check_source_test_runtime_capability(
++    *,
++    find_spec: Callable[[str], Any] | None = None,
++    extra_runtime: Path | None = None,
++) -> dict[str, object]:
++    # `find_spec` remains injectable only for narrow unit tests. Production uses
++    # a subprocess import so compiled/ABI failures cannot masquerade as READY.
+     modules: dict[str, dict[str, object]] = {}
+     missing: list[str] = []
++    runtime_validation: dict[str, object] | None = None
++    if extra_runtime is not None:
++        try:
++            from l3_dependency_intake import validate_verified_runtime
++        except ImportError:
++            from scripts.l3_dependency_intake import validate_verified_runtime  # type: ignore
++        try:
++            runtime_validation = validate_verified_runtime(runtime_dir=Path(extra_runtime))
++        except Exception as exc:
++            return {
++                "schema": "imagelab.release-source-runtime-preflight.v2",
++                "status": "BLOCKED",
++                "missing": ["verified_l3_runtime"],
++                "modules": {},
++                "verified_runtime": {"status": "BLOCKED", "error": str(exc)},
++            }
++
+     for module, required_for in REQUIRED_SOURCE_TEST_MODULES.items():
+-        try:
+-            available = find_spec(module) is not None
+-        except Exception:
+-            available = False
++        if find_spec is not None:
++            try:
++                probe = {"status": "ready" if find_spec(module) is not None else "unavailable"}
++            except Exception as exc:
++                probe = {"status": "unavailable", "stderr": str(exc)}
++        else:
++            probe = probe_import(module, extra_runtime=extra_runtime)
++        available = probe.get("status") == "ready"
+         modules[module] = {
+             "status": "ready" if available else "missing",
+             "required_for": list(required_for),
++            "probe": probe,
+         }
+         if not available:
+             missing.append(module)
+     return {
+-        "schema": "imagelab.release-source-runtime-preflight.v1",
++        "schema": "imagelab.release-source-runtime-preflight.v2",
+         "status": "PASS" if not missing else "BLOCKED",
+         "missing": missing,
+         "modules": modules,
++        "verified_runtime": runtime_validation,
+     }
+ 
+ 
+-def assert_source_test_runtime_capability() -> dict[str, object]:
+-    result = check_source_test_runtime_capability()
++def assert_source_test_runtime_capability(*, extra_runtime: Path | None = None) -> dict[str, object]:
++    result = check_source_test_runtime_capability(extra_runtime=extra_runtime)
+     if result["status"] != "PASS":
+         raise RuntimeError(
+             "source-test runtime capability is incomplete before build: "
+             + ", ".join(result["missing"])
+@@ -47,9 +99,12 @@
+     return result
+ 
+ 
+ def main() -> int:
+-    result = check_source_test_runtime_capability()
++    parser = argparse.ArgumentParser()
++    parser.add_argument("--l3-runtime", type=Path)
++    args = parser.parse_args()
++    result = check_source_test_runtime_capability(extra_runtime=args.l3_runtime)
+     print(json.dumps(result, ensure_ascii=False, indent=2))
+     return 0 if result["status"] == "PASS" else 2
+ 
+ 
