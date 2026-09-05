@@ -1,0 +1,11 @@
+--- PREBUILD2/app/config.py
++++ PREBUILD4/app/config.py
+@@ -19,7 +19,7 @@
+ class Settings:
+     app_name: str = "ImageLab by LarannA"
+     app_version: str = "1.4.9-recovery-candidate"
+-    build_id: str = "A28-PROJECT-HARDEN-20260905-RC4-PREBUILD2"
++    build_id: str = "A28-PROJECT-HARDEN-20260906-RC4-PREBUILD4"
+     install_id: str = os.environ.get("IMAGELAB_INSTALL_ID", "source-tree").strip() or "source-tree"
+     host: str = "127.0.0.1"
+     port: int = 8765
