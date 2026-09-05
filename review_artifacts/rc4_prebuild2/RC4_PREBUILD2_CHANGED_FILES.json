@@ -1,0 +1,77 @@
+{
+  "changed_count": 9,
+  "files": [
+    {
+      "path": "app/config.py",
+      "status": "MODIFIED",
+      "pre1_sha256": "2115b6adf9bd0824e5518098132be87cce23639947a5ed8c193211a8416cd010",
+      "pre2_sha256": "677c5b32ced87f9441e87289238208e40308e87f9a6bccbc91a382b28abbc35e",
+      "pre1_size": 1513,
+      "pre2_size": 1514
+    },
+    {
+      "path": "scripts/build_zero_trust_candidate.py",
+      "status": "MODIFIED",
+      "pre1_sha256": "5e55bcf06909a8624d609f02c8738cb6223bd67305981dfdfaa102cf68ef5163",
+      "pre2_sha256": "ad2d6265e01fd22202bb23885d85c44baace00921765a4bb7eefe2e968c88f5a",
+      "pre1_size": 11057,
+      "pre2_size": 11721
+    },
+    {
+      "path": "scripts/l3_dependency_intake.py",
+      "status": "ADDED",
+      "pre1_sha256": null,
+      "pre2_sha256": "852c206560be93590cc4f9660f57b39b915df5c5d3e419aeaf3851200f4022b2",
+      "pre1_size": null,
+      "pre2_size": 8697
+    },
+    {
+      "path": "scripts/release_capability_preflight.py",
+      "status": "MODIFIED",
+      "pre1_sha256": "33479921ef8ae638e0dc3928386ac544047568d55b48564431cad5472baa77ae",
+      "pre2_sha256": "ada9320ce89505e0dd58c4f6600da21ca52b2e1e297ecea51b4099320ef5d79c",
+      "pre1_size": 1772,
+      "pre2_size": 4158
+    },
+    {
+      "path": "scripts/source_release_gate.py",
+      "status": "ADDED",
+      "pre1_sha256": null,
+      "pre2_sha256": "abdbd3b613b2306b8fd678c24912c2f760e05a78b30e296cff09149d217a9c9b",
+      "pre1_size": null,
+      "pre2_size": 8028
+    },
+    {
+      "path": "tests/test_heif_runtime_e2e_20260906.py",
+      "status": "ADDED",
+      "pre1_sha256": null,
+      "pre2_sha256": "a505ed002c03c2100c4b2ebbc50c71445cec5dca5f04256f125115760b5c0a0f",
+      "pre1_size": null,
+      "pre2_size": 580
+    },
+    {
+      "path": "tests/test_project_process_hardening_rc4_prebuild2_20260906.py",
+      "status": "ADDED",
+      "pre1_sha256": null,
+      "pre2_sha256": "75fce6c3b5ed18040e6721f34e1b9e12ac6b91a55c8d5496557a93493d477672",
+      "pre1_size": null,
+      "pre2_size": 7411
+    },
+    {
+      "path": "windows_installer/installer/main.go",
+      "status": "MODIFIED",
+      "pre1_sha256": "1b60f470f35ae1f171414cfbee49d30908dbb38af70f0ed533a7deb80420cd49",
+      "pre2_sha256": "ac9d2e56738becd5094ec543e04e41684ee6bcd4173a60e28a14b1cec849273c",
+      "pre1_size": 36468,
+      "pre2_size": 36469
+    },
+    {
+      "path": "windows_installer/launcher/main.go",
+      "status": "MODIFIED",
+      "pre1_sha256": "60ad45b2a6ee998cd2d5af1f8a73306c60b6e1554a6e41e73f853d8586854cc6",
+      "pre2_sha256": "b08f1682b95caebdb785398f946455228fe2fbf5ece7f9f0af92d1ec80c8e194",
+      "pre1_size": 11279,
+      "pre2_size": 11280
+    }
+  ]
+}
