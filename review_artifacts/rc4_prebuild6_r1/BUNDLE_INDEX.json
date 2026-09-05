@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "build_id": "A28-PROJECT-HARDEN-20260906-RC4-PREBUILD6-R1",
+  "source_tree": {
+    "sha256": "8f5b45292612a1ba12857b6c2fbcd62306dc539125fa169270cf946496f4a4e9",
+    "file_count": 215
+  },
+  "file_count": 215,
+  "utf8_file_count": 205,
+  "binary_file_count": 10,
+  "text_bundle_xz_sha256": "6f39c31d7ed216615a85a6a4b480e45def4f5abcd38d2a7438b168c2261c043b",
+  "text_bundle_xz_size": 348832,
+  "base64_chunk_count": 8,
+  "base64_chunk_chars": 60000
+}
