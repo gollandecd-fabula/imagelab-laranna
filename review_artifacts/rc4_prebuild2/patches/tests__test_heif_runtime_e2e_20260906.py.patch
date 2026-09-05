@@ -1,0 +1,23 @@
+--- PREBUILD/tests/test_heif_runtime_e2e_20260906.py
++++ PREBUILD2/tests/test_heif_runtime_e2e_20260906.py
+@@ -0,0 +1,20 @@
++from __future__ import annotations
++
++import io
++from pathlib import Path
++
++from PIL import Image
++
++from app.services.file_inspector import inspect_upload
++
++
++def test_heif_real_encode_then_inspect_upload() -> None:
++    import pillow_heif
++
++    image = Image.new("RGB", (19, 13), (24, 150, 210))
++    buffer = io.BytesIO()
++    pillow_heif.from_pillow(image).save(buffer, quality=90)
++    record = inspect_upload(buffer.getvalue(), "probe.heic")
++    assert record.format == "HEIF"
++    assert (record.width_px, record.height_px) == (19, 13)
++    assert record.preview_url.endswith("/preview")
