@@ -1,0 +1,75 @@
+--- PREBUILD2/tests/test_project_process_hardening_rc4_prebuild2_20260906.py
++++ PREBUILD4/tests/test_project_process_hardening_rc4_prebuild2_20260906.py
+@@ -113,10 +113,11 @@
+ def test_build_script_requires_verified_runtime_and_source_gate_before_mutation() -> None:
+     source = (ROOT / "scripts" / "build_zero_trust_candidate.py").read_text("utf-8")
+     assert "--l3-runtime" in source
+-    assert "--source-gate-receipt" in source
+-    assert "validate_source_gate_receipt" in source
++    assert "--source-gate-receipt" not in source
++    assert "run_full_source_gate" in source
++    assert "validate_source_gate_receipt" not in source
+     main = source[source.index("def main()") :]
+-    gate_pos = main.index("validate_source_gate_receipt")
++    gate_pos = main.index("run_full_source_gate")
+     assert gate_pos < main.index("output_dir.mkdir")
+     assert gate_pos < main.index("build_go(")
+ 
+@@ -162,3 +163,57 @@
+     root.mkdir(); runtime.mkdir()
+     with pytest.raises(RuntimeError, match="outside source root"):
+         module.assert_runtime_outside_source(root=root, runtime_dir=runtime)
++
++
++def test_preflight_rejects_shadow_import_outside_verified_runtime(tmp_path: Path) -> None:
++    preflight = _load("imagelab_preflight_shadow_origin", ROOT / "scripts" / "release_capability_preflight.py")
++    runtime = tmp_path / "runtime"
++    runtime.mkdir()
++    (runtime / "alpha_pkg").mkdir()
++    (runtime / "alpha_pkg" / "__init__.py").write_text("SOURCE='verified'\n", "utf-8")
++    shadow = tmp_path / "shadow"
++    shadow.mkdir()
++    (shadow / "alpha_pkg.py").write_text("SOURCE='shadow'\n", "utf-8")
++    old_cwd = Path.cwd()
++    os.chdir(shadow)
++    try:
++        result = preflight.probe_import(
++            "alpha_pkg",
++            extra_runtime=runtime,
++            require_origin_under=runtime,
++        )
++    finally:
++        os.chdir(old_cwd)
++    assert result["status"] == "ready"
++    assert result["origin_verified"] is True
++    assert Path(result["module_file"]).resolve().is_relative_to(runtime.resolve())
++
++
++def test_source_gate_pytest_policy_prioritizes_verified_runtime(tmp_path: Path) -> None:
++    gate = _load("imagelab_source_gate_policy", ROOT / "scripts" / "source_release_gate.py")
++    root = tmp_path / "source"
++    runtime = tmp_path / "runtime"
++    root.mkdir(); runtime.mkdir()
++    env = gate.build_pytest_environment(root=root, runtime_dir=runtime, base_env={"PYTHONPATH": "/legacy"})
++    parts = env["PYTHONPATH"].split(os.pathsep)
++    assert Path(parts[0]).resolve() == runtime.resolve()
++    assert Path(parts[1]).resolve() == root.resolve()
++    command = gate.build_pytest_command(Path("result.xml"))
++    assert command[:4] == [sys.executable, "-P", "-m", "pytest"]
++    assert "--import-mode=importlib" in command
++
++
++def test_source_gate_receipt_rejects_missing_safe_execution_policy(tmp_path: Path) -> None:
++    gate = _load("imagelab_source_gate_policy_receipt", ROOT / "scripts" / "source_release_gate.py")
++    root = tmp_path / "root"
++    runtime = tmp_path / "runtime"
++    root.mkdir(); runtime.mkdir()
++    (root / "app.py").write_text("x=1\n", "utf-8")
++    (runtime / "module.py").write_text("x=1\n", "utf-8")
++    receipt = tmp_path / "receipt.json"
++    gate.write_pass_receipt_for_test(root=root, runtime_dir=runtime, receipt_path=receipt, tests_total=1, tests_passed=1)
++    payload = json.loads(receipt.read_text("utf-8"))
++    payload.pop("execution_policy", None)
++    receipt.write_text(json.dumps(payload), "utf-8")
++    with pytest.raises(RuntimeError, match="execution policy"):
++        gate.validate_source_gate_receipt(receipt_path=receipt, root=root, runtime_dir=runtime)
