@@ -1,0 +1,42 @@
+{
+  "schema": "imagelab.a28-project-harden-rc4-prebuild2-evidence.v1",
+  "created_at_utc": "2026-09-05T20:30:58.183479+00:00",
+  "build_id": "A28-PROJECT-HARDEN-20260905-RC4-PREBUILD2",
+  "product_source_changed_after_freeze": false,
+  "source_tree": {"sha256": "17805176058d7b2e662690a5794d2209c74c4834fcaed4357df38737d57e1c56", "file_count": 212},
+  "source_zip": {"sha256": "31c3696c0efce52bd99e84f1bc5b9f3bf68e71906c8b9dc75c726918c3d7c3ce", "entries": 212, "crc": "PASS"},
+  "selftest": "PASS",
+  "preflight": {"status": "BLOCKED", "missing": ["pillow_heif", "psd_tools"]},
+  "tests": {
+    "schema": "imagelab.rc4-prebuild2-test-summary.v1",
+    "build_id": "A28-PROJECT-HARDEN-20260905-RC4-PREBUILD2",
+    "source_tree_sha256": "17805176058d7b2e662690a5794d2209c74c4834fcaed4357df38737d57e1c56",
+    "total": 416, "passed": 411, "failed": 4, "skipped": 1,
+    "browser": {"total": 33, "passed": 33, "failed": 0, "skipped": 0},
+    "independent_nonbrowser": {"total": 372, "passed": 372, "failed": 0, "skipped": 0},
+    "psd_psb_file": {"total": 10, "passed": 6, "failed": 3, "skipped": 1, "cause": "psd_tools missing", "log": "RC4_PREBUILD2_PSD_PSB_BLOCKER_FINAL.txt"},
+    "heif_e2e": {"total": 1, "passed": 0, "failed": 1, "skipped": 0, "cause": "pillow_heif missing", "log": "RC4_PREBUILD2_HEIF_BLOCKER_FINAL.txt"},
+    "other_failures": 0,
+    "claim": "FAIL_CLOSED_NOT_FULL_PASS"
+  },
+  "f01": {"targeted": "PASS", "halo_rgb_overshoot_max": 5, "ab_delta_p99": 1.0, "glaz_visual": "GREEN_L2_SOURCE_ONLY", "physical_l5": "NOT_EXECUTED"},
+  "codex": {
+    "schema": "imagelab.codex-review-link.v1",
+    "repository": "gollandecd-fabula/imagelab-laranna",
+    "authoritative_pr": 11,
+    "pr_head_sha_at_request": "7db657da93ad04326fe76a24829c856b1fc0af21",
+    "request_comment_id": 5554456930,
+    "request_created_at_utc": "2026-09-05T20:07:20Z",
+    "connector": "ChatGPT Codex Connector",
+    "acknowledgement": "EYES_REACTION",
+    "text_review": "PENDING",
+    "scope_warning": "Codex review on PR #11 is not transferable to unpublished local PREBUILD2 bytes.",
+    "release_authorization": false
+  },
+  "installer": {"built": false, "reason": "Build is prohibited until exact verified runtime + complete zero-failure/zero-skip source gate PASS."},
+  "l3": "NOT_ESTABLISHED",
+  "l4": "NOT_STARTED",
+  "l5": "NOT_STARTED_RC4_PREBUILD2",
+  "release_authorization": false,
+  "status": ["FAIL-CLOSED", "PROTOCOL_IMPLEMENTATION_INCOMPLETE", "MILESTONE_NOT_COMPLETE", "RELEASE_BLOCKED"]
+}
