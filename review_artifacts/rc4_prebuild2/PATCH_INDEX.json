@@ -1,13 +1,58 @@
 {
   "patches": [
-    {"source_path":"app/config.py","patch_file":"app__config.py.patch","sha256":"943c422fdb50df957fc9fb3a46297ce0fbd02911caaa533dfd02ccd35848fb6b","size":530},
-    {"source_path":"scripts/build_zero_trust_candidate.py","patch_file":"scripts__build_zero_trust_candidate.py.patch","sha256":"41f8dee0c5be0ab5fac80c664258f69d014234ebb706f0a9c673ae622d943923","size":2510},
-    {"source_path":"scripts/l3_dependency_intake.py","patch_file":"scripts__l3_dependency_intake.py.patch","sha256":"f885dab56fc0fc568896f0e9009b1c272f993a0508ece361cae3cdf0cc8ae802","size":9032},
-    {"source_path":"scripts/release_capability_preflight.py","patch_file":"scripts__release_capability_preflight.py.patch","sha256":"1d298567f55b0b8e0acb8d4a432a69c03449a852c0641cca4729f50538e3207f","size":4663},
-    {"source_path":"scripts/source_release_gate.py","patch_file":"scripts__source_release_gate.py.patch","sha256":"095712dfd653c0830d5b7f1ad6e8ce8d5918e5b4b83188517048619a1ba97b97","size":8327},
-    {"source_path":"tests/test_heif_runtime_e2e_20260906.py","patch_file":"tests__test_heif_runtime_e2e_20260906.py.patch","sha256":"0bc1897f513797e4f0b6420c59d802487ecacddaa832543695e2316e54a52ce6","size":724},
-    {"source_path":"tests/test_project_process_hardening_rc4_prebuild2_20260906.py","patch_file":"tests__test_project_process_hardening_rc4_prebuild2_20260906.py.patch","sha256":"e52004f177afbd1ad81e26a2c6a7b7308bf7fd23cb8ebad1a8926581c7b14e84","size":7746},
-    {"source_path":"windows_installer/installer/main.go","patch_file":"windows_installer__installer__main.go.patch","sha256":"38755aab60ef77a8ee1400da1828c32a7f6314dd1ab6aed8fc09b476e1a6f09d","size":769},
-    {"source_path":"windows_installer/launcher/main.go","patch_file":"windows_installer__launcher__main.go.patch","sha256":"3397f0b8bb15fee0d8624870fa648aeaad509c3d3ba6833a97514fe09177c147","size":365}
+    {
+      "source_path": "app/config.py",
+      "patch_file": "app__config.py.patch",
+      "sha256": "943c422fdb50df957fc9fb3a46297ce0fbd02911caaa533dfd02ccd35848fb6b",
+      "size": 530
+    },
+    {
+      "source_path": "scripts/build_zero_trust_candidate.py",
+      "patch_file": "scripts__build_zero_trust_candidate.py.patch",
+      "sha256": "41f8dee0c5be0ab5fac80c664258f69d014234ebb706f0a9c673ae622d943923",
+      "size": 2510
+    },
+    {
+      "source_path": "scripts/l3_dependency_intake.py",
+      "patch_file": "scripts__l3_dependency_intake.py.patch",
+      "sha256": "f885dab56fc0fc568896f0e9009b1c272f993a0508ece361cae3cdf0cc8ae802",
+      "size": 9032
+    },
+    {
+      "source_path": "scripts/release_capability_preflight.py",
+      "patch_file": "scripts__release_capability_preflight.py.patch",
+      "sha256": "1d298567f55b0b8e0acb8d4a432a69c03449a852c0641cca4729f50538e3207f",
+      "size": 4663
+    },
+    {
+      "source_path": "scripts/source_release_gate.py",
+      "patch_file": "scripts__source_release_gate.py.patch",
+      "sha256": "095712dfd653c0830d5b7f1ad6e8ce8d5918e5b4b83188517048619a1ba97b97",
+      "size": 8327
+    },
+    {
+      "source_path": "tests/test_heif_runtime_e2e_20260906.py",
+      "patch_file": "tests__test_heif_runtime_e2e_20260906.py.patch",
+      "sha256": "0bc1897f513797e4f0b6420c59d802487ecacddaa832543695e2316e54a52ce6",
+      "size": 724
+    },
+    {
+      "source_path": "tests/test_project_process_hardening_rc4_prebuild2_20260906.py",
+      "patch_file": "tests__test_project_process_hardening_rc4_prebuild2_20260906.py.patch",
+      "sha256": "e52004f177afbd1ad81e26a2c6a7b7308bf7fd23cb8ebad1a8926581c7b14e84",
+      "size": 7746
+    },
+    {
+      "source_path": "windows_installer/installer/main.go",
+      "patch_file": "windows_installer__installer__main.go.patch",
+      "sha256": "38755aab60ef77a8ee1400da1828c32a7f6314dd1ab6aed8fc09b476e1a6f09d",
+      "size": 769
+    },
+    {
+      "source_path": "windows_installer/launcher/main.go",
+      "patch_file": "windows_installer__launcher__main.go.patch",
+      "sha256": "3397f0b8bb15fee0d8624870fa648aeaad509c3d3ba6833a97514fe09177c147",
+      "size": 365
+    }
   ]
 }
