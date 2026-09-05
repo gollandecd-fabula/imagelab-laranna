@@ -1,0 +1,80 @@
++        output_dir = args.output_dir.resolve()
++        output_dir.mkdir(parents=True, exist_ok=True)
++        safe_label = "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in args.label)
++        installer_path = output_dir / f"ImageLab_by_LarannA_{safe_label}_Setup_x64.exe"
++        source_zip = output_dir / f"ImageLab_by_LarannA_{safe_label}_SOURCE.zip"
++        build_dir = temp_root / "build"
++        build_dir.mkdir(parents=True)
++
++        try:
++            _verify_pinned_file(build_root, BUNDLED_PILLOW_HEIF_REL, BUNDLED_PILLOW_HEIF_SHA256, "bundled pillow-heif wheel")
++            _verify_pinned_file(build_root, BUNDLED_PSD_TOOLS_REL, BUNDLED_PSD_TOOLS_SHA256, "bundled psd-tools wheel")
++            _verify_pinned_file(build_root, BUNDLED_STET_EXE_REL, BUNDLED_STET_SHA256, "bundled Stet EPS renderer")
++            _verify_pinned_file(build_root, BUNDLED_STET_LINUX_REL, BUNDLED_STET_LINUX_SHA256, "source-only Linux Stet EPS renderer")
++
++            identity = read_identity(build_root)
++            payload_path = build_root / "windows_installer" / "installer" / "payload.zip"
++            launcher = build_dir / "ImageLab.exe"
++            uninstaller = build_dir / "Uninstall.exe"
++            build_go(build_root / "windows_installer" / "launcher", launcher, gui=True)
++            build_go(build_root / "windows_installer" / "uninstaller", uninstaller, gui=True)
++
++            payload_entries = [("ImageLab.exe", launcher.read_bytes()), ("Uninstall.exe", uninstaller.read_bytes())]
++            payload_entries.extend(
++                (path.relative_to(build_root).as_posix(), path.read_bytes())
++                for path in build_root.rglob("*") if payload_file(path, build_root)
++            )
++            archive(payload_path, payload_entries, {"ImageLab.exe", "Uninstall.exe"})
++            build_go(build_root / "windows_installer" / "installer", installer_path, gui=False)
++
++            source_entries = [
++                (path.relative_to(build_root).as_posix(), path.read_bytes())
++                for path in build_root.rglob("*") if source_file(path, build_root)
++            ]
++            archive(source_zip, source_entries, {"vendor/tools/stet/stet-linux-x64"})
++
++            with zipfile.ZipFile(payload_path) as archive_file:
++                bad_payload = archive_file.testzip()
++                payload_names = set(archive_file.namelist())
++            with zipfile.ZipFile(source_zip) as archive_file:
++                bad_source = archive_file.testzip()
++                source_names = set(archive_file.namelist())
++                source_count = len(source_names)
++
++            required = {
++                "ImageLab.exe", "Uninstall.exe", "bootstrap.py", "requirements.txt",
++                "app/config.py", "app/main.py", "app/release_selftest.py",
++                "app/static/index.html", "app/static/app.js", "app/static/styles.css",
++                "models/manifest.json", "vendor/tools/stet/stet.exe",
++                "vendor/tools/stet/LICENSE-APACHE", "vendor/tools/stet/LICENSE-MIT",
++            }
++            missing = sorted(required - payload_names)
++            source_required = {"vendor/tools/stet/stet-linux-x64"}
++            missing_source = sorted(source_required - source_names)
++            if "vendor/tools/stet/stet-linux-x64" in payload_names:
++                raise RuntimeError("source-only Linux Stet renderer leaked into Windows payload")
++            pe = pe_info(installer_path)
++            if missing or missing_source or bad_payload or bad_source or not all(pe[key] for key in ("mz", "pe", "machine_x64", "pe32_plus")):
++                raise RuntimeError(
++                    f"candidate package verification failed: missing={missing}, missing_source={missing_source}, "
++                    f"payload_bad={bad_payload}, source_bad={bad_source}, pe={pe}"
++                )
++
++            # Catch any mutation that occurred after testing and before/during packaging.
++            assert_build_inputs_unchanged(
++                build_root=build_root,
++                runtime_dir=runtime_dir,
++                approved_source_tree=approved_source_tree,
++                approved_runtime_tree=approved_runtime_tree,
++            )
++
++            candidate = {
++                "schema": 2,
++                "status": "PASS",
++                "identity": identity,
++                "source_gate": gate,
++                "installer": {
++                    "path": str(installer_path), "name": installer_path.name,
++                    "sha256": sha256(installer_path), "size_bytes": installer_path.stat().st_size, "pe": pe,
++                },
++                "payload": {

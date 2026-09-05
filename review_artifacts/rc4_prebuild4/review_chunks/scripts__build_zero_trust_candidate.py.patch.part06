@@ -1,0 +1,21 @@
++                    "path": str(payload_path), "sha256": sha256(payload_path), "entries": len(payload_names),
++                    "crc_ok": bad_payload is None, "missing_required": missing,
++                },
++                "source": {
++                    "path": str(source_zip), "sha256": sha256(source_zip), "entries": source_count,
++                    "crc_ok": bad_source is None, "tested_snapshot_tree": approved_source_tree,
++                },
++            }
++            manifest_path = output_dir / "candidate-manifest.json"
++            manifest_path.write_text(json.dumps(candidate, ensure_ascii=False, indent=2), "utf-8")
++            (output_dir / "installer-sha256.txt").write_text(
++                f"{candidate['installer']['sha256']}  {installer_path.name}\n", "utf-8"
++            )
++            print(json.dumps(candidate, ensure_ascii=False, indent=2))
++            return 0
++        except Exception:
++            cleanup_candidate_outputs(output_dir, args.label)
++            raise
+ 
+ 
+ if __name__ == "__main__":

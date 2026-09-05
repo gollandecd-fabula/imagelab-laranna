@@ -1,0 +1,89 @@
+{
+  "schema": "imagelab.review-chunks.v1",
+  "files": [
+    {
+      "source_patch": "scripts__build_zero_trust_candidate.py.patch",
+      "source_size": 20513,
+      "source_sha256": "4386d2b655e33acbd17e3b7a23fbf4d2b4f25d8399d8e7eeeb6bd1765069b37b",
+      "chunks": [
+        {
+          "file": "scripts__build_zero_trust_candidate.py.patch.part01",
+          "start_line": 1,
+          "end_line": 80,
+          "size": 3643,
+          "sha256": "367722a213c7f998097931d2658611a40ba5e83d17001045fcaac2f755e74f85"
+        },
+        {
+          "file": "scripts__build_zero_trust_candidate.py.patch.part02",
+          "start_line": 81,
+          "end_line": 160,
+          "size": 3109,
+          "sha256": "4c712a54309a0ab8e760ff76169284aaf3349bd1b4a85f023d4ca11fae83c4f3"
+        },
+        {
+          "file": "scripts__build_zero_trust_candidate.py.patch.part03",
+          "start_line": 161,
+          "end_line": 240,
+          "size": 4100,
+          "sha256": "e63939c4e23d9123e175ff021f2e053ebcc489c21cd092d021166a540e159663"
+        },
+        {
+          "file": "scripts__build_zero_trust_candidate.py.patch.part04",
+          "start_line": 241,
+          "end_line": 320,
+          "size": 3942,
+          "sha256": "f2b153490d533d971eb7e350aa95c828de569488ec177272066eb67ab047708d"
+        },
+        {
+          "file": "scripts__build_zero_trust_candidate.py.patch.part05",
+          "start_line": 321,
+          "end_line": 400,
+          "size": 4675,
+          "sha256": "67e167a85a1a223a9f5a5e983554770f931fa074bc01585ee6db8c247b247fa4"
+        },
+        {
+          "file": "scripts__build_zero_trust_candidate.py.patch.part06",
+          "start_line": 401,
+          "end_line": 421,
+          "size": 1044,
+          "sha256": "e918acc1e02d6d74bba22e60aac2860aae05445c9d5b35d0bacf0399ce4fdbb2"
+        }
+      ]
+    },
+    {
+      "source_patch": "release_gate__pytest_collection_manifest.txt.patch",
+      "source_size": 37485,
+      "source_sha256": "f15903307de59ba86dedd38dae96e13abdffa0f46d1de2dc0e224a0bb7a7e6fe",
+      "chunks": [
+        {
+          "file": "release_gate__pytest_collection_manifest.txt.patch.part01",
+          "start_line": 1,
+          "end_line": 110,
+          "size": 8969,
+          "sha256": "b4d312df3fb52cfe1c30311a02249be1faff81b4e9dd5e366e61fe076335f60d"
+        },
+        {
+          "file": "release_gate__pytest_collection_manifest.txt.patch.part02",
+          "start_line": 111,
+          "end_line": 220,
+          "size": 9173,
+          "sha256": "11e507678c986aab7a9e5e6fccbde862e9ef479d36e48b200deb09572b0acfcf"
+        },
+        {
+          "file": "release_gate__pytest_collection_manifest.txt.patch.part03",
+          "start_line": 221,
+          "end_line": 330,
+          "size": 10583,
+          "sha256": "c259748aad741054dd93ce96cd171f6b6ca7c5a85aa16111167719cb263d2d59"
+        },
+        {
+          "file": "release_gate__pytest_collection_manifest.txt.patch.part04",
+          "start_line": 331,
+          "end_line": 426,
+          "size": 8760,
+          "sha256": "e279f4efeed3127aaeeb7d5e3698a2bc0f08db9ea2db8e9142ab770ad29a67e2"
+        }
+      ]
+    }
+  ]
+}

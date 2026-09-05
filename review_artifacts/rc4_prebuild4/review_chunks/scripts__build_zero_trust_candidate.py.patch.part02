@@ -1,0 +1,80 @@
++        shutil.copy2(path, target)
++    after = compute_source_tree(source_root)
++    snapshot = compute_source_tree(snapshot_root)
++    if before != after or snapshot != before:
++        raise RuntimeError(
++            f"source changed while creating tested snapshot: before={before}, after={after}, snapshot={snapshot}"
++        )
++    return snapshot
++
++
++def assert_build_inputs_unchanged(
++    *,
++    build_root: Path,
++    runtime_dir: Path,
++    approved_source_tree: dict[str, object],
++    approved_runtime_tree: dict[str, object],
++) -> None:
++    source_now = compute_source_tree(build_root)
++    runtime_now = compute_runtime_tree(runtime_dir)
++    if source_now != approved_source_tree:
++        raise RuntimeError(f"tested source snapshot changed during build: expected {approved_source_tree}, got {source_now}")
++    if runtime_now != approved_runtime_tree:
++        raise RuntimeError(f"verified runtime changed during build: expected {approved_runtime_tree}, got {runtime_now}")
++
++
++def cleanup_candidate_outputs(output_dir: Path, label: str) -> None:
++    safe_label = "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in label)
++    names = {
++        f"ImageLab_by_LarannA_{safe_label}_Setup_x64.exe",
++        f"ImageLab_by_LarannA_{safe_label}_SOURCE.zip",
++        "candidate-manifest.json",
++        "installer-sha256.txt",
++    }
++    for name in names:
++        path = output_dir / name
++        try:
++            if path.is_file() or path.is_symlink():
++                path.unlink()
++        except OSError:
++            pass
+ 
+ 
+ def pe_info(path: Path) -> dict[str, object]:
+@@ -104,15 +160,28 @@
+         raise RuntimeError(f"Go build failed for {source}:\n{result.stdout}\n{result.stderr}")
+ 
+ 
+-def read_identity() -> dict[str, str]:
+-    if str(ROOT) not in sys.path:
+-        sys.path.insert(0, str(ROOT))
+-    from app.config import settings
+-    return {
+-        "app": str(settings.app_name),
+-        "version": str(settings.app_version),
+-        "build_id": str(settings.build_id),
+-    }
++def read_identity(root: Path = ROOT) -> dict[str, str]:
++    root = root.resolve()
++    code = (
++        "import json; from app.config import settings; "
++        "print(json.dumps({'app':str(settings.app_name),'version':str(settings.app_version),'build_id':str(settings.build_id)}))"
++    )
++    env = dict(os.environ)
++    env["PYTHONPATH"] = str(root)
++    completed = subprocess.run([sys.executable, "-P", "-c", code], cwd=root.parent, env=env, text=True, capture_output=True)
++    if completed.returncode != 0:
++        raise RuntimeError(f"failed to read build identity from tested snapshot: {completed.stderr}")
++    return json.loads(completed.stdout.strip())
++
++
++def _verify_pinned_file(build_root: Path, rel: Path, expected_sha: str, label: str) -> Path:
++    path = build_root / rel
++    if not path.is_file():
++        raise RuntimeError(f"mandatory {label} missing: {path}")
++    actual = sha256(path)
++    if actual != expected_sha:
++        raise RuntimeError(f"{label} SHA-256 mismatch: expected {expected_sha}, got {actual}")
++    return path
+ 
+ 

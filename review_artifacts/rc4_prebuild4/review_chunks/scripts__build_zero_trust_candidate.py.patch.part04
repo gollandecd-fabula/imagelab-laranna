@@ -1,0 +1,80 @@
+-    archive(payload_path, payload_entries, {"ImageLab.exe", "Uninstall.exe"})
+-    build_go(ROOT / "windows_installer" / "installer", installer_path, gui=False)
+-
+-    source_entries = [
+-        (path.relative_to(ROOT).as_posix(), path.read_bytes())
+-        for path in ROOT.rglob("*") if source_file(path)
+-    ]
+-    archive(source_zip, source_entries, {"vendor/tools/stet/stet-linux-x64"})
+-
+-    with zipfile.ZipFile(payload_path) as archive_file:
+-        bad_payload = archive_file.testzip()
+-        payload_names = set(archive_file.namelist())
+-    with zipfile.ZipFile(source_zip) as archive_file:
+-        bad_source = archive_file.testzip()
+-        source_names = set(archive_file.namelist())
+-        source_count = len(source_names)
+-
+-    required = {
+-        "ImageLab.exe", "Uninstall.exe", "bootstrap.py", "requirements.txt",
+-        "app/config.py", "app/main.py", "app/release_selftest.py",
+-        "app/static/index.html", "app/static/app.js", "app/static/styles.css",
+-        "models/manifest.json",
+-        "vendor/tools/stet/stet.exe", "vendor/tools/stet/LICENSE-APACHE",
+-        "vendor/tools/stet/LICENSE-MIT",
+-    }
+-    missing = sorted(required - payload_names)
+-    source_required = {"vendor/tools/stet/stet-linux-x64"}
+-    missing_source = sorted(source_required - source_names)
+-    if "vendor/tools/stet/stet-linux-x64" in payload_names:
+-        raise RuntimeError("source-only Linux Stet renderer leaked into Windows payload")
+-    pe = pe_info(installer_path)
+-    if missing or missing_source or bad_payload or bad_source or not all(pe[key] for key in ("mz", "pe", "machine_x64", "pe32_plus")):
+-        raise RuntimeError(f"candidate package verification failed: missing={missing}, missing_source={missing_source}, payload_bad={bad_payload}, source_bad={bad_source}, pe={pe}")
+-
+-    candidate = {
+-        "schema": 1,
+-        "status": "PASS",
+-        "identity": identity,
+-        "installer": {
+-            "path": str(installer_path),
+-            "name": installer_path.name,
+-            "sha256": sha256(installer_path),
+-            "size_bytes": installer_path.stat().st_size,
+-            "pe": pe,
+-        },
+-        "payload": {
+-            "path": str(payload_path),
+-            "sha256": sha256(payload_path),
+-            "entries": len(payload_names),
+-            "crc_ok": bad_payload is None,
+-            "missing_required": missing,
+-        },
+-        "source": {
+-            "path": str(source_zip),
+-            "sha256": sha256(source_zip),
+-            "entries": source_count,
+-            "crc_ok": bad_source is None,
+-        },
+-    }
+-    manifest_path = output_dir / "candidate-manifest.json"
+-    manifest_path.write_text(json.dumps(candidate, ensure_ascii=False, indent=2), "utf-8")
+-    (output_dir / "installer-sha256.txt").write_text(f"{candidate['installer']['sha256']}  {installer_path.name}\n", "utf-8")
+-    print(json.dumps(candidate, ensure_ascii=False, indent=2))
+-    return 0
++    runtime_dir = args.l3_runtime.resolve()
++    assert_source_test_runtime_capability(extra_runtime=runtime_dir)
++
++    # Build authorization is produced internally. An external PASS JSON is never
++    # accepted as proof that pytest ran. The exact source that passes the gate is
++    # copied to a private snapshot and all build reads use that same snapshot.
++    with tempfile.TemporaryDirectory(prefix="imagelab-build-snapshot-") as tmp:
++        temp_root = Path(tmp)
++        build_root = temp_root / "source"
++        copy_source_snapshot(ROOT, build_root)
++        source_gate_receipt = temp_root / "source-gate-receipt.json"
++        gate = run_full_source_gate(root=build_root, runtime_dir=runtime_dir, receipt_path=source_gate_receipt)
++        approved_source_tree = dict(gate["source_tree"])
++        approved_runtime_tree = dict(gate["runtime_tree"])
++
++        # No candidate/output directory is created before the complete source gate PASS.

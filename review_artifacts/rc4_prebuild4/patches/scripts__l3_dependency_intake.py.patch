@@ -1,0 +1,70 @@
+--- PREBUILD2/scripts/l3_dependency_intake.py
++++ PREBUILD4/scripts/l3_dependency_intake.py
+@@ -5,6 +5,8 @@
+ import json
+ import os
+ import shutil
++import stat
++import tempfile
+ import zipfile
+ from dataclasses import dataclass
+ from email.parser import Parser
+@@ -56,10 +58,26 @@
+ 
+ def _safe_members(zf: zipfile.ZipFile) -> list[zipfile.ZipInfo]:
+     members: list[zipfile.ZipInfo] = []
++    seen: set[str] = set()
+     for info in zf.infolist():
+         name = info.filename.replace("\\", "/")
+-        if name.startswith("/") or ".." in Path(name).parts:
++        parts = Path(name).parts
++        first = parts[0] if parts else ""
++        key = name.rstrip("/")
++        if (
++            not key
++            or name.startswith("/")
++            or first.endswith(":")
++            or ".." in parts
++            or "\x00" in name
++        ):
+             raise RuntimeError(f"unsafe wheel member path: {info.filename}")
++        if key in seen:
++            raise RuntimeError(f"duplicate wheel member path: {info.filename}")
++        seen.add(key)
++        mode = (info.external_attr >> 16) & 0o170000
++        if mode and not (stat.S_ISREG(mode) or stat.S_ISDIR(mode)):
++            raise RuntimeError(f"unsupported wheel member type: {info.filename}")
+         members.append(info)
+     return members
+ 
+@@ -189,11 +207,26 @@
+         req = requirements[key]
+         wheel_receipts.append(_verify_wheel(verified_dir / req.filename, req))
+ 
++    # Never trust the unsigned receipt as the authority for extracted bytes.
++    # Rebuild a clean runtime from the re-verified exact wheels and compare the
++    # actual runtime against those freshly derived bytes.
+     current_tree = compute_runtime_tree(runtime_dir)
+-    expected_tree = receipt.get("runtime_tree") or {}
+-    if current_tree.get("sha256") != expected_tree.get("sha256") or current_tree.get("file_count") != expected_tree.get("file_count"):
+-        raise RuntimeError(
+-            f"verified runtime tree hash mismatch: expected {expected_tree}, got {current_tree}"
++    with tempfile.TemporaryDirectory(prefix="imagelab-runtime-rebuild-") as tmp:
++        fresh_runtime = Path(tmp) / "runtime"
++        build_verified_runtime(
++            wheel_dir=verified_dir,
++            runtime_dir=fresh_runtime,
++            requirements=requirements,
++        )
++        expected_tree = compute_runtime_tree(fresh_runtime)
++    if current_tree != expected_tree:
++        raise RuntimeError(
++            f"verified runtime tree differs from freshly rebuilt pinned wheels: expected {expected_tree}, got {current_tree}"
++        )
++    receipt_tree = receipt.get("runtime_tree") or {}
++    if receipt_tree != expected_tree:
++        raise RuntimeError(
++            f"verified runtime receipt tree does not match freshly rebuilt pinned wheels: expected {expected_tree}, got {receipt_tree}"
+         )
+     return {
+         "schema": receipt["schema"],

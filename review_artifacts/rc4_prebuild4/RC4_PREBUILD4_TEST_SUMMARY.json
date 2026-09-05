@@ -1,0 +1,33 @@
+{
+  "schema": "imagelab.rc4-prebuild4-test-summary.v1",
+  "build_id": "A28-PROJECT-HARDEN-20260906-RC4-PREBUILD4",
+  "source_tree_sha256": "3d5055966628e006b7e21462a427ecef31e1ac3687ba9e47f8249a624e496e71",
+  "total": 423,
+  "passed": 418,
+  "failed": 4,
+  "skipped": 1,
+  "browser": {
+    "total": 33,
+    "passed": 33
+  },
+  "independent_nonbrowser": {
+    "total": 379,
+    "passed": 379
+  },
+  "psd_psb": {
+    "total": 10,
+    "passed": 6,
+    "failed": 3,
+    "skipped": 1,
+    "cause": "psd_tools missing"
+  },
+  "heif_generated_e2e": {
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "cause": "pillow_heif missing"
+  },
+  "heif_external_user_path": "BLOCKED_EXTERNAL_FIXTURE_TRANSPORT",
+  "other_failures": 0,
+  "release_authorization": false
+}

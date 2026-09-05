@@ -1,0 +1,22 @@
+--- PREBUILD2/tests/test_windows_packaging_config.py
++++ PREBUILD4/tests/test_windows_packaging_config.py
+@@ -120,7 +120,8 @@
+     assert 'rel.parts[:2] == ("vendor", "wheels")' in build_source
+     assert "BUNDLED_PILLOW_HEIF_SHA256" in build_source
+     assert "ed1e176cb73d245f58a2134129e8673023aefba89ff566fd65467048e4390ad5" in build_source
+-    assert "bundled pillow-heif wheel SHA-256 mismatch" in build_source
++    assert "BUNDLED_PILLOW_HEIF_REL" in build_source
++    assert "_verify_pinned_file" in build_source
+ 
+     installer = (ROOT / "windows_installer" / "installer" / "main.go").read_text("utf-8")
+     assert 'pillowHeifWheelName' in installer
+@@ -143,7 +144,8 @@
+     build_source = (ROOT / "scripts" / "build_zero_trust_candidate.py").read_text("utf-8")
+     assert "BUNDLED_PSD_TOOLS_SHA256" in build_source
+     assert "da103a304a23842aaddd5b99563a7e4f5660376b713f9fc70f38dba49ab8c20a" in build_source
+-    assert "bundled psd-tools wheel SHA-256 mismatch" in build_source
++    assert "BUNDLED_PSD_TOOLS_REL" in build_source
++    assert "_verify_pinned_file" in build_source
+ 
+     installer = (ROOT / "windows_installer" / "installer" / "main.go").read_text("utf-8")
+     assert "psdToolsWheelName" in installer

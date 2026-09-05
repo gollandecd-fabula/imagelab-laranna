@@ -1,0 +1,93 @@
+--- PREBUILD2/tests/test_project_process_hardening_rc4_prebuild4_20260906.py
++++ PREBUILD4/tests/test_project_process_hardening_rc4_prebuild4_20260906.py
+@@ -0,0 +1,90 @@
++from __future__ import annotations
++
++import hashlib
++import importlib.util
++import json
++import os
++import sys
++import zipfile
++from pathlib import Path
++
++import pytest
++
++ROOT = Path(__file__).resolve().parents[1]
++
++
++def _load(name: str, path: Path):
++    spec = importlib.util.spec_from_file_location(name, path)
++    assert spec is not None and spec.loader is not None
++    module = importlib.util.module_from_spec(spec)
++    sys.modules[name] = module
++    spec.loader.exec_module(module)
++    return module
++
++
++def _fake_wheel(path: Path, *, dist: str, version: str, module_name: str) -> str:
++    dist_info = f"{dist.replace('-', '_')}-{version}.dist-info"
++    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zf:
++        zf.writestr(f"{module_name}/__init__.py", "VALUE='pinned'\n")
++        zf.writestr(f"{dist_info}/METADATA", f"Metadata-Version: 2.1\nName: {dist}\nVersion: {version}\n")
++        zf.writestr(f"{dist_info}/WHEEL", "Wheel-Version: 1.0\nTag: py3-none-any\n")
++    return hashlib.sha256(path.read_bytes()).hexdigest()
++
++
++def test_runtime_validation_rebuilds_from_exact_wheels_not_receipt(tmp_path: Path) -> None:
++    intake = _load("imagelab_prebuild4_intake", ROOT / "scripts" / "l3_dependency_intake.py")
++    wheel = tmp_path / "alpha_pkg-1.2.3-py3-none-any.whl"
++    digest = _fake_wheel(wheel, dist="alpha-pkg", version="1.2.3", module_name="alpha_pkg")
++    expected = {
++        "alpha_pkg": intake.WheelRequirement("alpha_pkg", "alpha-pkg", "1.2.3", wheel.name, digest)
++    }
++    runtime = tmp_path / "runtime"
++    intake.build_verified_runtime(wheel_dir=tmp_path, runtime_dir=runtime, requirements=expected)
++    extracted = runtime / "alpha_pkg" / "__init__.py"
++    extracted.write_text("VALUE='tampered'\n", "utf-8")
++    receipt_path = runtime / intake.RECEIPT_NAME
++    receipt = json.loads(receipt_path.read_text("utf-8"))
++    receipt["runtime_tree"] = intake.compute_runtime_tree(runtime)
++    receipt_path.write_text(json.dumps(receipt), "utf-8")
++    with pytest.raises(RuntimeError, match="pinned wheel|fresh|extracted|runtime tree"):
++        intake.validate_verified_runtime(runtime_dir=runtime, requirements=expected)
++
++
++def test_builder_runs_full_source_gate_internally_and_rejects_external_pass_receipt() -> None:
++    source = (ROOT / "scripts" / "build_zero_trust_candidate.py").read_text("utf-8")
++    assert "run_full_source_gate" in source
++    assert "validate_source_gate_receipt" not in source
++    assert "--source-gate-receipt" not in source
++
++
++def test_source_gate_sanitizes_pytest_and_pins_complete_collection() -> None:
++    gate = _load("imagelab_prebuild4_source_gate", ROOT / "scripts" / "source_release_gate.py")
++    env = gate.build_pytest_environment(
++        root=ROOT,
++        runtime_dir=ROOT.parent / "verified-runtime-probe",
++        base_env={
++            "PYTHONPATH": "/legacy",
++            "PYTEST_ADDOPTS": "-k harmless",
++            "PYTEST_PLUGINS": "evil_plugin",
++        },
++    )
++    assert "PYTEST_ADDOPTS" not in env
++    assert "PYTEST_PLUGINS" not in env
++    assert env["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] == "1"
++    assert hasattr(gate, "load_pinned_collection")
++    assert hasattr(gate, "collect_test_nodeids")
++    command = gate.build_pytest_command(Path("result.xml"))
++    assert "-c" in command
++    assert os.devnull in command
++    assert "tests" in command
++
++
++def test_builder_uses_tested_snapshot_and_has_postbuild_input_check() -> None:
++    source = (ROOT / "scripts" / "build_zero_trust_candidate.py").read_text("utf-8")
++    assert "copy_source_snapshot" in source
++    assert "run_full_source_gate" in source
++    assert "assert_build_inputs_unchanged" in source
++    main = source[source.index("def main()") :]
++    assert main.index("copy_source_snapshot") < main.index("run_full_source_gate")
++    assert main.index("run_full_source_gate") < main.index("output_dir.mkdir")
++    assert main.rindex("assert_build_inputs_unchanged") > main.index("build_go(")
