@@ -41,7 +41,7 @@ This directory is an **external review artifact**, not authoritative ImageLab so
 10. Review whether the local delta has any bypass, TOCTOU, path traversal, hash-scope, receipt-forgery, or build-order weakness.
 
 ## Files in this review artifact
-- `RC4_PREBUILD_TO_PREBUILD2_DIFF.patch` — exact textual unified diff between the two local source ZIPs.
+- `PATCH_INDEX.json` + `patches/*.patch` — byte-bound per-file unified patches for all 9 local changes.
 - `RC4_PREBUILD2_CHANGED_FILES.json` — per-file before/after SHA and size.
 - `A28_RC4_PREBUILD2_EVIDENCE.json` — local fail-closed evidence summary.
 - `RC4_PREBUILD2_TEST_SUMMARY.json` — exact local test classification.
