@@ -12,10 +12,20 @@ This PR must contain only review artifacts. It does not apply PREBUILD4 to the a
 - unresolved runtime deps: `psd_tools`, `pillow_heif`
 - external real-camera HEIC user-path test: BLOCKED (fixture transport unavailable)
 
-- GitHub review payload: `RC4_PREBUILD2_TO_PREBUILD4_COMBINED.patch`
-- combined patch SHA-256: `ea248617d91b334db0cf9016138a10dbcfc71b8bf91640295ccf69f5ac7169c0`
-- combined patch bytes: `85391`
-- composition: exact concatenation of the 11 per-file patches in `PATCH_INDEX.json` order; local per-file patches remain evidence artifacts.
+## GitHub review delivery
+
+`PATCH_INDEX.json` binds all 11 local PREBUILD2→PREBUILD4 patches by exact SHA-256 and byte size.
+
+GitHub delivery is described by `GITHUB_DELIVERY_INDEX.json`:
+- 9 smaller patches are present byte-for-byte under `patches/`;
+- `scripts__build_zero_trust_candidate.py.patch` is present as 6 deterministic chunks under `review_chunks/`;
+- `release_gate__pytest_collection_manifest.txt.patch` is present as 4 deterministic chunks under `review_chunks/`;
+- `REVIEW_CHUNKS.json` binds each chunk by line range, SHA-256 and size;
+- concatenating each chunk sequence reproduces its full patch SHA from `PATCH_INDEX.json`.
+
+The local combined patch is evidence only and is **not uploaded as a monolithic GitHub file** because the review transport truncates large text:
+- combined local SHA-256: `ea248617d91b334db0cf9016138a10dbcfc71b8bf91640295ccf69f5ac7169c0`
+- combined bytes: `85391`
 
 ## Codex PREBUILD2 findings to re-check
 1. P1 unsigned runtime receipt forgery — corrected by fresh rebuild from exact wheel bytes.
