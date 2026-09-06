@@ -23,6 +23,44 @@ def _candidate_root() -> Path:
 
 ROOT = _candidate_root()
 sys.path.insert(0, str(ROOT))
+
+# The reproducibility snapshot intentionally contains only the three exact
+# correction endpoints. image_processing imports unrelated application modules
+# at module import time, but these smoothing regressions do not call those
+# services. Install explicit inert stubs so the exact reconstructed module can
+# be imported without inventing product source bytes.
+import types  # noqa: E402
+
+def _stub_module(name: str, **attrs):
+    mod = types.ModuleType(name)
+    for key, value in attrs.items():
+        setattr(mod, key, value)
+    sys.modules[name] = mod
+    return mod
+
+class _StubSettings:
+    def __getattr__(self, name):
+        return None
+
+class _StubRecord:
+    pass
+
+class _StubUploadValidationError(Exception):
+    pass
+
+class _StubAIModelError(Exception):
+    pass
+
+app_mod = _stub_module('app')
+app_mod.__path__ = [str(ROOT / 'app')]
+ai_mod = _stub_module('app.ai'); ai_mod.__path__ = []
+services_mod = _stub_module('app.services'); services_mod.__path__ = [str(ROOT / 'app' / 'services')]
+_stub_module('app.ai.registry', AIModelError=_StubAIModelError)
+_stub_module('app.ai.runtime', get_ai_engine=lambda *a, **k: None)
+_stub_module('app.config', settings=_StubSettings())
+_stub_module('app.models', AssetRecord=_StubRecord, CheckItem=_StubRecord)
+_stub_module('app.services.file_inspector', UploadValidationError=_StubUploadValidationError, inspect_upload=lambda *a, **k: None)
+
 from app.services import image_processing as ip  # noqa: E402
 
 
