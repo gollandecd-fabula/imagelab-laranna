@@ -1,0 +1,132 @@
+--- R6/app/services/image_processing.py
++++ R7/app/services/image_processing.py
+@@ -437,6 +437,47 @@
+     return np.clip(bounded, 0, 255).astype(np.uint8)
+ 
+ 
++def _post_resize_smoothing(image: Image.Image, strength: int, *, upscale_factor: float = 1.0) -> Image.Image:
++    """Scale-aware anti-pixel smoothing applied after the final resize.
++
++    The operation is intentionally a bounded low-pass blend, not a restoration
++    model: it reduces stair-steps/blockiness while preserving alpha and most
++    edge contrast. Strength 0 is a strict no-op.
++    """
++    value = int(np.clip(int(strength), 0, 100))
++    if value <= 0:
++        return image
++    rgba = _rgba_array(image)
++    alpha = rgba[:, :, 3].copy()
++    rgb = rgba[:, :, :3].copy()
++    t = value / 100.0
++    scale = float(np.clip(upscale_factor, 1.0, 10.0))
++    sigma = 0.28 + t * (0.72 + 0.18 * scale)
++    soft = cv2.GaussianBlur(rgb, (0, 0), sigmaX=sigma, sigmaY=sigma, borderType=cv2.BORDER_REPLICATE)
++
++    gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY).astype(np.float32)
++    gx = cv2.Sobel(gray, cv2.CV_32F, 1, 0, ksize=3)
++    gy = cv2.Sobel(gray, cv2.CV_32F, 0, 1, ksize=3)
++    gradient = cv2.magnitude(gx, gy)
++    reference = max(6.0, float(np.percentile(gradient, 88.0)))
++    edge = np.clip(gradient / reference, 0.0, 1.0)
++    base_weight = float(np.clip(0.08 + 0.62 * t, 0.08, 0.70))
++    weight = (base_weight * (1.0 - 0.28 * edge))[:, :, None]
++    smoothed = np.clip(rgb.astype(np.float32) * (1.0 - weight) + soft.astype(np.float32) * weight, 0, 255).astype(np.uint8)
++    return _apply_rgb_alpha(smoothed, alpha)
++
++
++def _automatic_smoothing_strength(source: Image.Image, result: Image.Image, params: dict[str, Any]) -> int:
++    """Choose conservative smoothing for quick/automatic Enhance."""
++    preset = str(params.get("preset", "standard")).strip().lower()
++    denoise = _integer(params, "denoise", 0, 0, 100)
++    scale = max(result.width / max(1, source.width), result.height / max(1, source.height), 1.0)
++    preset_base = {"soft": 8.0, "standard": 12.0, "detail": 18.0}.get(preset, 12.0)
++    scale_term = min(40.0, 12.0 * math.log2(scale)) if scale > 1.0 else 0.0
++    denoise_term = min(18.0, denoise * 0.18)
++    return int(round(float(np.clip(preset_base + scale_term + denoise_term, 0.0, 78.0))))
++
++
+ def _enhance(image: Image.Image, params: dict[str, Any]) -> Image.Image:
+     preset = str(params.get("preset", "standard")).strip().lower()
+     brightness = _number(params, "brightness", 1.0, 0.2, 2.5)
+--- R6/app/services/m2a_processing.py
++++ R7/app/services/m2a_processing.py
+@@ -223,11 +223,24 @@
+ 
+         result = legacy._enhance(image, params)
+         result, result_ppi = geometry_m2a(result, ppi, recorded)
++        upscale_factor = max(result.width / max(1, image.width), result.height / max(1, image.height), 1.0)
++        preset = str(params.get("preset", "standard")).strip().lower()
++        if preset == "custom":
++            smoothing = legacy._integer(params, "smoothing", 0, 0, 100)
++            smoothing_mode = "manual"
++        else:
++            smoothing = legacy._automatic_smoothing_strength(image, result, params) if legacy._bool(params, "smoothing_auto", True) else 0
++            smoothing_mode = "automatic"
++        if smoothing:
++            result = legacy._post_resize_smoothing(result, smoothing, upscale_factor=upscale_factor)
++        recorded["smoothing_mode"] = smoothing_mode
++        recorded["smoothing_effective"] = smoothing
++        recorded["smoothing_upscale_factor"] = round(float(upscale_factor), 4)
+         recorded["physical_size_unit"] = "mm"
+         recorded["ppi_range"] = [100, 1000]
+         ai = {
+             "improve_advisory": advisory,
+-            "deterministic_postprocess": "edge_preserving_denoise/lab_local_contrast/multiscale_detail/brightness_guard",
++            "deterministic_postprocess": "edge_preserving_denoise/lab_local_contrast/multiscale_detail/brightness_guard/post_resize_smoothing",
+         }
+         return legacy._save_result(result, result_ppi, asset, normalized, recorded, ai=ai)
+ 
+--- R6/app/static/app.js
++++ R7/app/static/app.js
+@@ -517,7 +517,7 @@
+ $('#clearButton').addEventListener('click', async () => { if (await divertCheckOnly('Очистка проекта')) return; if (!confirm('Удалить все файлы проекта TS-001?')) return; setBusy(true); try { state.project = await api(`/api/projects/${PROJECT_ID}/assets`,{method:'DELETE'}); state.selectedId = null; renderProject(); toast('Проект очищен'); } catch(error){toast(error.message,true);} finally{setBusy(false);} });
+ 
+ $$('[data-improve-mode]').forEach((button)=>button.addEventListener('click',()=>{ const manual=button.dataset.improveMode==='manual'; $$('[data-improve-mode]').forEach((item)=>item.classList.toggle('active',item===button)); $('#improveManual').classList.toggle('compact-hidden',!manual); const preset=$('#enhancePreset'); if(manual){ preset.value='custom'; } else if(preset.value==='custom'){ preset.value='detail'; } }));
+-$('#applyEnhance').addEventListener('click',()=>processSelected('enhance',{preset:$('#enhancePreset').value,brightness:1,contrast:number('#enhanceContrast',100)/100,sharpness:number('#enhanceSharpness',100)/100,denoise:number('#enhanceDenoise',0),ai_auto:$('#improveAiAuto').checked,...improvePhysicalParams()},'Улучшение применено'));
++$('#applyEnhance').addEventListener('click',()=>{const preset=$('#enhancePreset').value,p={preset,brightness:1,contrast:number('#enhanceContrast',100)/100,sharpness:number('#enhanceSharpness',100)/100,denoise:number('#enhanceDenoise',0),ai_auto:$('#improveAiAuto').checked,...improvePhysicalParams()};if(preset==='custom')p.smoothing=number('#enhanceSmoothing',0);else p.smoothing_auto=true;processSelected('enhance',p,'Улучшение применено');});
+ $('#applyReconstruct').addEventListener('click',()=>processSelected('reconstruct',{scale:number('#reconstructScale',2),detail:number('#reconstructDetail',50),denoise:number('#enhanceDenoise',20),ai_auto:$('#improveAiAuto').checked,...improvePhysicalParams()},'Реконструкция завершена'));
+ 
+ $$('[data-extract-mode]').forEach((button)=>button.addEventListener('click',()=>{ state.extractMode=button.dataset.extractMode; $$('[data-extract-mode]').forEach((item)=>item.classList.toggle('active',item===button)); $('#extractRegionControls').classList.toggle('compact-hidden',state.extractMode!=='region'); }));
+--- R6/app/static/index.html
++++ R7/app/static/index.html
+@@ -55,6 +55,7 @@
+           <div id="improveManual" class="advanced-group compact-hidden">
+             <label class="range-row"><span>Контраст</span><input id="enhanceContrast" type="range" min="20" max="250" value="110"><output data-for="enhanceContrast">110%</output></label>
+             <label class="range-row"><span>Резкость</span><input id="enhanceSharpness" type="range" min="0" max="400" value="130"><output data-for="enhanceSharpness">130%</output></label>
++            <label class="range-row"><span>Сглаживание</span><input id="enhanceSmoothing" type="range" min="0" max="100" value="0"><output data-for="enhanceSmoothing">0%</output></label>
+           </div>
+           <label class="range-row"><span>Шумоподавление</span><input id="enhanceDenoise" type="range" min="0" max="100" value="20"><output data-for="enhanceDenoise">20%</output></label>
+           <div class="divider"></div>
+--- R6/app/static/m2a-ui-parts/09-preview-controller.js.part
++++ R7/app/static/m2a-ui-parts/09-preview-controller.js.part
+@@ -60,7 +60,7 @@
+         splitControl=document.createElement('div');splitControl.className='m2a-split-control';
+         splitControl.innerHTML='<span class="m2a-before-label">Было</span><span class="m2a-after-label">Стало</span><i class="m2a-split-divider"></i>';
+         const divider=splitControl.querySelector('.m2a-split-divider'),setRatio=v=>{M.splitRatio=clamp(+v,0,1);M.syncSplitGeometry&&M.syncSplitGeometry();},setClientX=x=>{const r=plane.getBoundingClientRect();setRatio((x-r.left)/(r.width||1));};
+-        splitControl.style.cssText='inset:0;pointer-events:none';divider.style.cssText+='pointer-events:auto;cursor:ew-resize;border:0 solid transparent;border-width:0 5px;box-sizing:content-box';
++        splitControl.style.cssText='inset:0;pointer-events:none';divider.style.cssText+='pointer-events:auto;cursor:ew-resize;border:0 solid transparent;border-width:0 5px;box-sizing:content-box;transform:translateX(-6px)';
+         const syncGeometry=()=>{const s=surface.getBoundingClientRect(),r=plane.getBoundingClientRect(),v=M.splitRatio??.5;resultImage.style.clipPath=`inset(0 0 0 ${100*v}%)`;divider.style.left=`${r.left-s.left+r.width*v}px`;};
+         const stop=e=>divider.hasPointerCapture(e.pointerId)&&divider.releasePointerCapture(e.pointerId);
+         divider.onpointerdown=e=>{e.preventDefault();e.stopPropagation();divider.setPointerCapture(e.pointerId);setClientX(e.clientX);};divider.onpointermove=e=>{if(!divider.hasPointerCapture(e.pointerId))return;setClientX(e.clientX);};divider.onpointerup=stop;divider.onpointercancel=stop;M.syncSplitGeometry=syncGeometry;syncGeometry();
+--- R6/app/static/m2a-ui-parts/13-m2a-closure-fixes.js.part
++++ R7/app/static/m2a-ui-parts/13-m2a-closure-fixes.js.part
+@@ -222,8 +222,9 @@
+ 
+   replaceButton('applyEnhance', () => {
+     try {
++      const preset = byId('enhancePreset')?.value || 'standard';
+       const params = {
+-        preset: byId('enhancePreset')?.value || 'standard',
++        preset,
+         brightness: 1,
+         contrast: numberField('enhanceContrast', 100) / 100,
+         sharpness: numberField('enhanceSharpness', 100) / 100,
+@@ -231,6 +232,8 @@
+         ai_auto: Boolean(byId('improveAiAuto')?.checked),
+         ...window.improvePhysicalParams(),
+       };
++      if (preset === 'custom') params.smoothing = numberField('enhanceSmoothing', 0);
++      else params.smoothing_auto = true;
+       processSelected('enhance', params, 'Улучшение применено');
+     } catch (error) {
+       toast(error.message, true);
