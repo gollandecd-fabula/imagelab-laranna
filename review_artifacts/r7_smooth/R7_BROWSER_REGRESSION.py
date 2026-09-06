@@ -22,7 +22,7 @@ root = candidate_root / 'app' / 'static'
 
 def synthetic_fixture_bytes() -> tuple[bytes, bytes]:
     # Deterministic, self-contained browser-only fixture. It is not claimed to
-    # reproduce the historical /mnt/data PNGs; the regression checks UI routing
+    # reproduce any historical external PNG fixtures; the regression checks UI routing
     # and divider geometry, not image-quality metrics.
     w, h = 192, 144
     image = Image.new('RGBA', (w, h))
