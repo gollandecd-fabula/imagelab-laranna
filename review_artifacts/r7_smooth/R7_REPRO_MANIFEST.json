@@ -1,0 +1,98 @@
+{
+  "evidence_ceiling": "L2_REPRODUCIBLE_REVIEW_ARTIFACTS; existing packaged product evidence remains separate L3; physical L4/L5 not inferred.",
+  "final_endpoints": [
+    {
+      "path": "app/services/image_processing.py",
+      "sha256": "b965c65d892861dfec173f25cebf9558607fefecb791b828ce5ae2e39489336c",
+      "size": 110801
+    },
+    {
+      "path": "app/static/app.js",
+      "sha256": "d0858947325855b028957d97375bf010197aa8d369bd0ebde5a0bb2d791d5c2c",
+      "size": 49641
+    },
+    {
+      "path": "app/static/m2a-ui-parts/13-m2a-closure-fixes.js.part",
+      "sha256": "f10079101fe7eca1930d167f9f9eeec8ed0c7eaab0ec22f9d81d4ffa3d4af5d9",
+      "size": 25461
+    }
+  ],
+  "final_static": [
+    {"path":"app/static/app.js","sha256":"d0858947325855b028957d97375bf010197aa8d369bd0ebde5a0bb2d791d5c2c","size":49641},
+    {"path":"app/static/index.html","sha256":"2d3a38eed2890633834975e446868b6046ce2c6b5fe0e86bfcfff631217c4088","size":31582},
+    {"path":"app/static/m1-hardening.css","sha256":"d873558c474c1205de4715efa66de6a06b84ded6cb1b058b5efde2a8155f037e","size":2132},
+    {"path":"app/static/m2a-completeness.css","sha256":"34a76cf1052d1ca721443accc48eb4f2173ca48378a51ea412ac161de46b1baf","size":8285},
+    {"path":"app/static/m2a-ui-parts/00-project-bootstrap-route.js.part","sha256":"822c94d407e062cf481316567bb69b551a593e757e4f0992bff6f120dd383c0a","size":455},
+    {"path":"app/static/m2a-ui-parts/01.js.part","sha256":"69e9902ddfc798f528a26d540637caa3fe0f244871f54e1435d53bd6d617cea7","size":7025},
+    {"path":"app/static/m2a-ui-parts/02.js.part","sha256":"10c51b714bff23fa4e17d6515ad59692dd45c18464fdf1ae964881f1f0b6f3a0","size":6323},
+    {"path":"app/static/m2a-ui-parts/03a.js.part","sha256":"12bc1de9cfaca46bc273adcae9bc937154789ef79ce8ca86cce839629083a9c1","size":3575},
+    {"path":"app/static/m2a-ui-parts/03b.js.part","sha256":"d5985012742fa5c23845aac3965f6cb0f8eb740bb534f81c2029422973906593","size":2427},
+    {"path":"app/static/m2a-ui-parts/04a.js.part","sha256":"db5ab9f2f5e2a7cbecd34f50db9ee5bbb05e42c17c1a96f35eb2b5934d16aba0","size":2311},
+    {"path":"app/static/m2a-ui-parts/04b.js.part","sha256":"5e3925fcb99eef387be60d200aa532a466ed20006b160d8a51d2825b156eae22","size":4608},
+    {"path":"app/static/m2a-ui-parts/05a.js.part","sha256":"a7c97d3a8d8c6160c5dad980f2d107f3a67bffab9b7b9d66c2736bb3d41b1082","size":3312},
+    {"path":"app/static/m2a-ui-parts/05b.js.part","sha256":"c3442b6fc65b5890fb02013aa25745dfac64cfec57783e49869df1cf3eb39e92","size":2577},
+    {"path":"app/static/m2a-ui-parts/06a.js.part","sha256":"1e21df24eb0de735371e8f3182370a5a6ab7b5dc602ec5b3b1c69660b5abb0d4","size":3489},
+    {"path":"app/static/m2a-ui-parts/07-scope-lock.js.part","sha256":"5080ae55e48067201a968168d70e859821572c9ae1edc7e657e838462b40e8d9","size":4859},
+    {"path":"app/static/m2a-ui-parts/08-workspace-batch.js.part","sha256":"d01c341efaad486e8d694653d0d15e3515738c2619ac16795de8c35d585f6daa","size":21356},
+    {"path":"app/static/m2a-ui-parts/09-preview-controller.js.part","sha256":"e9bf5e4691d7416671f8e21306470167a557ba8aa14cd5b013281176c6b6b8b9","size":23766},
+    {"path":"app/static/m2a-ui-parts/10-direct-controls.js.part","sha256":"ea7dad06abc2fbf7915dda4b0c99a145ca33f153ccb359159204d150024c8d89","size":2526},
+    {"path":"app/static/m2a-ui-parts/11-rtm-hardening.js.part","sha256":"bd3b1d6efb57032c4f10df113b3733f9e6c3ac1727ca8746dd63f1b3058954c4","size":7405},
+    {"path":"app/static/m2a-ui-parts/12-canvas-controller.js.part","sha256":"31570e25d5970fa872489c2a14a326d98116f6dbb4095d260cd85118931ccd2c","size":7308},
+    {"path":"app/static/m2a-ui-parts/13-m2a-closure-fixes.js.part","sha256":"f10079101fe7eca1930d167f9f9eeec8ed0c7eaab0ec22f9d81d4ffa3d4af5d9","size":25461},
+    {"path":"app/static/m2a-ui-parts/14-project-switch-flush.js.part","sha256":"2f4045aae74abc4a6cc686db6944c8c39d2f10f3ec5b16ef33df9b9ad91422c4","size":1819},
+    {"path":"app/static/m2a-ui-parts/15-m2a-runtime-race-guard.js.part","sha256":"8372a306bea316c2e45f748a2aa7b56d8744bc5fd83d29639f890be9954653f4","size":5731},
+    {"path":"app/static/m2a-ui-parts/16-project-bootstrap-restore.js.part","sha256":"926fe6c4d752287a2932d35546f4325381ffa683486b5d5e2a8704518533aa41","size":1306},
+    {"path":"app/static/m2a-ui-parts/17-accessible-info-drawer.js.part","sha256":"4200cf23760cdf92b470a66dd11bcd05e43954e802c1f945bb44ce050d5f2ebf","size":2397},
+    {"path":"app/static/m2a-ui-parts/18-preset-policy-restore.js.part","sha256":"b5a544340e60451bc49fe045b25fd9be8b1ec894887caa71784185f000ca5052","size":1861},
+    {"path":"app/static/m2a-ui-parts/19-canonical-v144-scope.js.part","sha256":"4e70ca19945408824c043df7e9df8192f5c5ec1036474e2cf2117a3f01b48a7e","size":11541},
+    {"path":"app/static/m2a-ui-parts/20-accessible-info-focus-guard.js.part","sha256":"defa518117884a919bc165233551f994cba6702d39c467a4ff404168a62be9ba","size":1034},
+    {"path":"app/static/m2a-ui-parts/20-f09-export-contract.js.part","sha256":"0bcaae1a92c5041bf1b6ffd6eacdf2eeb5335c03d44405251fd9cc47badb9cdc","size":3987},
+    {"path":"app/static/m2a-ui-parts/21-preset-policy-draft.js.part","sha256":"9d5efed27eaecde1dc4ca0b2c8eb1250932da9b5d8e102023f3600292d6f9ae3","size":2198},
+    {"path":"app/static/m2a-ui-parts/22-f01-improve-contract.js.part","sha256":"922e05eb0763aceb788fcfb8434d385f3ab27f62efca752c796414c2c464d0cc","size":2168},
+    {"path":"app/static/m2a-ui.css","sha256":"2396902ac7d4a608784a2013fe7a7eec6af069f4b87ef4fba89db0a8f9ecea14","size":9539},
+    {"path":"app/static/styles.css","sha256":"41f755bfbe97f2e5dd81a84eb3b367b3f25e2d426dac29d8468e43b6a3f7f554","size":16892}
+  ],
+  "patch": {
+    "changed_paths": ["app/services/image_processing.py","app/static/app.js","app/static/m2a-ui-parts/13-m2a-closure-fixes.js.part"],
+    "path": "R7_POST_CODEX_FIX.patch",
+    "sha256": "09dafafce30ee75c8dd00a2759fe4b3896a47e09ac69106b716717468820b56f"
+  },
+  "pre_endpoints": [
+    {"path":"app/services/image_processing.py","sha256":"6695f598e500daf08eeb6e0cac4e60da235b6eb9b151f4709def57cc2c95d6fd","size":108449},
+    {"path":"app/static/app.js","sha256":"e417104b39bb9b5ae91b36917a6be98c99af1a1addb474e4de6b03eadb94cd1e","size":49212},
+    {"path":"app/static/m2a-ui-parts/13-m2a-closure-fixes.js.part","sha256":"00b1a37b2ffced77c7f653ac1da885ea2309d2028cd309f8b8c4c48fa95d5031","size":25321}
+  ],
+  "product_installer_invariant": {"bytes":31847936,"sha256":"daf2bb55bf09dc614f8b17e7a064e6b2b436acd5e2d77eefc450f38530497fb6"},
+  "schema": "imagelab.r7.review-repro.v3",
+  "snapshot": {
+    "archive_bytes": 82868,
+    "archive_format": "tar.xz encoded as repository Base64 chunks",
+    "archive_parts": ["R7_REPRO_SNAPSHOT.part01.b64","R7_REPRO_SNAPSHOT.part02.b64","R7_REPRO_SNAPSHOT.part03.b64","R7_REPRO_SNAPSHOT.part04.b64","R7_REPRO_SNAPSHOT.part05.b64","R7_REPRO_SNAPSHOT.part06.b64","R7_REPRO_SNAPSHOT.part07.b64","R7_REPRO_SNAPSHOT.part08.b64","R7_REPRO_SNAPSHOT.part09.b64","R7_REPRO_SNAPSHOT.part10.b64","R7_REPRO_SNAPSHOT.part11.b64","R7_REPRO_SNAPSHOT.part12.b64"],
+    "archive_sha256": "3f8e770875521ad73ef224fbdd161f9fd996e789f6635380f069b69d4b950d01"
+  },
+  "source_provenance": {
+    "final_payload_zip_sha256": "4d55ea0302c042feadfdcd583e97c6f370b1bc20dfc73424c0e38a3fc11ef4c6",
+    "payload_crc": "PASS",
+    "payload_diff_paths": ["app/services/image_processing.py","app/static/app.js","app/static/m2a-ui-parts/13-m2a-closure-fixes.js.part"],
+    "payload_file_count_each": 99,
+    "pre_payload_zip_sha256": "acac42f36aabbaae78ff91cf7ebbc8782456fd3a325c9765dfe081a8ecd623fc"
+  },
+  "support_files": [
+    {"path":"R7_REPRO_SNAPSHOT.part01.b64","sha256":"b67acff45225c440420280c59ceb34b336dc025772a1d68afde8c57478eba1f5","size":10000},
+    {"path":"R7_REPRO_SNAPSHOT.part02.b64","sha256":"8d0337dfd6bd28049b85ad49e526090084bc21176ce58d23ae39aa1862a6120e","size":10000},
+    {"path":"R7_REPRO_SNAPSHOT.part03.b64","sha256":"5780606a4f48dba3a11558ef1670e18a9e44b96b9fcd824bf2bb390da4d27a49","size":10000},
+    {"path":"R7_REPRO_SNAPSHOT.part04.b64","sha256":"9111b4408f2495b0c65aaba3735a13a6732ecd5198e7cc6068aaf1aee747736f","size":10000},
+    {"path":"R7_REPRO_SNAPSHOT.part05.b64","sha256":"8534147333ea9a9e7756c09f70ad10e16348d2cf7d57791afb29c1aa9805ce48","size":10000},
+    {"path":"R7_REPRO_SNAPSHOT.part06.b64","sha256":"e869c85877ce8cb64b6ddd3f152c3ec4d4d32eaa7087857d4dc49adace205019","size":10000},
+    {"path":"R7_REPRO_SNAPSHOT.part07.b64","sha256":"6f3fcaa30c02cb0ec6a690ee15cfb4f6d512b2c4e86b6216006ff62ac314722e","size":10000},
+    {"path":"R7_REPRO_SNAPSHOT.part08.b64","sha256":"91a7db52053a281f25d74ffe0dd212e5f48b2cb841bc6a1a7767bed3977fd40b","size":10000},
+    {"path":"R7_REPRO_SNAPSHOT.part09.b64","sha256":"9ec6ab6b1c4a50f5509da71e8194475ca6cc45dbd6d109c79a42426f1ad8c33a","size":10000},
+    {"path":"R7_REPRO_SNAPSHOT.part10.b64","sha256":"9edf6cb6ee2b2eddcd1face9efeef9736957764b2dd609d3c15179d4d33972ab","size":10000},
+    {"path":"R7_REPRO_SNAPSHOT.part11.b64","sha256":"f7f66824f999d470795f30c5cf326baec25d0726bbdff3e7318f7f881322d1ac","size":10000},
+    {"path":"R7_REPRO_SNAPSHOT.part12.b64","sha256":"22f57873d32f1f70ba9a087b1271ef46ea4914893ebca1f9c3bcd8a05ebe8969","size":492},
+    {"path":"R7_POST_CODEX_FIX.patch","sha256":"09dafafce30ee75c8dd00a2759fe4b3896a47e09ac69106b716717468820b56f","size":14129},
+    {"path":"R7_REGRESSION_TESTS.py","sha256":"a1447bf8999cc0f835fd2edd7a859700999c656a336b7d3556f89343446bf54d","size":7305},
+    {"path":"R7_BROWSER_REGRESSION.py","sha256":"4b266c99f9bbb87d7a7dc0ac28d51b6c131a7663f7f34d14a14a86561e2c4ed1","size":9551},
+    {"path":"R7_REPRO_RUNNER.py","sha256":"3b4c2edf84ff44c90a05eb8a7620643c3aa6c82cfec9680272a90789449f14b2","size":5788}
+  ]
+}
