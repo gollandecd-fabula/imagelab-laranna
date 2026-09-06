@@ -92,7 +92,7 @@
     {"path":"R7_REPRO_SNAPSHOT.part12.b64","sha256":"22f57873d32f1f70ba9a087b1271ef46ea4914893ebca1f9c3bcd8a05ebe8969","size":492},
     {"path":"R7_POST_CODEX_FIX.patch","sha256":"09dafafce30ee75c8dd00a2759fe4b3896a47e09ac69106b716717468820b56f","size":14129},
     {"path":"R7_REGRESSION_TESTS.py","sha256":"a1447bf8999cc0f835fd2edd7a859700999c656a336b7d3556f89343446bf54d","size":7305},
-    {"path":"R7_BROWSER_REGRESSION.py","sha256":"4b266c99f9bbb87d7a7dc0ac28d51b6c131a7663f7f34d14a14a86561e2c4ed1","size":9551},
+    {"path":"R7_BROWSER_REGRESSION.py","sha256":"b25d45eed5bb5819e716b97c4fdbdd8d4f03c28101a61b5a071aa8c0d4720e78","size":9558},
     {"path":"R7_REPRO_RUNNER.py","sha256":"3b4c2edf84ff44c90a05eb8a7620643c3aa6c82cfec9680272a90789449f14b2","size":5788}
   ]
 }
