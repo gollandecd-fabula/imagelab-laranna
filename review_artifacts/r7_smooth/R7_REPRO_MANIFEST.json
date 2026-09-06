@@ -1,21 +1,23 @@
 {
+  "backend_route": {
+    "integration_test_file": "R7_BACKEND_REGRESSION_TESTS.py",
+    "integration_tests": ["manual_73","manual_zero_no_call","automatic_4x"],
+    "path": "app/services/m2a_processing.py",
+    "sha256": "00d3141f75adbd385c4a6a0b13eb329ababfa5d9019a97ee8b4b98df21c736e0",
+    "size": 13538,
+    "support_file": "R7_BACKEND_ROUTE.py"
+  },
   "evidence_ceiling": "L2_REPRODUCIBLE_REVIEW_ARTIFACTS; existing packaged product evidence remains separate L3; physical L4/L5 not inferred.",
+  "final_candidate": [
+    {"path":"app/services/image_processing.py","sha256":"b965c65d892861dfec173f25cebf9558607fefecb791b828ce5ae2e39489336c","size":110801},
+    {"path":"app/services/m2a_processing.py","sha256":"00d3141f75adbd385c4a6a0b13eb329ababfa5d9019a97ee8b4b98df21c736e0","size":13538},
+    {"path":"app/static/app.js","sha256":"d0858947325855b028957d97375bf010197aa8d369bd0ebde5a0bb2d791d5c2c","size":49641},
+    {"path":"app/static/m2a-ui-parts/13-m2a-closure-fixes.js.part","sha256":"f10079101fe7eca1930d167f9f9eeec8ed0c7eaab0ec22f9d81d4ffa3d4af5d9","size":25461}
+  ],
   "final_endpoints": [
-    {
-      "path": "app/services/image_processing.py",
-      "sha256": "b965c65d892861dfec173f25cebf9558607fefecb791b828ce5ae2e39489336c",
-      "size": 110801
-    },
-    {
-      "path": "app/static/app.js",
-      "sha256": "d0858947325855b028957d97375bf010197aa8d369bd0ebde5a0bb2d791d5c2c",
-      "size": 49641
-    },
-    {
-      "path": "app/static/m2a-ui-parts/13-m2a-closure-fixes.js.part",
-      "sha256": "f10079101fe7eca1930d167f9f9eeec8ed0c7eaab0ec22f9d81d4ffa3d4af5d9",
-      "size": 25461
-    }
+    {"path":"app/services/image_processing.py","sha256":"b965c65d892861dfec173f25cebf9558607fefecb791b828ce5ae2e39489336c","size":110801},
+    {"path":"app/static/app.js","sha256":"d0858947325855b028957d97375bf010197aa8d369bd0ebde5a0bb2d791d5c2c","size":49641},
+    {"path":"app/static/m2a-ui-parts/13-m2a-closure-fixes.js.part","sha256":"f10079101fe7eca1930d167f9f9eeec8ed0c7eaab0ec22f9d81d4ffa3d4af5d9","size":25461}
   ],
   "final_static": [
     {"path":"app/static/app.js","sha256":"d0858947325855b028957d97375bf010197aa8d369bd0ebde5a0bb2d791d5c2c","size":49641},
@@ -52,47 +54,36 @@
     {"path":"app/static/m2a-ui.css","sha256":"2396902ac7d4a608784a2013fe7a7eec6af069f4b87ef4fba89db0a8f9ecea14","size":9539},
     {"path":"app/static/styles.css","sha256":"41f755bfbe97f2e5dd81a84eb3b367b3f25e2d426dac29d8468e43b6a3f7f554","size":16892}
   ],
-  "patch": {
-    "changed_paths": ["app/services/image_processing.py","app/static/app.js","app/static/m2a-ui-parts/13-m2a-closure-fixes.js.part"],
-    "path": "R7_POST_CODEX_FIX.patch",
-    "sha256": "09dafafce30ee75c8dd00a2759fe4b3896a47e09ac69106b716717468820b56f"
-  },
+  "patch": {"changed_paths":["app/services/image_processing.py","app/static/app.js","app/static/m2a-ui-parts/13-m2a-closure-fixes.js.part"],"path":"R7_POST_CODEX_FIX.patch","sha256":"09dafafce30ee75c8dd00a2759fe4b3896a47e09ac69106b716717468820b56f"},
+  "pre_candidate": [
+    {"path":"app/services/image_processing.py","sha256":"6695f598e500daf08eeb6e0cac4e60da235b6eb9b151f4709def57cc2c95d6fd","size":108449},
+    {"path":"app/services/m2a_processing.py","sha256":"00d3141f75adbd385c4a6a0b13eb329ababfa5d9019a97ee8b4b98df21c736e0","size":13538},
+    {"path":"app/static/app.js","sha256":"e417104b39bb9b5ae91b36917a6be98c99af1a1addb474e4de6b03eadb94cd1e","size":49212},
+    {"path":"app/static/m2a-ui-parts/13-m2a-closure-fixes.js.part","sha256":"00b1a37b2ffced77c7f653ac1da885ea2309d2028cd309f8b8c4c48fa95d5031","size":25321}
+  ],
   "pre_endpoints": [
     {"path":"app/services/image_processing.py","sha256":"6695f598e500daf08eeb6e0cac4e60da235b6eb9b151f4709def57cc2c95d6fd","size":108449},
     {"path":"app/static/app.js","sha256":"e417104b39bb9b5ae91b36917a6be98c99af1a1addb474e4de6b03eadb94cd1e","size":49212},
     {"path":"app/static/m2a-ui-parts/13-m2a-closure-fixes.js.part","sha256":"00b1a37b2ffced77c7f653ac1da885ea2309d2028cd309f8b8c4c48fa95d5031","size":25321}
   ],
-  "product_installer_invariant": {"bytes":31847936,"sha256":"daf2bb55bf09dc614f8b17e7a064e6b2b436acd5e2d77eefc450f38530497fb6"},
-  "schema": "imagelab.r7.review-repro.v3",
+  "product_installer_invariant":{"bytes":31847936,"sha256":"daf2bb55bf09dc614f8b17e7a064e6b2b436acd5e2d77eefc450f38530497fb6"},
+  "schema":"imagelab.r7.review-repro.v4",
   "snapshot": {
-    "archive_bytes": 82868,
-    "archive_format": "tar.xz encoded as repository Base64 chunks",
-    "archive_parts": ["R7_REPRO_SNAPSHOT.part01.b64","R7_REPRO_SNAPSHOT.part02.b64","R7_REPRO_SNAPSHOT.part03.b64","R7_REPRO_SNAPSHOT.part04.b64","R7_REPRO_SNAPSHOT.part05.b64","R7_REPRO_SNAPSHOT.part06.b64","R7_REPRO_SNAPSHOT.part07.b64","R7_REPRO_SNAPSHOT.part08.b64","R7_REPRO_SNAPSHOT.part09.b64","R7_REPRO_SNAPSHOT.part10.b64","R7_REPRO_SNAPSHOT.part11.b64","R7_REPRO_SNAPSHOT.part12.b64"],
-    "archive_sha256": "3f8e770875521ad73ef224fbdd161f9fd996e789f6635380f069b69d4b950d01"
+    "archive_format":"tar.xz encoded as repository Base64 chunks; transport bytes are not an evidence identity",
+    "archive_parts":["R7_REPRO_SNAPSHOT.part01.b64","R7_REPRO_SNAPSHOT.part02.b64","R7_REPRO_SNAPSHOT.part03.b64","R7_REPRO_SNAPSHOT.part04.b64","R7_REPRO_SNAPSHOT.part05.b64","R7_REPRO_SNAPSHOT.part06.b64","R7_REPRO_SNAPSHOT.part07.b64","R7_REPRO_SNAPSHOT.part08.b64","R7_REPRO_SNAPSHOT.part09.b64","R7_REPRO_SNAPSHOT.part10.b64","R7_REPRO_SNAPSHOT.part11.b64","R7_REPRO_SNAPSHOT.part12.b64"],
+    "content_identity_enforced":true,
+    "local_equivalent_archive_sha256":"8fbc50d11d874e04ebd62911f1c2002c02d04fa3f9c276c5e1739999bfcd7175",
+    "note":"Runner verifies exact extracted pre endpoints/final static hashes; remote V3 transport may have different tar container bytes.",
+    "transport_sha_enforced":false
   },
-  "source_provenance": {
-    "final_payload_zip_sha256": "4d55ea0302c042feadfdcd583e97c6f370b1bc20dfc73424c0e38a3fc11ef4c6",
-    "payload_crc": "PASS",
-    "payload_diff_paths": ["app/services/image_processing.py","app/static/app.js","app/static/m2a-ui-parts/13-m2a-closure-fixes.js.part"],
-    "payload_file_count_each": 99,
-    "pre_payload_zip_sha256": "acac42f36aabbaae78ff91cf7ebbc8782456fd3a325c9765dfe081a8ecd623fc"
-  },
+  "source_provenance":{"final_payload_zip_sha256":"4d55ea0302c042feadfdcd583e97c6f370b1bc20dfc73424c0e38a3fc11ef4c6","payload_crc":"PASS","payload_diff_paths":["app/services/image_processing.py","app/static/app.js","app/static/m2a-ui-parts/13-m2a-closure-fixes.js.part"],"payload_file_count_each":99,"pre_payload_zip_sha256":"acac42f36aabbaae78ff91cf7ebbc8782456fd3a325c9765dfe081a8ecd623fc"},
   "support_files": [
-    {"path":"R7_REPRO_SNAPSHOT.part01.b64","sha256":"b67acff45225c440420280c59ceb34b336dc025772a1d68afde8c57478eba1f5","size":10000},
-    {"path":"R7_REPRO_SNAPSHOT.part02.b64","sha256":"8d0337dfd6bd28049b85ad49e526090084bc21176ce58d23ae39aa1862a6120e","size":10000},
-    {"path":"R7_REPRO_SNAPSHOT.part03.b64","sha256":"5780606a4f48dba3a11558ef1670e18a9e44b96b9fcd824bf2bb390da4d27a49","size":10000},
-    {"path":"R7_REPRO_SNAPSHOT.part04.b64","sha256":"9111b4408f2495b0c65aaba3735a13a6732ecd5198e7cc6068aaf1aee747736f","size":10000},
-    {"path":"R7_REPRO_SNAPSHOT.part05.b64","sha256":"8534147333ea9a9e7756c09f70ad10e16348d2cf7d57791afb29c1aa9805ce48","size":10000},
-    {"path":"R7_REPRO_SNAPSHOT.part06.b64","sha256":"e869c85877ce8cb64b6ddd3f152c3ec4d4d32eaa7087857d4dc49adace205019","size":10000},
-    {"path":"R7_REPRO_SNAPSHOT.part07.b64","sha256":"6f3fcaa30c02cb0ec6a690ee15cfb4f6d512b2c4e86b6216006ff62ac314722e","size":10000},
-    {"path":"R7_REPRO_SNAPSHOT.part08.b64","sha256":"91a7db52053a281f25d74ffe0dd212e5f48b2cb841bc6a1a7767bed3977fd40b","size":10000},
-    {"path":"R7_REPRO_SNAPSHOT.part09.b64","sha256":"9ec6ab6b1c4a50f5509da71e8194475ca6cc45dbd6d109c79a42426f1ad8c33a","size":10000},
-    {"path":"R7_REPRO_SNAPSHOT.part10.b64","sha256":"9edf6cb6ee2b2eddcd1face9efeef9736957764b2dd609d3c15179d4d33972ab","size":10000},
-    {"path":"R7_REPRO_SNAPSHOT.part11.b64","sha256":"f7f66824f999d470795f30c5cf326baec25d0726bbdff3e7318f7f881322d1ac","size":10000},
-    {"path":"R7_REPRO_SNAPSHOT.part12.b64","sha256":"22f57873d32f1f70ba9a087b1271ef46ea4914893ebca1f9c3bcd8a05ebe8969","size":492},
+    {"path":"R7_BACKEND_ROUTE.py","sha256":"00d3141f75adbd385c4a6a0b13eb329ababfa5d9019a97ee8b4b98df21c736e0","size":13538},
     {"path":"R7_POST_CODEX_FIX.patch","sha256":"09dafafce30ee75c8dd00a2759fe4b3896a47e09ac69106b716717468820b56f","size":14129},
     {"path":"R7_REGRESSION_TESTS.py","sha256":"a1447bf8999cc0f835fd2edd7a859700999c656a336b7d3556f89343446bf54d","size":7305},
+    {"path":"R7_BACKEND_REGRESSION_TESTS.py","sha256":"ab456aae050a96e123613ca2d6988a40d295d1bf061cc1d387bc0ed361b1d555","size":6073},
     {"path":"R7_BROWSER_REGRESSION.py","sha256":"b25d45eed5bb5819e716b97c4fdbdd8d4f03c28101a61b5a071aa8c0d4720e78","size":9558},
-    {"path":"R7_REPRO_RUNNER.py","sha256":"3b4c2edf84ff44c90a05eb8a7620643c3aa6c82cfec9680272a90789449f14b2","size":5788}
-  ]
+    {"path":"R7_REPRO_RUNNER.py","sha256":"97928bc2642c60ace7385cd4e786c240a8a87b6f35d30d30bf13026f5aab6764","size":6645}
+  ],
+  "unchanged_runtime":[{"path":"app/services/m2a_processing.py","sha256":"00d3141f75adbd385c4a6a0b13eb329ababfa5d9019a97ee8b4b98df21c736e0","size":13538}]
 }
