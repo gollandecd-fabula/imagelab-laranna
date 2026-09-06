@@ -16,14 +16,15 @@ Scope: review the local R6 -> R7 delta only. Do not merge this PR; it contains r
 - Denoise benchmark: byte-identical metrics vs R6.
 - 8x source-runtime API: manual 0/50/100 recorded correctly; auto detail+denoise100 selected smoothing 72.
 - Synthetic 8x/12x: alpha unchanged; max mean RGB drift <0.24; at smoothing100 strong-edge proxy retains ~90–93%.
+- Memory hardening: smoothing is tile-based; compared with the prior full-frame algorithm, RGB difference is at most 1 level including tile borders; smoothing=0 remains byte-identical to R6.
 - UI: smoothing appears only inside Manual controls; saturation absent; quick hides the slider; divider drag works; visible divider/split mismatch ~0.0005 px after regression fix.
 
 ## Review questions
-1. Is `_post_resize_smoothing` safe for RGBA, large images, and edge preservation? Any overflow/shape/alpha pitfalls?
+1. Is the tiled `_post_resize_smoothing` safe for RGBA, large images, tile boundaries, and edge preservation? Any overflow/shape/alpha pitfalls?
 2. Is `_automatic_smoothing_strength` appropriately bounded and deterministic for 1x..12x upscales?
 3. Does manual `smoothing=0` remain a strict no-op through the full enhance path?
 4. Are there parameter-validation or persistence issues in `m2a_processing.py`?
-5. Could the extra Gaussian/Sobel allocations cause unacceptable peak memory on the existing 150 Mpx maximum?
+5. Could the tiled Gaussian/Sobel implementation still cause unacceptable peak memory or CPU time near the existing 150 Mpx maximum?
 6. Does the UI correctly send manual vs automatic parameters without reintroducing Saturation?
 7. Does the one-line divider hit-area transform preserve drag while aligning the visible line?
 
