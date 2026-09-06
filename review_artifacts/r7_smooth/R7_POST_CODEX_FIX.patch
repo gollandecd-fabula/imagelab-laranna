@@ -1,0 +1,195 @@
+--- imagelab_r7packaged/app/services/image_processing.py
++++ imagelab_r7work/app/services/image_processing.py
+@@
+ import io
+ import math
++import os
++import tempfile
+ from pathlib import Path
+ from typing import Any
+@@
+ def _post_resize_smoothing(image: Image.Image, strength: int, *, upscale_factor: float = 1.0) -> Image.Image:
+     """Scale-aware anti-pixel smoothing applied after the final resize.
+ 
+-    Processing is tiled so large print images do not allocate multiple full-size
+-    float32 working planes. Strength 0 is a strict no-op.
++    Work is tiled. Large images use a disk-backed immutable raw RGBA source
++    while the destination is updated in-place, avoiding a second full-frame RAM
++    canvas. RGB is premultiplied by alpha for edge analysis and blur so hidden
++    colors beneath transparent pixels cannot bleed into visible edges. Strength
++    0 is a strict no-op.
+     """
+     value = int(np.clip(int(strength), 0, 100))
+     if value <= 0:
+         return image
+-    source = image if image.mode == "RGBA" else image.convert("RGBA")
+-    out = source.copy()
++    out = image if image.mode == "RGBA" else image.convert("RGBA")
+     t = value / 100.0
+     scale = float(np.clip(upscale_factor, 1.0, 10.0))
+     sigma = 0.28 + t * (0.72 + 0.18 * scale)
+     base_weight = float(np.clip(0.08 + 0.62 * t, 0.08, 0.70))
+     tile_size = 1024
++    disk_threshold = 32_000_000
++    temp_path: str | None = None
++    raw_reader = None
++    source_copy: Image.Image | None = None
+ 
+-    # Pass 1: global gradient histogram from tile cores. This keeps one edge
+-    # reference for the whole image (no tile seams) without a full float plane.
+-    hist = np.zeros(1444, dtype=np.int64)
+-    total = 0
+-    for y0 in range(0, source.height, tile_size):
+-        y1 = min(source.height, y0 + tile_size)
+-        for x0 in range(0, source.width, tile_size):
+-            x1 = min(source.width, x0 + tile_size)
+-            hx0, hy0 = max(0, x0 - 1), max(0, y0 - 1)
+-            hx1, hy1 = min(source.width, x1 + 1), min(source.height, y1 + 1)
+-            rgb = np.asarray(source.crop((hx0, hy0, hx1, hy1)).convert("RGB"), dtype=np.uint8)
+-            gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY).astype(np.float32)
+-            gx = cv2.Sobel(gray, cv2.CV_32F, 1, 0, ksize=3)
+-            gy = cv2.Sobel(gray, cv2.CV_32F, 0, 1, ksize=3)
+-            mag = cv2.magnitude(gx, gy)
+-            core = mag[y0 - hy0:y1 - hy0, x0 - hx0:x1 - hx0]
+-            bins = np.minimum(np.rint(core).astype(np.int32), 1443)
+-            hist += np.bincount(bins.ravel(), minlength=1444)
+-            total += core.size
+-    target = max(1, int(math.ceil(total * 0.88)))
+-    reference = max(6.0, float(np.searchsorted(np.cumsum(hist), target)))
+-
+-    # Pass 2: smooth with enough overlap for the Gaussian kernel, then paste
+-    # only each tile core. Identical global reference prevents visible seams.
+-    halo = max(2, int(math.ceil(4.0 * sigma)) + 1)
+-    for y0 in range(0, source.height, tile_size):
+-        y1 = min(source.height, y0 + tile_size)
+-        for x0 in range(0, source.width, tile_size):
+-            x1 = min(source.width, x0 + tile_size)
+-            hx0, hy0 = max(0, x0 - halo), max(0, y0 - halo)
+-            hx1, hy1 = min(source.width, x1 + halo), min(source.height, y1 + halo)
+-            rgba = np.asarray(source.crop((hx0, hy0, hx1, hy1)), dtype=np.uint8)
+-            rgb = rgba[:, :, :3]
+-            soft = cv2.GaussianBlur(rgb, (0, 0), sigmaX=sigma, sigmaY=sigma, borderType=cv2.BORDER_REPLICATE)
+-            gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY).astype(np.float32)
+-            gx = cv2.Sobel(gray, cv2.CV_32F, 1, 0, ksize=3)
+-            gy = cv2.Sobel(gray, cv2.CV_32F, 0, 1, ksize=3)
+-            edge = np.clip(cv2.magnitude(gx, gy) / reference, 0.0, 1.0)
+-            weight = (base_weight * (1.0 - 0.28 * edge))[:, :, None]
+-            smoothed = np.clip(rgb.astype(np.float32) * (1.0 - weight) + soft.astype(np.float32) * weight, 0, 255).astype(np.uint8)
+-            cy0, cy1 = y0 - hy0, y1 - hy0
+-            cx0, cx1 = x0 - hx0, x1 - hx0
+-            core = np.dstack((smoothed[cy0:cy1, cx0:cx1], rgba[cy0:cy1, cx0:cx1, 3]))
+-            out.paste(Image.fromarray(core, "RGBA"), (x0, y0))
+-    return out
++    try:
++        if out.width * out.height > disk_threshold:
++            fd, temp_path = tempfile.mkstemp(prefix="imagelab-smoothing-", suffix=".rgba")
++            with os.fdopen(fd, "wb") as raw_writer:
++                for y0 in range(0, out.height, 256):
++                    y1 = min(out.height, y0 + 256)
++                    band = np.asarray(out.crop((0, y0, out.width, y1)), dtype=np.uint8)
++                    raw_writer.write(band.tobytes(order="C"))
++            raw_reader = open(temp_path, "rb")
++
++            def read_band(y0: int, y1: int) -> np.ndarray:
++                count = (y1 - y0) * out.width * 4
++                raw_reader.seek(y0 * out.width * 4)
++                data = raw_reader.read(count)
++                if len(data) != count:
++                    raise ProcessingError("Не удалось прочитать временный буфер сглаживания")
++                return np.frombuffer(data, dtype=np.uint8).reshape((y1 - y0, out.width, 4))
++        else:
++            source_copy = out.copy()
++
++            def read_band(y0: int, y1: int) -> np.ndarray:
++                return np.asarray(source_copy.crop((0, y0, out.width, y1)), dtype=np.uint8)
++
++        def premultiplied_rgb(rgba: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
++            alpha = rgba[:, :, 3].astype(np.float32) / 255.0
++            premul = rgba[:, :, :3].astype(np.float32) * alpha[:, :, None]
++            return premul, alpha
++
++        hist = np.zeros(1444, dtype=np.int64)
++        total = 0
++        for y0 in range(0, out.height, tile_size):
++            y1 = min(out.height, y0 + tile_size)
++            hy0, hy1 = max(0, y0 - 1), min(out.height, y1 + 1)
++            band = read_band(hy0, hy1)
++            for x0 in range(0, out.width, tile_size):
++                x1 = min(out.width, x0 + tile_size)
++                hx0, hx1 = max(0, x0 - 1), min(out.width, x1 + 1)
++                rgba = band[:, hx0:hx1]
++                premul, _ = premultiplied_rgb(rgba)
++                gray = cv2.cvtColor(np.clip(premul, 0, 255).astype(np.uint8), cv2.COLOR_RGB2GRAY).astype(np.float32)
++                gx = cv2.Sobel(gray, cv2.CV_32F, 1, 0, ksize=3)
++                gy = cv2.Sobel(gray, cv2.CV_32F, 0, 1, ksize=3)
++                mag = cv2.magnitude(gx, gy)
++                core = mag[y0 - hy0:y1 - hy0, x0 - hx0:x1 - hx0]
++                bins = np.minimum(np.rint(core).astype(np.int32), 1443)
++                hist += np.bincount(bins.ravel(), minlength=1444)
++                total += core.size
++        target = max(1, int(math.ceil(total * 0.88)))
++        reference = max(6.0, float(np.searchsorted(np.cumsum(hist), target)))
++
++        halo = max(2, int(math.ceil(4.0 * sigma)) + 1)
++        for y0 in range(0, out.height, tile_size):
++            y1 = min(out.height, y0 + tile_size)
++            hy0, hy1 = max(0, y0 - halo), min(out.height, y1 + halo)
++            band = read_band(hy0, hy1)
++            for x0 in range(0, out.width, tile_size):
++                x1 = min(out.width, x0 + tile_size)
++                hx0, hx1 = max(0, x0 - halo), min(out.width, x1 + halo)
++                rgba = band[:, hx0:hx1]
++                rgb = rgba[:, :, :3].astype(np.float32)
++                premul, alpha = premultiplied_rgb(rgba)
++                soft_premul = cv2.GaussianBlur(premul, (0, 0), sigmaX=sigma, sigmaY=sigma, borderType=cv2.BORDER_REPLICATE)
++                soft_alpha = cv2.GaussianBlur(alpha, (0, 0), sigmaX=sigma, sigmaY=sigma, borderType=cv2.BORDER_REPLICATE)
++                soft = np.zeros_like(soft_premul)
++                np.divide(soft_premul, np.maximum(soft_alpha[:, :, None], 1e-6), out=soft, where=soft_alpha[:, :, None] > 1e-6)
++                gray = cv2.cvtColor(np.clip(premul, 0, 255).astype(np.uint8), cv2.COLOR_RGB2GRAY).astype(np.float32)
++                gx = cv2.Sobel(gray, cv2.CV_32F, 1, 0, ksize=3)
++                gy = cv2.Sobel(gray, cv2.CV_32F, 0, 1, ksize=3)
++                edge = np.clip(cv2.magnitude(gx, gy) / reference, 0.0, 1.0)
++                weight = (base_weight * (1.0 - 0.28 * edge))[:, :, None]
++                smoothed = np.clip(rgb * (1.0 - weight) + soft * weight, 0, 255).astype(np.uint8)
++                cy0, cy1 = y0 - hy0, y1 - hy0
++                cx0, cx1 = x0 - hx0, x1 - hx0
++                core = np.dstack((smoothed[cy0:cy1, cx0:cx1], rgba[cy0:cy1, cx0:cx1, 3]))
++                out.paste(Image.fromarray(core, "RGBA"), (x0, y0))
++        return out
++    finally:
++        source_copy = None
++        if raw_reader is not None:
++            raw_reader.close()
++        if temp_path:
++            Path(temp_path).unlink(missing_ok=True)
+
+--- imagelab_r7packaged/app/static/app.js
++++ imagelab_r7work/app/static/app.js
+@@
+-$$('[data-improve-mode]').forEach((button)=>button.addEventListener('click',()=>{ const manual=button.dataset.improveMode==='manual'; $$('[data-improve-mode]').forEach((item)=>item.classList.toggle('active',item===button)); $('#improveManual').classList.toggle('compact-hidden',!manual); const preset=$('#enhancePreset'); if(manual){ preset.value='custom'; } else if(preset.value==='custom'){ preset.value='detail'; } }));
+-$('#applyEnhance').addEventListener('click',()=>{const preset=$('#enhancePreset').value,p={preset,brightness:1,contrast:number('#enhanceContrast',100)/100,sharpness:number('#enhanceSharpness',100)/100,denoise:number('#enhanceDenoise',0),ai_auto:$('#improveAiAuto').checked,...improvePhysicalParams()};if(preset==='custom')p.smoothing=number('#enhanceSmoothing',0);else p.smoothing_auto=true;processSelected('enhance',p,'Улучшение применено');});
++function setImproveMode(mode, {syncPreset=true}={}) {
++  const manual=mode==='manual';
++  $$('[data-improve-mode]').forEach((item)=>item.classList.toggle('active',item.dataset.improveMode===mode));
++  $('#improveManual').classList.toggle('compact-hidden',!manual);
++  const preset=$('#enhancePreset');
++  if(syncPreset){
++    if(manual) preset.value='custom';
++    else if(preset.value==='custom') preset.value='detail';
++  }
++}
++function activeImproveMode(){ return document.querySelector('[data-improve-mode].active')?.dataset.improveMode==='manual'?'manual':'quick'; }
++$$('[data-improve-mode]').forEach((button)=>button.addEventListener('click',()=>setImproveMode(button.dataset.improveMode)));
++$('#enhancePreset').addEventListener('change',()=>setImproveMode($('#enhancePreset').value==='custom'?'manual':'quick',{syncPreset:false}));
++$('#applyEnhance').addEventListener('click',()=>{const preset=$('#enhancePreset').value,mode=activeImproveMode(),p={preset,brightness:1,contrast:number('#enhanceContrast',100)/100,sharpness:number('#enhanceSharpness',100)/100,denoise:number('#enhanceDenoise',0),ai_auto:$('#improveAiAuto').checked,...improvePhysicalParams()};if(mode==='manual')p.smoothing=number('#enhanceSmoothing',0);else p.smoothing_auto=true;processSelected('enhance',p,'Улучшение применено');});
+
+--- imagelab_r7packaged/app/static/m2a-ui-parts/13-m2a-closure-fixes.js.part
++++ imagelab_r7work/app/static/m2a-ui-parts/13-m2a-closure-fixes.js.part
+@@
+       const preset = byId('enhancePreset')?.value || 'standard';
++      const improveMode = document.querySelector('[data-improve-mode].active')?.dataset.improveMode === 'manual' ? 'manual' : 'quick';
+       const params = {
+@@
+-      if (preset === 'custom') params.smoothing = numberField('enhanceSmoothing', 0);
++      if (improveMode === 'manual') params.smoothing = numberField('enhanceSmoothing', 0);
+       else params.smoothing_auto = true;
