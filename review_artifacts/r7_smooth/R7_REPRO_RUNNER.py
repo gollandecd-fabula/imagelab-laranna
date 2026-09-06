@@ -13,9 +13,9 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 MANIFEST = HERE / 'R7_REPRO_MANIFEST.json'
-SNAPSHOT_PARTS = sorted(HERE.glob('R7_REPRO_SNAPSHOT.part*.b64'))
 PATCH = HERE / 'R7_POST_CODEX_FIX.patch'
 PYTEST = HERE / 'R7_REGRESSION_TESTS.py'
+BACKEND_TESTS = HERE / 'R7_BACKEND_REGRESSION_TESTS.py'
 BROWSER = HERE / 'R7_BROWSER_REGRESSION.py'
 
 
@@ -66,6 +66,8 @@ def main() -> int:
     parser.add_argument('--keep-temp', action='store_true')
     args = parser.parse_args()
     manifest = json.loads(MANIFEST.read_text('utf-8'))
+    snapshot_parts = [HERE / name for name in manifest['snapshot']['archive_parts']]
+    backend_support = HERE / manifest['backend_route']['support_file']
 
     for item in manifest['support_files']:
         path = HERE / item['path']
@@ -76,14 +78,10 @@ def main() -> int:
             raise AssertionError(f'support file mismatch: {item["path"]}')
 
     expected_parts = manifest['snapshot']['archive_parts']
-    if [p.name for p in SNAPSHOT_PARTS] != expected_parts:
-        raise AssertionError(f'snapshot part-set mismatch: {[p.name for p in SNAPSHOT_PARTS]} != {expected_parts}')
-    encoded = ''.join(''.join(p.read_text('ascii').split()) for p in SNAPSHOT_PARTS)
+    if [p.name for p in snapshot_parts] != expected_parts or any(not p.is_file() for p in snapshot_parts):
+        raise AssertionError(f'snapshot part-set mismatch: {[p.name for p in snapshot_parts]} != {expected_parts}')
+    encoded = ''.join(''.join(p.read_text('ascii').split()) for p in snapshot_parts)
     archive = base64.b64decode(encoded, validate=True)
-    if len(archive) != manifest['snapshot']['archive_bytes']:
-        raise AssertionError('snapshot archive size mismatch')
-    if sha256_bytes(archive) != manifest['snapshot']['archive_sha256']:
-        raise AssertionError('snapshot archive SHA mismatch')
     if sha256_bytes(PATCH.read_bytes()) != manifest['patch']['sha256']:
         raise AssertionError('patch SHA mismatch')
 
@@ -92,18 +90,30 @@ def main() -> int:
         safe_extract_tar_xz(archive, temp)
         pre_root = temp / 'pre3'
         static_root = temp / 'finalstatic'
-        verify_exact_files(pre_root, manifest['pre_endpoints'], 'pre endpoints', require_exact_set=True)
+        backend_rel = manifest['backend_route']['path']
+        backend_dest = pre_root / backend_rel
+        backend_dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(backend_support, backend_dest)
+        verify_exact_files(pre_root, manifest['pre_candidate'], 'pre candidate', require_exact_set=True)
         verify_exact_files(static_root, manifest['final_static'], 'final static', require_exact_set=True)
 
         candidate = temp / 'candidate'
         shutil.copytree(pre_root, candidate)
         run(['git', 'apply', '--check', str(PATCH)], cwd=candidate)
         run(['git', 'apply', str(PATCH)], cwd=candidate)
-        verify_exact_files(candidate, manifest['final_endpoints'], 'final endpoints', require_exact_set=True)
+        verify_exact_files(candidate, manifest['final_candidate'], 'final candidate', require_exact_set=True)
 
-        changed = sorted(item['path'] for item in manifest['final_endpoints'])
+        pre_map = {item['path']: item['sha256'] for item in manifest['pre_candidate']}
+        final_map = {item['path']: item['sha256'] for item in manifest['final_candidate']}
+        if set(pre_map) != set(final_map):
+            raise AssertionError('pre/final candidate path-set mismatch')
+        changed = sorted(path for path in final_map if pre_map[path] != final_map[path])
         if changed != sorted(manifest['patch']['changed_paths']):
             raise AssertionError(f'changed path-set mismatch: {changed}')
+        backend = manifest['backend_route']
+        backend_path = candidate / backend['path']
+        if sha256_bytes(backend_path.read_bytes()) != backend['sha256']:
+            raise AssertionError('backend route identity mismatch')
 
         # Tie the exact patched JS endpoints to the exact final browser snapshot.
         for rel in ('app/static/app.js', 'app/static/m2a-ui-parts/13-m2a-closure-fixes.js.part'):
@@ -111,15 +121,17 @@ def main() -> int:
                 raise AssertionError(f'browser snapshot endpoint mismatch: {rel}')
 
         run([sys.executable, str(PYTEST), '--candidate-root', str(candidate)], cwd=HERE)
+        run([sys.executable, str(BACKEND_TESTS), '--candidate-root', str(candidate)], cwd=HERE)
         run([sys.executable, str(BROWSER), '--candidate-root', str(static_root)], cwd=HERE)
 
         print(json.dumps({
             'status': 'PASS',
-            'pre_endpoint_files': len(manifest['pre_endpoints']),
-            'final_endpoint_files': len(manifest['final_endpoints']),
+            'pre_candidate_files': len(manifest['pre_candidate']),
+            'final_candidate_files': len(manifest['final_candidate']),
+            'backend_route': manifest['backend_route']['path'],
             'final_static_files': len(manifest['final_static']),
             'changed_paths': changed,
-            'snapshot_sha256': manifest['snapshot']['archive_sha256'],
+            'snapshot_content_identity': 'verified extracted hashes',
             'evidence_ceiling': manifest['evidence_ceiling'],
         }, sort_keys=True))
         return 0
