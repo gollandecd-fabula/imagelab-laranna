@@ -1,0 +1,39 @@
+{
+  "scope": "R7-SMOOTH current source before repackaging",
+  "python_regression": "4/4 PASS",
+  "browser_regression": "PASS",
+  "zero_noop": {
+    "r6_sha256": "2d3c525be90a3f6cc03cbcc203e2005378afe3a9e2c030f13441ae46303782a3",
+    "r7_sha256": "2d3c525be90a3f6cc03cbcc203e2005378afe3a9e2c030f13441ae46303782a3",
+    "byte_equal": true
+  },
+  "source_api": {
+    "manual0": 0,
+    "manual50": 50,
+    "manual100": 100,
+    "auto_detail_8x": 72,
+    "result_size": [1536, 1152]
+  },
+  "ui": {
+    "manual_request": {"smoothing": 73, "smoothing_auto_present": false},
+    "quick_request": {"smoothing_present": false, "smoothing_auto": true},
+    "saturation_count": 0,
+    "bottom_split_slider_count": 0,
+    "divider_clip_delta_px": 0.000448
+  },
+  "memory": {
+    "29_76_mpx": {"peak_rss_gib": 0.497, "seconds": 2.905},
+    "64_mpx": {"peak_rss_gib": 0.562, "seconds": 5.619},
+    "150_mpx": {"peak_rss_gib": 0.899, "seconds": 12.909, "completed": true}
+  },
+  "alpha": {
+    "original_alpha_exact": true,
+    "visible_output_identical_when_only_hidden_alpha0_rgb_changes": true,
+    "tile_vs_full_reference_max_rgb_delta": 2
+  },
+  "boundaries": {
+    "authoritative_product_branch_changed": false,
+    "physical_l5": "NOT_STARTED",
+    "release": "BLOCKED"
+  }
+}
