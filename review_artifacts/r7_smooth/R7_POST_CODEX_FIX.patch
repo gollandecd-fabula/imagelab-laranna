@@ -1,13 +1,17 @@
---- imagelab_r7packaged/app/services/image_processing.py
-+++ imagelab_r7work/app/services/image_processing.py
-@@
+diff --git a/app/services/image_processing.py b/app/services/image_processing.py
+index 1bc7541..05ab8f5 100644
+--- a/app/services/image_processing.py
++++ b/app/services/image_processing.py
+@@ -2,6 +2,8 @@ from __future__ import annotations
+ 
  import io
  import math
 +import os
 +import tempfile
  from pathlib import Path
  from typing import Any
-@@
+ 
+@@ -440,65 +442,110 @@ def _manual_high_boost(rgb_array: np.ndarray, *, sharpness: float, denoise_stren
  def _post_resize_smoothing(image: Image.Image, strength: int, *, upscale_factor: float = 1.0) -> Image.Image:
      """Scale-aware anti-pixel smoothing applied after the final resize.
  
@@ -108,6 +112,7 @@
 +            premul = rgba[:, :, :3].astype(np.float32) * alpha[:, :, None]
 +            return premul, alpha
 +
++        # Pass 1: one global edge reference from alpha-aware tile cores.
 +        hist = np.zeros(1444, dtype=np.int64)
 +        total = 0
 +        for y0 in range(0, out.height, tile_size):
@@ -130,6 +135,7 @@
 +        target = max(1, int(math.ceil(total * 0.88)))
 +        reference = max(6.0, float(np.searchsorted(np.cumsum(hist), target)))
 +
++        # Pass 2: alpha-aware Gaussian + bounded blend, pasting only tile cores.
 +        halo = max(2, int(math.ceil(4.0 * sigma)) + 1)
 +        for y0 in range(0, out.height, tile_size):
 +            y1 = min(out.height, y0 + tile_size)
@@ -162,10 +168,17 @@
 +            raw_reader.close()
 +        if temp_path:
 +            Path(temp_path).unlink(missing_ok=True)
-
---- imagelab_r7packaged/app/static/app.js
-+++ imagelab_r7work/app/static/app.js
-@@
+ 
+ 
+ def _automatic_smoothing_strength(source: Image.Image, result: Image.Image, params: dict[str, Any]) -> int:
+diff --git a/app/static/app.js b/app/static/app.js
+index 2c27e85..d0c1821 100644
+--- a/app/static/app.js
++++ b/app/static/app.js
+@@ -516,8 +516,20 @@ $('#dropzone').addEventListener('click', () => $('#fileInput').click()); $('#dro
+ $('#dropzone').addEventListener('drop',(event)=>uploadFiles(event.dataTransfer.files));
+ $('#clearButton').addEventListener('click', async () => { if (await divertCheckOnly('Очистка проекта')) return; if (!confirm('Удалить все файлы проекта TS-001?')) return; setBusy(true); try { state.project = await api(`/api/projects/${PROJECT_ID}/assets`,{method:'DELETE'}); state.selectedId = null; renderProject(); toast('Проект очищен'); } catch(error){toast(error.message,true);} finally{setBusy(false);} });
+ 
 -$$('[data-improve-mode]').forEach((button)=>button.addEventListener('click',()=>{ const manual=button.dataset.improveMode==='manual'; $$('[data-improve-mode]').forEach((item)=>item.classList.toggle('active',item===button)); $('#improveManual').classList.toggle('compact-hidden',!manual); const preset=$('#enhancePreset'); if(manual){ preset.value='custom'; } else if(preset.value==='custom'){ preset.value='detail'; } }));
 -$('#applyEnhance').addEventListener('click',()=>{const preset=$('#enhancePreset').value,p={preset,brightness:1,contrast:number('#enhanceContrast',100)/100,sharpness:number('#enhanceSharpness',100)/100,denoise:number('#enhanceDenoise',0),ai_auto:$('#improveAiAuto').checked,...improvePhysicalParams()};if(preset==='custom')p.smoothing=number('#enhanceSmoothing',0);else p.smoothing_auto=true;processSelected('enhance',p,'Улучшение применено');});
 +function setImproveMode(mode, {syncPreset=true}={}) {
@@ -182,14 +195,27 @@
 +$$('[data-improve-mode]').forEach((button)=>button.addEventListener('click',()=>setImproveMode(button.dataset.improveMode)));
 +$('#enhancePreset').addEventListener('change',()=>setImproveMode($('#enhancePreset').value==='custom'?'manual':'quick',{syncPreset:false}));
 +$('#applyEnhance').addEventListener('click',()=>{const preset=$('#enhancePreset').value,mode=activeImproveMode(),p={preset,brightness:1,contrast:number('#enhanceContrast',100)/100,sharpness:number('#enhanceSharpness',100)/100,denoise:number('#enhanceDenoise',0),ai_auto:$('#improveAiAuto').checked,...improvePhysicalParams()};if(mode==='manual')p.smoothing=number('#enhanceSmoothing',0);else p.smoothing_auto=true;processSelected('enhance',p,'Улучшение применено');});
-
---- imagelab_r7packaged/app/static/m2a-ui-parts/13-m2a-closure-fixes.js.part
-+++ imagelab_r7work/app/static/m2a-ui-parts/13-m2a-closure-fixes.js.part
-@@
+ $('#applyReconstruct').addEventListener('click',()=>processSelected('reconstruct',{scale:number('#reconstructScale',2),detail:number('#reconstructDetail',50),denoise:number('#enhanceDenoise',20),ai_auto:$('#improveAiAuto').checked,...improvePhysicalParams()},'Реконструкция завершена'));
+ 
+ $$('[data-extract-mode]').forEach((button)=>button.addEventListener('click',()=>{ state.extractMode=button.dataset.extractMode; $$('[data-extract-mode]').forEach((item)=>item.classList.toggle('active',item===button)); $('#extractRegionControls').classList.toggle('compact-hidden',state.extractMode!=='region'); }));
+diff --git a/app/static/m2a-ui-parts/13-m2a-closure-fixes.js.part b/app/static/m2a-ui-parts/13-m2a-closure-fixes.js.part
+index f5dfcd0..0508234 100644
+--- a/app/static/m2a-ui-parts/13-m2a-closure-fixes.js.part
++++ b/app/static/m2a-ui-parts/13-m2a-closure-fixes.js.part
+@@ -223,6 +223,7 @@
+   replaceButton('applyEnhance', () => {
+     try {
        const preset = byId('enhancePreset')?.value || 'standard';
 +      const improveMode = document.querySelector('[data-improve-mode].active')?.dataset.improveMode === 'manual' ? 'manual' : 'quick';
        const params = {
-@@
+         preset,
+         brightness: 1,
+@@ -232,7 +233,7 @@
+         ai_auto: Boolean(byId('improveAiAuto')?.checked),
+         ...window.improvePhysicalParams(),
+       };
 -      if (preset === 'custom') params.smoothing = numberField('enhanceSmoothing', 0);
 +      if (improveMode === 'manual') params.smoothing = numberField('enhanceSmoothing', 0);
        else params.smoothing_auto = true;
+       processSelected('enhance', params, 'Улучшение применено');
+     } catch (error) {
