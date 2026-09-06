@@ -1,36 +1,48 @@
 from __future__ import annotations
 
 import argparse
-import base64
 import hashlib
+import io
 import json
 import re
 import shutil
 from pathlib import Path
 
+from PIL import Image
 from playwright.sync_api import sync_playwright
 
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--candidate-root', required=True)
-parser.add_argument('--fixtures', required=True)
 args = parser.parse_args()
 
 candidate_root = Path(args.candidate_root).resolve()
 root = candidate_root / 'app' / 'static'
-fixtures = json.loads(Path(args.fixtures).read_text('utf-8'))
 
 
-def fixture_bytes(key: str) -> bytes:
-    item = fixtures[key]
-    data = base64.b64decode(item['base64'], validate=True)
-    digest = hashlib.sha256(data).hexdigest()
-    assert digest == item['sha256'], (key, digest, item['sha256'])
-    return data
+def synthetic_fixture_bytes() -> tuple[bytes, bytes]:
+    # Deterministic, self-contained browser-only fixture. It is not claimed to
+    # reproduce the historical /mnt/data PNGs; the regression checks UI routing
+    # and divider geometry, not image-quality metrics.
+    w, h = 192, 144
+    image = Image.new('RGBA', (w, h))
+    pixels = []
+    for y in range(h):
+        for x in range(w):
+            block = ((x // 16) + (y // 16)) & 1
+            pixels.append(((x * 5 + y * 3) & 255, (x * 2 + 40 * block) & 255, (y * 4 + 80 * (1 - block)) & 255, 255))
+    image.putdata(pixels)
+    result = image.resize((2304, 1728), Image.Resampling.NEAREST)
+    def encode(im: Image.Image) -> bytes:
+        stream = io.BytesIO()
+        im.save(stream, format='PNG', optimize=False)
+        return stream.getvalue()
+    return encode(image), encode(result)
 
 
-source_bytes = fixture_bytes('source')
-result_bytes = fixture_bytes('result')
+source_bytes, result_bytes = synthetic_fixture_bytes()
+source_sha = hashlib.sha256(source_bytes).hexdigest()
+result_sha = hashlib.sha256(result_bytes).hexdigest()
 html = (root / 'index.html').read_text('utf-8')
 html = re.sub(r'<script src="/static/app\.js[^>]*></script>', '', html)
 html = html.replace('<head>', '<head><base href="http://imagelab.test/">', 1)
@@ -63,8 +75,8 @@ def asset(i, name, op, source_id, url, sha, w, h, size_bytes):
     }
 
 
-source = asset('src', 'source.png', None, None, '/img/source.png', fixtures['source']['sha256'], 192, 144, len(source_bytes))
-result = asset('res', 'result.png', 'enhance', 'src', '/img/result.png', fixtures['result']['sha256'], 2304, 1728, len(result_bytes))
+source = asset('src', 'source.png', None, None, '/img/source.png', source_sha, 192, 144, len(source_bytes))
+result = asset('res', 'result.png', 'enhance', 'src', '/img/result.png', result_sha, 2304, 1728, len(result_bytes))
 project = {
     'schema_version': 1, 'id': 'TS-001', 'title': 'TS-001', 'created_at': '', 'updated_at': '',
     'assets': [source, result],
