@@ -1,0 +1,58 @@
+{
+  "correction_cycle": {
+    "builder_invocations": 1,
+    "builder_result": "BLOCKED_MISSING_EXACT_RECONSTRUCTION_INPUT",
+    "builder_retried": false,
+    "exact_inputs_recovered_after_builder": true
+  },
+  "evidence_levels": {
+    "existing_packaged_r7": "L3",
+    "installed_windows": "NOT_STARTED",
+    "physical_user_path": "NOT_STARTED",
+    "v3_review_reproducibility": "L2"
+  },
+  "milestone": "NOT_COMPLETE",
+  "product_invariant": {
+    "glaz_postcheck": "PASS",
+    "installer_bytes": 31847936,
+    "installer_sha256": "daf2bb55bf09dc614f8b17e7a064e6b2b436acd5e2d77eefc450f38530497fb6",
+    "product_bytes_changed_in_v3": false
+  },
+  "reconstruction": {
+    "final_endpoint_files": "3/3 PASS",
+    "final_payload_zip_sha256": "4d55ea0302c042feadfdcd583e97c6f370b1bc20dfc73424c0e38a3fc11ef4c6",
+    "final_static_files": "33/33 PASS",
+    "git_apply_check": "PASS",
+    "patched_js_equals_browser_tested_js": true,
+    "payload_crc": "PASS",
+    "payload_file_count_each": 99,
+    "pre_endpoint_files": "3/3 PASS",
+    "pre_payload_zip_sha256": "acac42f36aabbaae78ff91cf7ebbc8782456fd3a325c9765dfe081a8ecd623fc",
+    "snapshot_archive_bytes": 82868,
+    "snapshot_archive_sha256": "3f8e770875521ad73ef224fbdd161f9fd996e789f6635380f069b69d4b950d01",
+    "snapshot_parts": 12
+  },
+  "release": "BLOCKED",
+  "reviewer_v3": "NOT_STARTED",
+  "schema": "imagelab.r7.review-evidence.v3",
+  "browser_fixture": {
+    "type": "deterministic in-process synthetic RGBA source plus nearest-neighbour result",
+    "external_files": false,
+    "historical_fixture_claim": false,
+    "purpose": "UI routing and divider geometry only; not image-quality evidence"
+  },
+  "local_clean_checkout_v12": {
+    "bottom_split_slider_count": 0,
+    "browser_regression": "PASS",
+    "command": "python review_artifacts/r7_smooth/R7_REPRO_RUNNER.py",
+    "divider_clip_delta_px": 0.00044799999977840343,
+    "manual_smoothing": 73,
+    "manual_smoothing_auto_present": false,
+    "page_errors": [],
+    "python_regression": "4/4 PASS",
+    "quick_smoothing_auto": true,
+    "quick_smoothing_present": false,
+    "saturation_count": 0,
+    "status": "PASS"
+  }
+}
