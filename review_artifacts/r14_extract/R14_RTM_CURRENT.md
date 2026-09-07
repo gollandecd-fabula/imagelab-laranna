@@ -11,7 +11,7 @@
 | R14-6 | F03 Alignment | No guessed alignment | fail closed to unchanged ROI | no-confidence/no-op | L1 | diagnostics/tests | unproved correction is no-op | PARTIAL |
 | R14-7 | F03->F04 | Extract, Improve, Remove Background remain distinct | preserve pipeline separation | API chain | compatibility runtime | chain regression | F03 preserves data; F04 removes bg | PARTIAL |
 | R14-8 | Diagnostics | Diagnostics/QA truthfully expose working-fragment semantics | explicit semantic contract | API QA | L1 + compatibility runtime | R14 QA evidence | no ambiguous cutout claims | PARTIAL |
-| R14-9 | Client | Manual UI routes strict region working-fragment path | verify exact client request | browser/API | L0 current snippet | R13 client snippet | request matches server contract | UNVERIFIED |
+| R14-9 | Client | Manual UI routes strict region working-fragment path | split region vs auto request parameters | exact snippet + Node routing harness | L1 | R14_APP_EXTRACT_ROUTING.patch + R14_CLIENT_ROUTING_EVIDENCE.md | region sends ROI/strict/perspective only; auto cutout controls unchanged | PARTIAL — product/browser runtime not patched |
 | R14-10 | Regression | Focused + neighboring regressions | deterministic regression sets | custom/focused/broad/full | L1 + compatibility runtime | test logs | no R14 regression; full suite clean | PARTIAL — full suite scaffold-blocked |
 | R14-11 | Packaging | R14 exact packaged runtime | build/package exact verified source | packaged E2E | — | package evidence | R14 code executes in package | NOT_STARTED |
 | R14-12 | Installed | Installed Windows runtime | install exact package | installed tests | — | installed evidence | installed path works | NOT_STARTED |
