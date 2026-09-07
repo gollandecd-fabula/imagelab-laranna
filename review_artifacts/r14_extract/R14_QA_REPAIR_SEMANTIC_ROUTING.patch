@@ -1,0 +1,125 @@
+--- a/app/services/qa_service.py
++++ b/app/services/qa_service.py
+@@ -58,6 +58,29 @@
+     return float((alpha & frame).sum()) / max(1, int(alpha.sum()))
+ 
+ 
++def _working_fragment_diagnostics(asset: AssetRecord) -> dict[str, Any] | None:
++    """Return the manual R14 working-fragment contract, if explicitly recorded.
++
++    Do not infer this semantic from opacity or ROI parameters alone. The producer
++    must explicitly record `semantics=working_fragment`; otherwise legacy cutout
++    QA remains authoritative.
++    """
++    if asset.operation != "extract_print" or not isinstance(asset.parameters, dict):
++        return None
++    diagnostics = asset.parameters.get("diagnostics")
++    if not isinstance(diagnostics, dict):
++        return None
++    fidelity = diagnostics.get("extract_fidelity")
++    manual = diagnostics.get("manual_roi_working_fragment")
++    candidates = [item for item in (fidelity, manual) if isinstance(item, dict)]
++    if not any(str(item.get("semantics", "")).strip().lower() == "working_fragment" for item in candidates):
++        return None
++    merged: dict[str, Any] = {}
++    for item in candidates:
++        merged.update(item)
++    return merged
++
++
+ 
+ def _open_asset_rgba(asset: AssetRecord, path: Path) -> tuple[Image.Image, str]:
+     if asset.format == "PSB":
+@@ -140,7 +163,40 @@
+         checks.append(CheckItem(code="alpha", label="Прозрачность согласована", passed=alpha_ok, detail="Есть" if actual_alpha else "Нет"))
+ 
+         operation = asset.operation or "upload"
+-        if operation == "extract_print":
++        working_fragment = _working_fragment_diagnostics(asset) if operation == "extract_print" else None
++        if operation == "extract_print" and working_fragment is not None:
++            region_box = working_fragment.get("region_box_px")
++            strict_roi = working_fragment.get("strict_roi") is True
++            semantics_ok = str(working_fragment.get("semantics", "")).strip().lower() == "working_fragment"
++            no_destructive = all(working_fragment.get(key) is False for key in (
++                "segmentation_applied", "background_removed", "texture_reduction_applied",
++                "alpha_silhouette_dewarp_applied",
++            ))
++            no_fallback = working_fragment.get("fallback") is False
++            coverage = working_fragment.get("coverage_ratio")
++            coverage_semantics = str(working_fragment.get("coverage_semantics", ""))
++            coverage_ok = isinstance(coverage, (int, float)) and 0.0 <= float(coverage) <= 1.0 and coverage_semantics == "source_alpha_coverage_working_fragment"
++
++            box_ok = False
++            dimensions_ok = False
++            if isinstance(region_box, (list, tuple)) and len(region_box) == 4:
++                try:
++                    x0, y0, x1, y1 = [int(value) for value in region_box]
++                    input_width = int(asset.parameters.get("input_width_px", 0))
++                    input_height = int(asset.parameters.get("input_height_px", 0))
++                    box_ok = input_width > 0 and input_height > 0 and 0 <= x0 < x1 <= input_width and 0 <= y0 < y1 <= input_height
++                    dimensions_ok = box_ok and width == (x1 - x0) and height == (y1 - y0)
++                except (TypeError, ValueError):
++                    box_ok = False
++                    dimensions_ok = False
++
++            checks.append(CheckItem(code="working_fragment_semantics", label="Extract: рабочий фрагмент явно зафиксирован", passed=semantics_ok, detail="working_fragment" if semantics_ok else "semantic contract missing"))
++            checks.append(CheckItem(code="working_fragment_strict_roi", label="Extract: ROI является жёсткой границей", passed=strict_roi and box_ok, detail=str(region_box)))
++            checks.append(CheckItem(code="working_fragment_dimensions", label="Extract: размер результата совпадает с ROI", passed=dimensions_ok, detail=f"{width}×{height}px; roi={region_box}"))
++            checks.append(CheckItem(code="working_fragment_non_destructive", label="Extract: сегментация/удаление фона/texture/dewarp не применялись", passed=no_destructive))
++            checks.append(CheckItem(code="working_fragment_no_fallback", label="Extract: нет скрытого перехода в auto/cutout", passed=no_fallback))
++            checks.append(CheckItem(code="working_fragment_coverage_contract", label="Extract: coverage имеет семантику source alpha", passed=coverage_ok, detail=f"{coverage_semantics}: {coverage}"))
++        elif operation == "extract_print":
+             diagnostics = asset.parameters.get("diagnostics", {}) if isinstance(asset.parameters, dict) else {}
+             coverage = diagnostics.get("coverage_ratio")
+             if coverage is None:
+@@ -179,16 +235,24 @@
+             "master_dtf": "extract_print",
+             "select": "background" if asset.has_alpha else "selection",
+         }.get(operation, operation)
++        preflight_semantics = preflight_operation
++        if operation == "extract_print" and working_fragment is not None:
++            # `extract_print` preflight is a cutout-mask gate and would reject the
++            # intentionally preserved garment/background. Use the generic geometry
++            # output gate for the working fragment; the dedicated deterministic
++            # checks above remain the authoritative semantic oracle.
++            preflight_operation = "geometry"
++            preflight_semantics = "working_fragment:generic_geometry_output_gate"
+         if preflight_operation != "upload":
+             preflight = get_ai_engine().preflight(image, preflight_operation, module="qa")
+             details = preflight["details"]
+             reasons = details.get("hard_fail_reasons", [])
+             warnings = details.get("warning_reasons", [])
+-            detail = "PASS"
++            detail = f"{preflight_semantics}: PASS"
+             if reasons:
+-                detail = "BLOCK: " + ", ".join(reasons)
++                detail = f"{preflight_semantics}: BLOCK: " + ", ".join(reasons)
+             elif warnings:
+-                detail = "WARN: " + ", ".join(warnings)
++                detail = f"{preflight_semantics}: WARN: " + ", ".join(warnings)
+             checks.append(CheckItem(code="ai_visual_preflight", label="AI-визуальная проверка", passed=bool(details["passed"]), detail=detail))
+ 
+         exportable = width > 0 and height > 0 and path.stat().st_size > 0
+@@ -203,6 +267,8 @@
+     "file_exists", "sha256", "lineage", "dimensions", "exportable", "safe_svg",
+     "vector_content", "vector_complexity", "print_coverage", "print_garment_gate",
+     "print_border_purity", "background_subject_coverage", "background_border_purity",
++    "working_fragment_semantics", "working_fragment_strict_roi", "working_fragment_dimensions",
++    "working_fragment_non_destructive", "working_fragment_no_fallback", "working_fragment_coverage_contract",
+     "halftone_parameter_consistency", "ai_visual_preflight", "physical_ppi_range",
+     "physical_size_match",
+ }
+--- a/app/services/repair_service.py
++++ b/app/services/repair_service.py
+@@ -76,6 +76,11 @@
+             set_value("density", max(30.0, density * 0.85))
+ 
+     elif operation == "extract_print":
++        # R14 manual working-fragment semantics are non-destructive by contract.
++        # Never "repair" a manual ROI by changing segmentation/fabric parameters;
++        # those controls are cutout-only and are ignored by the R14 region path.
++        if str(nxt.get("mode", "auto")).strip().lower() == "region":
++            return None
+         sensitivity = float(nxt.get("sensitivity", 58))
+         if defects & {"print_garment_gate", "print_border_purity", "print_coverage", "ai_visual_preflight"}:
+             if "print_coverage" in defects and sensitivity < 55:
