@@ -1,0 +1,14 @@
+--- a/R13_app_extract_snippet.txt
++++ b/R14_app_extract_candidate.txt
+@@
+ $('#applyExtractPrint').addEventListener('click',()=>{
+   const regionButton=document.querySelector('[data-extract-mode="region"]');
+   const mode=regionButton?.classList.contains('active')?'region':'auto';
+   state.extractMode=mode;
+-  const params={mode,x:number('#extractX',10),y:number('#extractY',10),width:number('#extractWidth',80),height:number('#extractHeight',80),sensitivity:number('#extractSensitivity',58),texture_reduction:number('#extractTexture',35),reduce_fabric_texture:number('#extractTexture',35)>0,feather:number('#extractFeather',1),crop_output:$('#extractCrop').checked,padding_mm:number('#extractPaddingMm',2),strict_roi:mode==='region'};
++  const params={mode,x:number('#extractX',10),y:number('#extractY',10),width:number('#extractWidth',80),height:number('#extractHeight',80),strict_roi:mode==='region'};
++  if(mode==='auto') Object.assign(params,{sensitivity:number('#extractSensitivity',58),texture_reduction:number('#extractTexture',35),reduce_fabric_texture:number('#extractTexture',35)>0,feather:number('#extractFeather',1),crop_output:$('#extractCrop').checked,padding_mm:number('#extractPaddingMm',2)});
+   if ($('#extractPerspectiveEnabled').checked) params.perspective=pointValues('ep');
+-  processSelected('extract_print',params,'Принт извлечён в отдельный PNG');
++  processSelected('extract_print',params,mode==='region'?'Рабочий фрагмент создан':'Принт извлечён в отдельный PNG');
+ });
