@@ -1,0 +1,77 @@
+{
+  "backend_route": {
+    "integration_test_file": "R7_BACKEND_REGRESSION_TESTS.py",
+    "integration_tests": [
+      "manual_73",
+      "manual_zero_no_call",
+      "automatic_4x"
+    ],
+    "path": "app/services/m2a_processing.py",
+    "sha256": "00d3141f75adbd385c4a6a0b13eb329ababfa5d9019a97ee8b4b98df21c736e0",
+    "size": 13538,
+    "support_file": "R7_BACKEND_ROUTE.py"
+  },
+  "clean_checkout": {
+    "automatic_backend_4x_strength": 60,
+    "automatic_backend_upscale_factor": 4.0,
+    "backend_integrations": "3/3 PASS",
+    "bottom_split_slider_count": 0,
+    "browser": "PASS",
+    "divider_clip_delta_px": 0.00044799999977840343,
+    "final_candidate": "4/4 PASS",
+    "final_static": "33/33 PASS",
+    "forbidden_external_exec_refs": 0,
+    "git_apply_check": "PASS",
+    "helper_regressions": "4/4 PASS",
+    "manual_backend_strength": 73,
+    "manual_client_smoothing": 73,
+    "manual_zero_smoothing_calls": 0,
+    "page_errors": [],
+    "pre_candidate": "4/4 PASS",
+    "quick_client_smoothing_auto": true,
+    "saturation_count": 0,
+    "status": "PASS"
+  },
+  "evidence_levels": {
+    "existing_packaged_r7": "L3",
+    "installed_windows": "NOT_STARTED",
+    "physical_user_path": "NOT_STARTED",
+    "v4_review_reproducibility": "L2"
+  },
+  "milestone": "NOT_COMPLETE",
+  "product_invariant": {
+    "glaz_postcheck": "PASS",
+    "installer_bytes": 31847936,
+    "installer_sha256": "daf2bb55bf09dc614f8b17e7a064e6b2b436acd5e2d77eefc450f38530497fb6"
+  },
+  "release": "BLOCKED",
+  "reviewer_v3": {
+    "finding": "real Improve backend routing was not executed by V3 regressions",
+    "status": "P1_FOUND"
+  },
+  "reviewer_v4": "NOT_STARTED",
+  "schema": "imagelab.r7.review-evidence.v4",
+  "snapshot": {
+    "content_identity_enforced": true,
+    "parts": [
+      "R7_REPRO_SNAPSHOT.part01.b64",
+      "R7_REPRO_SNAPSHOT.part02.b64",
+      "R7_REPRO_SNAPSHOT.part03.b64",
+      "R7_REPRO_SNAPSHOT.part04.b64",
+      "R7_REPRO_SNAPSHOT.part05.b64",
+      "R7_REPRO_SNAPSHOT.part06.b64",
+      "R7_REPRO_SNAPSHOT.part07.b64",
+      "R7_REPRO_SNAPSHOT.part08.b64",
+      "R7_REPRO_SNAPSHOT.part09.b64",
+      "R7_REPRO_SNAPSHOT.part10.b64",
+      "R7_REPRO_SNAPSHOT.part11.b64",
+      "R7_REPRO_SNAPSHOT.part12.b64"
+    ],
+    "transport_sha_enforced": false
+  },
+  "v4": {
+    "builder_invocations": 0,
+    "product_bytes_changed": false,
+    "reason": "finding is concrete and directly testable from frozen exact payload bytes"
+  }
+}

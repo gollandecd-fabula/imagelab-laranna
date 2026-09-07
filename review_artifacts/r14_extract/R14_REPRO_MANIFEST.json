@@ -1,0 +1,54 @@
+{
+  "schema": "imagelab.r14.repro-manifest.v4",
+  "milestone": "R14/F03",
+  "evidence_ceiling": "L1_REPRODUCIBILITY_ONLY",
+  "exact_r13": {
+    "reconstructed_sha256": "60763e3b70142b334445d68c5ec82d83a14cf717e13b1e35c842faa559e9b991",
+    "size_bytes": 21676,
+    "parts": [
+      {"path":"R13_extract_fidelity.part01.py.txt","sha256":"1385e61d1f55a9004558a3921da2f6ba9af3677626174d52e4b06d1cb673e92a","size_bytes":7947},
+      {"path":"R13_extract_fidelity.part02.py.txt","sha256":"027a9af5b44bda5fb181bdcac66eaf3f31218508b629c8a0a3de75ae33b9febb","size_bytes":9149},
+      {"path":"R13_extract_fidelity.part03.py.txt","sha256":"a92c4deb4a6527f723011442d46ec5c878f0399f084e12176573eb46f94d2116","size_bytes":4580}
+    ]
+  },
+  "r14_generated_candidate": {
+    "sha256": "a5576f436874d9da6e460d96e2bdc1b80f0bec8dc9139f61b58fd7e8d543b73c",
+    "size_bytes": 19232,
+    "generated_by": "R14_APPLY_TO_EXACT_R13.py",
+    "storage_policy": "generated at runtime by R14_REPRO_RUNNER.py; no hand-copied candidate artifact is trusted"
+  },
+  "inputs": {
+    "R14_APPLY_TO_EXACT_R13.py": "95e470a3bfc57d586ab6cd6e16e06deda3b5fc89028af74e5138d6796e11dc37",
+    "R14_APP_EXTRACT_ROUTING.patch": "c57289a243413e698fb25dc201d788ceedea1f67caac26faeae25799de3a4e07",
+    "R14_QA_REPAIR_SEMANTIC_ROUTING.patch": "f455d683f54fe7e326d492af5c5154092b8e600969a1eceefb6deea6c86426f5",
+    "R14_CLIENT_ROUTING_REGRESSION.js": "7ede595d2d512afb1eeb369045f940787e6b294de7a234814d685aa7aea9146b"
+  },
+  "runner": {
+    "path": "R14_REPRO_RUNNER.py",
+    "git_blob_sha": "59bd4ef4de946da1ccdc8159418b61b31699015b",
+    "command": "python review_artifacts/r14_extract/R14_REPRO_RUNNER.py",
+    "check_count": 8,
+    "codex_clean_checkout": {
+      "verified_head": "290908dd11ad0faef5085427c1e0668ece972e06",
+      "issue_comment_id": 5575776470,
+      "exit_code": 0,
+      "status": "PASS_L1_REPRODUCIBILITY",
+      "pass_count": 8,
+      "fail_count": 0,
+      "r13_sha256": "60763e3b70142b334445d68c5ec82d83a14cf717e13b1e35c842faa559e9b991",
+      "r14_candidate_sha256": "a5576f436874d9da6e460d96e2bdc1b80f0bec8dc9139f61b58fd7e8d543b73c",
+      "hidden_uncommitted_input_dependency": false,
+      "note": "Later commits through this manifest update did not modify the runner or its executable reconstruction inputs; they only added/updated R14 review metadata and composite rehearsal artifacts."
+    }
+  },
+  "rollback_record": {
+    "drifted_candidate_commit": "6a3a7e6e1f6e207d8c4cd6dc4adc87aea9d39835",
+    "rollback_commit": "e3807891d1bddcf0051ed5e5d6555b2bc945d86a",
+    "reason": "hand-copied candidate bytes were not accepted as exact evidence; artifact deleted and generation moved into hash-gated runner"
+  },
+  "claims_not_made": ["L2 exact full product tree","L3 packaged runtime","L4 installed runtime","L5 physical user path","milestone complete","release ready"],
+  "blockers": [
+    "Full exact R13 surrounding product tree provenance is unavailable.",
+    "Pinned verified runtime wheel bytes are not currently retained in the working container."
+  ]
+}

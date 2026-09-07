@@ -1,0 +1,66 @@
+}
+async function runReport() {
+  if (state.busy) return; setBusy(true);
+  try { const asset = selectedAsset(); const suffix = asset?`?asset_id=${encodeURIComponent(asset.id)}`:''; const result = await api(`/api/projects/${PROJECT_ID}/report${suffix}`); $('#reportBox').textContent = JSON.stringify(result,null,2); activateInfoTab('report'); toast('Отчёт сформирован'); }
+  catch (error) { toast(error.message,true); } finally { setBusy(false); }
+}
+
+$$('.nav-item').forEach((button) => button.addEventListener('click', () => activateModule(button.dataset.module)));
+$$('.info-tab').forEach((button) => button.addEventListener('click', () => activateInfoTab(button.dataset.infoTab)));
+$('#refreshButton').addEventListener('click', loadProject);
+$('#downloadButton').addEventListener('click', () => { const asset = selectedAsset(); if (asset) window.location.href = asset.download_url || `/api/assets/${asset.id}/file`; });
+$('#sourceButton').addEventListener('click', async () => { const source = sourceAsset(selectedAsset()); if (source) await pinActiveAsset(source.id); });
+$('#chooseButton').addEventListener('click', (event) => { event.stopPropagation(); $('#fileInput').click(); });
+$('#dropzone').addEventListener('click', () => $('#fileInput').click()); $('#dropzone').addEventListener('keydown', (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); $('#fileInput').click(); } }); $('#fileInput').addEventListener('change', () => uploadFiles($('#fileInput').files));
+['dragenter','dragover'].forEach((name) => $('#dropzone').addEventListener(name,(event)=>{event.preventDefault();$('#dropzone').classList.add('dragover');}));
+['dragleave','drop'].forEach((name) => $('#dropzone').addEventListener(name,(event)=>{event.preventDefault();$('#dropzone').classList.remove('dragover');}));
+$('#dropzone').addEventListener('drop',(event)=>uploadFiles(event.dataTransfer.files));
+$('#clearButton').addEventListener('click', async () => { if (await divertCheckOnly('Очистка проекта')) return; if (!confirm('Удалить все файлы проекта TS-001?')) return; setBusy(true); try { state.project = await api(`/api/projects/${PROJECT_ID}/assets`,{method:'DELETE'}); state.selectedId = null; renderProject(); toast('Проект очищен'); } catch(error){toast(error.message,true);} finally{setBusy(false);} });
+
+function setImproveMode(mode, {syncPreset=true}={}) {
+  const manual=mode==='manual';
+  $$('[data-improve-mode]').forEach((item)=>item.classList.toggle('active',item.dataset.improveMode===mode));
+  $('#improveManual').classList.toggle('compact-hidden',!manual);
+  const preset=$('#enhancePreset');
+  if(syncPreset){
+    if(manual) preset.value='custom';
+    else if(preset.value==='custom') preset.value='detail';
+  }
+}
+function activeImproveMode(){ return document.querySelector('[data-improve-mode].active')?.dataset.improveMode==='manual'?'manual':'quick'; }
+$$('[data-improve-mode]').forEach((button)=>button.addEventListener('click',()=>setImproveMode(button.dataset.improveMode)));
+$('#enhancePreset').addEventListener('change',()=>setImproveMode($('#enhancePreset').value==='custom'?'manual':'quick',{syncPreset:false}));
+$('#applyEnhance').addEventListener('click',()=>{const preset=$('#enhancePreset').value,mode=activeImproveMode(),p={preset,brightness:1,contrast:Math.round((20+2.3*Math.max(0,Math.min(100,number('#enhanceContrast',39.130434782608695))))*100)/10000,sharpness:Math.max(0,Math.min(100,number('#enhanceSharpness',32.5)))/25,denoise:number('#enhanceDenoise',0),ai_auto:$('#improveAiAuto').checked,...improvePhysicalParams()};if(mode==='manual')p.smoothing=number('#enhanceSmoothing',0);else p.smoothing_auto=true;processSelected('enhance',p,'Улучшение применено');});
+$('#applyReconstruct').addEventListener('click',()=>processSelected('reconstruct',{scale:number('#reconstructScale',2),detail:number('#reconstructDetail',50),denoise:number('#enhanceDenoise',20),ai_auto:$('#improveAiAuto').checked,...improvePhysicalParams()},'Реконструкция завершена'));
+
+$$('[data-extract-mode]').forEach((button)=>button.addEventListener('click',()=>{ state.extractMode=button.dataset.extractMode; $$('[data-extract-mode]').forEach((item)=>item.classList.toggle('active',item===button)); $('#extractRegionControls').classList.toggle('compact-hidden',state.extractMode!=='region'); }));
+$('#applyExtractPrint').addEventListener('click',()=>{
+  const regionButton=document.querySelector('[data-extract-mode="region"]');
+  const mode=regionButton?.classList.contains('active')?'region':'auto';
+  state.extractMode=mode;
+  const params={mode,x:number('#extractX',10),y:number('#extractY',10),width:number('#extractWidth',80),height:number('#extractHeight',80),sensitivity:number('#extractSensitivity',58),texture_reduction:number('#extractTexture',35),reduce_fabric_texture:number('#extractTexture',35)>0,feather:number('#extractFeather',1),crop_output:$('#extractCrop').checked,padding_mm:number('#extractPaddingMm',2),strict_roi:mode==='region'};
+  if ($('#extractPerspectiveEnabled').checked) params.perspective=pointValues('ep');
+  processSelected('extract_print',params,'Принт извлечён в отдельный PNG');
+});
+
+$$('[data-selection-mode]').forEach((button)=>button.addEventListener('click',()=>{ state.selectionMode=button.dataset.selectionMode; $$('[data-selection-mode]').forEach((item)=>item.classList.toggle('active',item===button)); }));
+$$('[data-selection-tool]').forEach((button)=>button.addEventListener('click',()=>{ state.selectionTool=button.dataset.selectionTool; $$('[data-selection-tool]').forEach((item)=>item.classList.toggle('active',item===button)); }));
+$('#clearSelectionEdits').addEventListener('click',()=>{resetSelectionState(selectedAsset()?.id || null);drawSelectionOverlay();});
+$('#applySelection').addEventListener('click',()=>processSelected('select',{mode:state.selectionMode,grow_mm:number('#selectionGrowMm'),brush_mm:number('#selectionBrushMm',5),feather:number('#selectionFeather'),ai_auto:$('#selectionAiAuto').checked,manual_edits:state.selectionEdits},'Выделение сохранено'));
+$('#applyCleanup').addEventListener('click',applyCleanupFlow);
+
+$$('[data-halftone-mode]').forEach((button)=>button.addEventListener('click',()=>{ state.halftoneMode=button.dataset.halftoneMode; $$('[data-halftone-mode]').forEach((item)=>item.classList.toggle('active',item===button)); }));
+$$('[data-raster]').forEach((button)=>button.addEventListener('click',()=>{ state.raster=button.dataset.raster; $$('[data-raster]').forEach((item)=>item.classList.toggle('active',item===button)); }));
+$$('[data-halftone-preview]').forEach((button)=>button.addEventListener('click',()=>{state.halftonePreview=button.dataset.halftonePreview;$$('[data-halftone-preview]').forEach((item)=>item.classList.toggle('active',item===button));$('#previewStage').dataset.previewBackground=state.halftonePreview;}));
+$('#applyHalftone').addEventListener('click',()=>processSelected('halftone',{mode:state.halftoneMode,raster:state.raster,size_mm:number('#halftoneSize',.2),lpi:number('#halftoneLpi',45),min_size_mm:number('#halftoneMinSize',.08),max_size_mm:number('#halftoneMaxSize',.4),angle:number('#halftoneAngle',45),shape:$('#halftoneShape').value,density:number('#halftoneDensity',75),alpha_threshold:number('#halftoneAlphaThreshold',8),invert:$('#halftoneInvert').checked,foreground_color:$('#halftoneColor').value,preview_background:state.halftonePreview,ai_auto:$('#halftoneAiAuto').checked},'Полутон создан'));
+
+$$('[data-vector-mode]').forEach((button)=>button.addEventListener('click',()=>{ state.vectorMode=button.dataset.vectorMode; $$('[data-vector-mode]').forEach((item)=>item.classList.toggle('active',item===button)); }));
+$('#applyVectorize').addEventListener('click',()=>processSelected('vectorize',{mode:state.vectorMode,colors:number('#vectorColors',6),simplify_mm:number('#vectorSimplifyMm',.2),min_area_mm2:number('#vectorMinAreaMm2',.5),optimize:$('#vectorOptimize').checked,ai_auto:$('#vectorAiAuto').checked},'SVG создан'));
+
+$('#applyGeometry').addEventListener('click',()=>{ const params={width_mm:$('#widthMm').value,height_mm:$('#heightMm').value,ppi:number('#geometryPpi',300),preserve_aspect:$('#preserveAspect').checked,rotate:number('#rotateAngle'),crop:{x:number('#cropX'),y:number('#cropY'),width:number('#cropWidth',100),height:number('#cropHeight',100)},ai_auto_crop:$('#geometryAiCrop').checked}; if($('#usePerspective').checked)params.perspective=pointValues('p'); processSelected('geometry',params,'Размер и геометрия применены'); });
+$$('[data-export-format]').forEach((button)=>button.addEventListener('click',()=>{ state.exportFormat=button.dataset.exportFormat; $$('[data-export-format]').forEach((item)=>item.classList.toggle('active',item===button)); }));
+$('#applyExport').addEventListener('click',exportSelected); $('#runQaButton').addEventListener('click',runQa); $('#runReportButton').addEventListener('click',runReport);
+$('#masterCleanButton').addEventListener('click',()=>processSelected('master_clean',{},'Clean Master создан'));
+$('#masterCardButton').addEventListener('click',()=>processSelected('master_card',{width_mm:300,height_mm:400,ppi:300},'Card Master создан'));
+$('#masterDtfButton').addEventListener('click',()=>processSelected('master_dtf',{},'DTF Master создан'));
+$('#logoPrepareButton').addEventListener('click',()=>processSelected('logo',{remove_background:true,color_mode:'black',binary_alpha:false},'Логотип подготовлен'));

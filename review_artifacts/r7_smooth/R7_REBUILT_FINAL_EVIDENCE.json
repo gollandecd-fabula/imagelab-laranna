@@ -1,0 +1,52 @@
+{
+  "scope": "R7-SMOOTH rebuilt final candidate after local remount",
+  "candidate": {
+    "filename": "ImageLab_by_LarannA_A28_RC4_PREBUILD6_R7_SMOOTH_REBUILT_Setup_x64.exe",
+    "size": 31847936,
+    "sha256": "daf2bb55bf09dc614f8b17e7a064e6b2b436acd5e2d77eefc450f38530497fb6",
+    "build_id": "A28-PROJECT-HARDEN-20260906-RC4-PREBUILD6-R7-SMOOTH"
+  },
+  "packaging": {
+    "entries": 99,
+    "crc_ok": true,
+    "payload_hash_match_to_frozen_r7": true,
+    "outer_r6_id_count": 0,
+    "outer_r7_id_count": 1,
+    "outer_prefix_and_suffix_preserved": true
+  },
+  "packaged_runtime": {
+    "manual_smoothing_73": true,
+    "quick_smoothing_auto": true,
+    "preset_mode_sync": true,
+    "saturation_count": 0,
+    "manual_smoothing_control_count": 1,
+    "bottom_split_slider_count": 0,
+    "divider_drag_changed_split": true,
+    "divider_delta_px": 0.0,
+    "javascript_errors": 0
+  },
+  "smoothing": {
+    "hidden_alpha0_visible_rgb_delta": 0,
+    "alpha_exact": true,
+    "strength_zero_strict_noop": true,
+    "auto_strengths": {"1x": 36, "2x": 48, "4x": 60, "8x": 72, "12x": 76}
+  },
+  "memory_150mp": {
+    "completed": true,
+    "pixels": 150000000,
+    "peak_rss_gib": 0.9033546447753906,
+    "seconds": 27.006739721999963
+  },
+  "glaz": {
+    "packaged_ui": "PASS_L3",
+    "smoothing_0_50_76_100": "PASS_L3"
+  },
+  "boundaries": {
+    "product_source_changed_after_freeze": false,
+    "authoritative_branch_changed": false,
+    "codex_builder_used_for_local_packaging": false,
+    "reason_builder_not_used": "Packaging, hash, browser, alpha, geometry and memory checks were locally provable and user explicitly requested economical Codex use.",
+    "physical_windows_l4_l5": "NOT_STARTED",
+    "release": "BLOCKED"
+  }
+}

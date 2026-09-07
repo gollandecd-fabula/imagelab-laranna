@@ -1,0 +1,85 @@
+        borderMode=cv2.BORDER_CONSTANT,
+        borderValue=(0, 0, 0, 0),
+    )
+    before_mass = float(alpha.astype(np.float64).sum())
+    after_alpha = corrected[:, :, 3]
+    after_mass = float(after_alpha.astype(np.float64).sum())
+    mass_delta = 0.0 if before_mass <= 0 else abs(after_mass - before_mass) / before_mass
+    before_high = float(np.mean(alpha >= 220))
+    after_high = float(np.mean(after_alpha >= 220))
+    high_delta = abs(after_high - before_high)
+    diagnostics.update({"alpha_mass_delta": round(mass_delta, 6), "high_alpha_coverage_delta": round(high_delta, 6)})
+    if mass_delta > 0.03 or high_delta > 0.05:
+        diagnostics["reason"] = "alpha_preservation_gate"
+        return image, diagnostics
+
+    diagnostics["applied"] = True
+    diagnostics["reason"] = "smooth_non_linear_curvature"
+    return Image.fromarray(corrected, "RGBA"), diagnostics
+
+def process_extract(asset: AssetRecord, params: dict[str, Any]) -> AssetRecord:
+    engine = get_ai_engine()
+    image, ppi = legacy._load_rgba(asset)
+    if image.width * image.height > settings.max_processing_pixels:
+        raise legacy.ProcessingError("Изображение превышает безопасный лимит обработки; предварительно уменьшите его")
+
+    recorded = dict(params)
+    recorded.update({
+        "input_asset_id": asset.id,
+        "input_operation": asset.operation or "upload",
+        "input_width_px": image.width,
+        "input_height_px": image.height,
+        "input_ppi": round(float(ppi), 4),
+    })
+    if legacy._provided(params.get("padding_mm")):
+        padding_mm = legacy._number(params, "padding_mm", 2.0, 0.0, 50.0)
+        recorded["padding_mm"] = padding_mm
+        recorded["padding"] = int(round(padding_mm / 25.4 * ppi))
+
+    manual = _manual_roi_loss_averse_extract(image, recorded)
+    solved = None if manual is not None else _fidelity_extract(image, recorded)
+    if manual is not None:
+        result, ai = manual
+        ai.setdefault("details", {})["extract_fidelity"] = {
+            "strategy": "manual_roi_loss_averse",
+            "fallback": False,
+        }
+    elif solved is None:
+        # Preserve established behavior and all contextual corrections whenever
+        # the narrow fabric model cannot prove its assumptions.
+        result, ai = legacy._ai_extract_print(image, recorded)
+        ai.setdefault("details", {})["extract_fidelity"] = {
+            "strategy": "existing_ai_legacy_fallback",
+            "fallback": True,
+        }
+    else:
+        result, diagnostics = solved
+        ai = engine.analyze(result, module="extract")
+        preflight = engine.preflight(result, "extract_print", module="extract")
+        ai["preflight"] = preflight
+        ai.setdefault("details", {})["extract_fidelity"] = diagnostics
+        if not preflight["details"]["passed"]:
+            raise legacy.ProcessingError("AI-проверка заблокировала непригодный результат извлечения принта")
+
+    # Local alpha-silhouette dewarp is not safe as an implicit operation: an
+    # arbitrary logo/illustration silhouette is not evidence of a fabric fold.
+    # Standard UI extraction therefore preserves geometry unless a future
+    # explicitly user-controlled straighten action passes this flag. Four-point
+    # perspective correction remains available independently in the normal path.
+    if legacy._bool(params, "straighten", False):
+        result, dewarp = _local_dewarp(result)
+        ai.setdefault("details", {})["local_dewarp"] = dewarp
+        final_preflight = engine.preflight(result, "extract_print", module="extract")
+        ai["preflight"] = final_preflight
+        if not final_preflight["details"]["passed"]:
+            raise legacy.ProcessingError("AI-проверка заблокировала результат после распрямления принта")
+
+    recorded["diagnostics"] = ai.get("details", {})
+    # Compatibility: legacy callers expect coverage_ratio and region_box_px at
+    # the diagnostics root, not only nested under the additive fidelity section.
+    fidelity = ai.get("details", {}).get("extract_fidelity")
+    if isinstance(fidelity, dict) and not fidelity.get("fallback"):
+        recorded["diagnostics"].setdefault("coverage_ratio", fidelity.get("coverage_ratio"))
+        recorded["diagnostics"].setdefault("region_box_px", fidelity.get("region_box_px"))
+    recorded["physical_size_unit"] = "mm"
+    return legacy._save_result(result, ppi, asset, "extract_print", recorded, ai=ai)

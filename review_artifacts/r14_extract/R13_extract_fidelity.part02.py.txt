@@ -1,0 +1,180 @@
+        return None
+
+    # Existing learned mask remains useful for pigment close to fabric colour.
+    engine = get_ai_engine()
+    threshold = float(np.clip(0.70 - legacy._number(params, "sensitivity", 58, 0, 100) * 0.004, 0.28, 0.68))
+    ai_mask, ai = engine.segment_print(region, threshold=threshold, feather=0.0, module="extract")
+    ai_binary = (ai_mask > 16) & (source_alpha > 8)
+
+    # Model only the user-provided ROI frame as fabric. K-means handles gentle
+    # folds/gradients; the 99.5th-percentile residual is the confidence baseline.
+    lab = cv2.cvtColor(rgb, cv2.COLOR_RGB2LAB).astype(np.float32)
+    frame = max(3, int(round(min(h, w) * 0.045)))
+    border = np.zeros((h, w), dtype=bool)
+    border[:frame, :] = True; border[-frame:, :] = True
+    border[:, :frame] = True; border[:, -frame:] = True
+    border &= source_alpha > 8
+    samples = lab[border]
+    diagnostics: dict[str, Any] = {
+        "strategy": "manual_roi_ai_plus_border_fabric_v1",
+        "region_box_px": list(region_box),
+        "strict_roi": True,
+        "small_component_deletion": False,
+    }
+    fabric_binary = np.zeros((h, w), dtype=bool)
+    fabric_enabled = False
+    if samples.shape[0] >= 64:
+        if samples.shape[0] > 30_000:
+            indices = np.linspace(0, samples.shape[0] - 1, 30_000).astype(np.int32)
+            samples = samples[indices]
+        unique = len(np.unique(samples.astype(np.uint8), axis=0))
+        clusters = min(3, max(1, unique // 12 + 1))
+        cv2.setRNGSeed(20260907)
+        criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.4)
+        _, labels, centers = cv2.kmeans(samples, clusters, None, criteria, 2, cv2.KMEANS_PP_CENTERS)
+        distances = np.linalg.norm(lab[:, :, None, :] - centers[None, None, :, :], axis=3).min(axis=2)
+        border_distance = distances[border]
+        baseline = float(np.percentile(border_distance, 99.5))
+        fabric_threshold = float(np.clip(baseline + 4.0, 5.0, 28.0))
+        # The ROI frame must actually resemble the dominant interior fabric.
+        # If the user drew the ROI through the print itself, learning fabric from
+        # the frame would erase legitimate pigment. Use an independent dominant
+        # interior Lab cluster as a contamination gate.
+        interior_samples = lab[~border]
+        if interior_samples.shape[0] > 30_000:
+            indices = np.linspace(0, interior_samples.shape[0] - 1, 30_000).astype(np.int32)
+            interior_samples = interior_samples[indices]
+        interior_clusters = min(3, max(1, len(np.unique(interior_samples.astype(np.uint8), axis=0)) // 12 + 1))
+        cv2.setRNGSeed(20260908)
+        _, interior_labels, interior_centers = cv2.kmeans(interior_samples, interior_clusters, None, criteria, 2, cv2.KMEANS_PP_CENTERS)
+        interior_counts = np.bincount(interior_labels.reshape(-1), minlength=interior_clusters)
+        dominant_interior = interior_centers[int(np.argmax(interior_counts))]
+        border_median = np.median(lab[border], axis=0)
+        border_to_interior = float(np.linalg.norm(border_median - dominant_interior))
+        candidate = (distances > fabric_threshold) & (source_alpha > 8)
+        # Close single-pixel gaps only. Never OPEN the mask and never area-filter
+        # components: dots, punctuation and thin strokes are semantically valid.
+        candidate_u8 = cv2.morphologyEx(
+            (candidate.astype(np.uint8) * 255), cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8), iterations=1
+        )
+        candidate = candidate_u8 > 0
+        border_selected = float((candidate & border).sum()) / float(max(1, border.sum()))
+        ai_border_selected = float((ai_binary & border).sum()) / float(max(1, border.sum()))
+        candidate_coverage = float(candidate.mean())
+        # A contaminated ROI frame cannot safely define fabric. The independent
+        # AI mask is the strongest contamination signal: if it already sees print
+        # on the ROI frame, do not learn fabric from that frame.
+        fabric_enabled = border_to_interior <= 28.0 and ai_border_selected <= 0.08 and border_selected <= 0.08 and candidate_coverage <= 0.82
+        if fabric_enabled:
+            fabric_binary = candidate
+        diagnostics.update({
+            "fabric_clusters": clusters,
+            "fabric_border_residual_p995": round(baseline, 6),
+            "fabric_border_to_dominant_interior_lab": round(border_to_interior, 6),
+            "fabric_distance_threshold": round(fabric_threshold, 6),
+            "fabric_border_selected_ratio": round(border_selected, 6),
+            "ai_border_selected_ratio": round(ai_border_selected, 6),
+            "fabric_candidate_coverage": round(candidate_coverage, 6),
+            "fabric_mask_enabled": fabric_enabled,
+        })
+
+    combined = (ai_binary | fabric_binary) & (source_alpha > 8)
+    coverage = float(combined.mean())
+    if coverage < 0.001:
+        return None
+    if coverage > 0.92:
+        return None
+    mask = (combined.astype(np.uint8) * 255)
+    feather = legacy._number(params, "feather", 1.0, 0, 20)
+    if feather > 0:
+        mask = cv2.GaussianBlur(mask, (0, 0), max(0.35, feather / 2.0))
+        mask = np.minimum(mask, source_alpha)
+
+    out_rgb = rgb
+    if legacy._bool(params, "reduce_fabric_texture", True):
+        strength = legacy._number(params, "texture_reduction", 35, 0, 100) / 100.0
+        filtered = region.convert("RGB").filter(ImageFilter.MedianFilter(size=3))
+        restored = np.asarray(filtered, dtype=np.uint8)
+        weight = (mask.astype(np.float32) / 255.0 * min(0.65, strength))[:, :, None]
+        out_rgb = np.clip(rgb.astype(np.float32) * (1.0 - weight) + restored.astype(np.float32) * weight, 0, 255).astype(np.uint8)
+    result = legacy._apply_rgb_alpha(out_rgb, mask)
+    if legacy._bool(params, "crop_output", True):
+        result = legacy._crop_alpha(result, legacy._integer(params, "padding", 8, 0, 200))
+
+    ai.setdefault("details", {})["manual_roi_loss_averse"] = diagnostics
+    ai["details"]["region_box_px"] = list(region_box)
+    ai["details"]["strict_roi"] = True
+    ai["details"]["coverage_ratio"] = round(coverage, 6)
+    return result, ai
+
+def _local_dewarp(image: Image.Image) -> tuple[Image.Image, dict[str, Any]]:
+    """Confidence-gated vertical mesh correction for smooth fabric curvature.
+
+    The estimator uses only the extracted alpha silhouette. It removes the linear
+    trend first, so ordinary rotation/perspective is not treated as a fold. When
+    confidence is insufficient, the function returns the original pixels exactly.
+    """
+    rgba = np.asarray(image.convert("RGBA"))
+    h, w = rgba.shape[:2]
+    alpha = rgba[:, :, 3]
+    binary = alpha > 96
+    xs: list[int] = []
+    centers: list[float] = []
+    spans: list[float] = []
+    min_span = max(4, int(round(h * 0.02)))
+    for x in range(w):
+        ys = np.flatnonzero(binary[:, x])
+        if ys.size < min_span:
+            continue
+        xs.append(x)
+        centers.append((float(ys[0]) + float(ys[-1])) / 2.0)
+        spans.append(float(ys[-1] - ys[0] + 1))
+    diagnostics: dict[str, Any] = {
+        "strategy": "alpha_silhouette_vertical_mesh_v1",
+        "applied": False,
+        "valid_columns": len(xs),
+    }
+    if len(xs) < max(24, int(round(w * 0.35))):
+        diagnostics["reason"] = "insufficient_alpha_geometry"
+        return image, diagnostics
+
+    x = np.asarray(xs, dtype=np.float64)
+    c = np.asarray(centers, dtype=np.float64)
+    span = np.asarray(spans, dtype=np.float64)
+    # Reject unstable silhouettes where the vertical span changes wildly. This
+    # protects irregular artwork from being mistaken for a fabric fold.
+    span_median = max(1.0, float(np.median(span)))
+    span_cv = float(np.std(span) / span_median)
+    diagnostics["span_cv"] = round(span_cv, 6)
+    if span_cv > 0.28:
+        diagnostics["reason"] = "irregular_silhouette"
+        return image, diagnostics
+
+    full_x = np.arange(w, dtype=np.float64)
+    interpolated = np.interp(full_x, x, c, left=c[0], right=c[-1]).astype(np.float32)
+    sigma = max(1.0, w * 0.035)
+    smooth = cv2.GaussianBlur(interpolated.reshape(1, -1), (0, 0), sigmaX=sigma).reshape(-1).astype(np.float64)
+    line_coeff = np.polyfit(x, c, 1)
+    baseline = np.polyval(line_coeff, full_x)
+    residual = smooth - baseline
+    residual -= float(np.median(residual[x.astype(int)]))
+    valid_residual = residual[x.astype(int)]
+    rms = float(np.sqrt(np.mean(valid_residual ** 2)))
+    amplitude = float(np.percentile(np.abs(valid_residual), 95))
+    diagnostics.update({"curvature_rms_px": round(rms, 6), "curvature_p95_px": round(amplitude, 6)})
+    minimum = max(2.0, h * 0.012)
+    maximum = h * 0.18
+    if amplitude < minimum:
+        diagnostics["reason"] = "curvature_below_gate"
+        return image, diagnostics
+    if amplitude > maximum:
+        diagnostics["reason"] = "curvature_above_safe_gate"
+        return image, diagnostics
+
+    xx, yy = np.meshgrid(np.arange(w, dtype=np.float32), np.arange(h, dtype=np.float32))
+    map_y = yy + residual.astype(np.float32)[None, :]
+    corrected = cv2.remap(
+        rgba,
+        xx,
+        map_y,
+        cv2.INTER_LINEAR,
