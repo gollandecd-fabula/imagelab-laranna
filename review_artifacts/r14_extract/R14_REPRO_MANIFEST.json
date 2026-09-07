@@ -1,26 +1,14 @@
 {
-  "schema": "imagelab.r14.repro-manifest.v2",
+  "schema": "imagelab.r14.repro-manifest.v3",
   "milestone": "R14/F03",
   "evidence_ceiling": "L1_REPRODUCIBILITY_ONLY",
   "exact_r13": {
     "reconstructed_sha256": "60763e3b70142b334445d68c5ec82d83a14cf717e13b1e35c842faa559e9b991",
     "size_bytes": 21676,
     "parts": [
-      {
-        "path": "R13_extract_fidelity.part01.py.txt",
-        "sha256": "1385e61d1f55a9004558a3921da2f6ba9af3677626174d52e4b06d1cb673e92a",
-        "size_bytes": 7947
-      },
-      {
-        "path": "R13_extract_fidelity.part02.py.txt",
-        "sha256": "027a9af5b44bda5fb181bdcac66eaf3f31218508b629c8a0a3de75ae33b9febb",
-        "size_bytes": 9149
-      },
-      {
-        "path": "R13_extract_fidelity.part03.py.txt",
-        "sha256": "a92c4deb4a6527f723011442d46ec5c878f0399f084e12176573eb46f94d2116",
-        "size_bytes": 4580
-      }
+      {"path":"R13_extract_fidelity.part01.py.txt","sha256":"1385e61d1f55a9004558a3921da2f6ba9af3677626174d52e4b06d1cb673e92a","size_bytes":7947},
+      {"path":"R13_extract_fidelity.part02.py.txt","sha256":"027a9af5b44bda5fb181bdcac66eaf3f31218508b629c8a0a3de75ae33b9febb","size_bytes":9149},
+      {"path":"R13_extract_fidelity.part03.py.txt","sha256":"a92c4deb4a6527f723011442d46ec5c878f0399f084e12176573eb46f94d2116","size_bytes":4580}
     ]
   },
   "r14_generated_candidate": {
@@ -37,24 +25,20 @@
   },
   "runner": {
     "path": "R14_REPRO_RUNNER.py",
-    "sha256": "cd2d4289cb92f8dc979111ad557211a3e4ec156e4151ef51a932f0355fea4eac",
+    "git_blob_sha": "59bd4ef4de946da1ccdc8159418b61b31699015b",
+    "local_equivalent_sha256": "cd2d4289cb92f8dc979111ad557211a3e4ec156e4151ef51a932f0355fea4eac",
+    "local_equivalent_sha256_is_not_github_byte_identity": true,
     "command": "python review_artifacts/r14_extract/R14_REPRO_RUNNER.py",
-    "last_local_result": "PASS_L1_REPRODUCIBILITY",
-    "check_count": 8
+    "last_local_equivalent_result": "PASS_L1_REPRODUCIBILITY",
+    "check_count": 8,
+    "github_head_execution": "REQUESTED_FROM_CODEX_NOT_YET_OBSERVED"
   },
   "rollback_record": {
     "drifted_candidate_commit": "6a3a7e6e1f6e207d8c4cd6dc4adc87aea9d39835",
     "rollback_commit": "e3807891d1bddcf0051ed5e5d6555b2bc945d86a",
     "reason": "hand-copied candidate bytes were not accepted as exact evidence; artifact deleted and generation moved into hash-gated runner"
   },
-  "claims_not_made": [
-    "L2 exact full product tree",
-    "L3 packaged runtime",
-    "L4 installed runtime",
-    "L5 physical user path",
-    "milestone complete",
-    "release ready"
-  ],
+  "claims_not_made": ["L2 exact full product tree","L3 packaged runtime","L4 installed runtime","L5 physical user path","milestone complete","release ready"],
   "blockers": [
     "Full exact R13 surrounding product tree provenance is unavailable.",
     "Pinned verified runtime wheel bytes are not currently retained in the working container."
