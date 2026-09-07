@@ -58,6 +58,8 @@ def _manual_roi_working_fragment(
         region = legacy._perspective(region, validated)
         transform_applied = True
 
+    source_alpha = np.asarray(region.convert("RGBA"), dtype=np.uint8)[:, :, 3]
+    source_alpha_coverage = float(np.mean(source_alpha > 16))
     straighten_requested = legacy._bool(params, "straighten", False)
     ignored = [
         key
@@ -77,6 +79,8 @@ def _manual_roi_working_fragment(
         "semantics": "working_fragment",
         "region_box_px": list(region_box),
         "strict_roi": True,
+        "coverage_ratio": round(source_alpha_coverage, 6),
+        "coverage_semantics": "source_alpha_coverage_working_fragment",
         "segmentation_applied": False,
         "background_removed": False,
         "texture_reduction_applied": False,
@@ -110,6 +114,8 @@ PROCESS_REPLACEMENT = r'''    mode = str(recorded.get("mode", "auto")).strip().l
             "semantics": "working_fragment",
             "region_box_px": diagnostics["region_box_px"],
             "strict_roi": True,
+            "coverage_ratio": diagnostics["coverage_ratio"],
+            "coverage_semantics": diagnostics["coverage_semantics"],
             "segmentation_applied": False,
             "background_removed": False,
             "fallback": False,
