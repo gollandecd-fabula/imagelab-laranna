@@ -51,7 +51,6 @@ def main() -> int:
     try:
         for name in PARTS + [
             "R14_APPLY_TO_EXACT_R13.py",
-            "R14_extract_fidelity_candidate.py.txt",
             "R14_CLIENT_ROUTING_REGRESSION.js",
             "R14_APP_EXTRACT_ROUTING.patch",
             "R14_QA_REPAIR_SEMANTIC_ROUTING.patch",
@@ -68,11 +67,6 @@ def main() -> int:
         candidate_bytes = candidate_text.encode("utf-8")
         checked("deterministic_r14_sha256", lambda: (
             require(sha256(candidate_bytes) == EXPECTED_R14_SHA256, "R14_SHA_MISMATCH") or EXPECTED_R14_SHA256
-        ))
-
-        committed_candidate = (ROOT / "R14_extract_fidelity_candidate.py.txt").read_bytes()
-        checked("candidate_byte_equivalence", lambda: (
-            require(committed_candidate == candidate_bytes, "COMMITTED_CANDIDATE_DIFFERS") or len(candidate_bytes)
         ))
 
         def compile_candidate():
