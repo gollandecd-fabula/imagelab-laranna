@@ -1,0 +1,31 @@
+name: SINDEL C05C Export Env R3
+
+on:
+  push:
+    branches: [sindel-c05b-wheelhouse-r3]
+    paths:
+      - '.github/workflows/sindel-c05c-export-env-r3.yml'
+      - 'sindel/c05c/**'
+
+permissions:
+  contents: read
+
+jobs:
+  build-export-env:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11.15'
+      - name: Build and offline-verify C05C export environment
+        shell: bash
+        run: bash sindel/c05c/build_export_env.sh
+      - name: Upload immutable C05C export environment
+        uses: actions/upload-artifact@v4
+        with:
+          name: C05C_EXPORT_ENV_R3
+          path: sindel/c05c/out/C05C_EXPORT_ENV_R3
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
