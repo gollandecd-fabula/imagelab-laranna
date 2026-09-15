@@ -1,0 +1,36 @@
+name: SINDEL C05B Vosk Wheel R3
+
+on:
+  push:
+    branches: [sindel-c05b-wheelhouse-r3]
+    paths:
+      - '.github/workflows/sindel-c05b-vosk-wheel-r3.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  fetch-vosk-wheel:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11.15'
+      - name: Fetch and verify official Vosk wheel
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out/vosk
+          python -m pip download --disable-pip-version-check --no-deps --only-binary=:all: --dest out/vosk 'vosk==0.3.45'
+          test -f out/vosk/vosk-0.3.45-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.whl
+          echo '25e025093c4399d7278f543568ed8cc5460ac3a4bf48c23673ace1e25d26619f  out/vosk/vosk-0.3.45-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.whl' | sha256sum -c -
+          sha256sum out/vosk/* > out/vosk/SHA256SUMS.txt
+      - name: Upload immutable Vosk wheel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: C05B_VOSK_PY_WHEEL_R3
+          path: out/vosk
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
