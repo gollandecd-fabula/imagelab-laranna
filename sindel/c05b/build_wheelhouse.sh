@@ -39,12 +39,11 @@ import importlib.metadata
 print(importlib.metadata.version('resemble-perth'))
 PY
 )"
-export PERTH_VERSION CHATTERBOX_VERSION
+export PERTH_VERSION
 python - "$OUT/requirements.resolved.txt" "$OUT/requirements.offline.txt" <<'PY'
 import os, sys
 src, dst = sys.argv[1:]
 perth_version = os.environ['PERTH_VERSION']
-chatterbox_version = os.environ['CHATTERBOX_VERSION']
 lines=[]
 for line in open(src, encoding='utf-8'):
     s=line.strip()
@@ -52,7 +51,6 @@ for line in open(src, encoding='utf-8'):
         lines.append(f'resemble-perth=={perth_version}\n')
     else:
         lines.append(line)
-lines.append(f'chatterbox-tts=={chatterbox_version}\n')
 open(dst,'w',encoding='utf-8').writelines(lines)
 PY
 
@@ -63,16 +61,20 @@ test "$ACTUAL_CHATTERBOX" = "$CHATTERBOX_COMMIT"
 printf '%s\n' "$ACTUAL_CHATTERBOX" > "$OUT/CHATTERBOX_COMMIT.txt"
 printf '%s\n' "$PERTH_COMMIT" > "$OUT/PERTH_COMMIT.txt"
 
-# Build the exact frozen Chatterbox source itself into the wheelhouse so the
-# offline environments contain real package metadata and never rely on PYTHONPATH.
+# Build the frozen Chatterbox source itself. It is installed --no-deps below
+# so its direct Perth git metadata can never trigger a network request during
+# the offline reproducibility probes.
 python -m pip wheel --disable-pip-version-check --no-input --no-deps \
   --wheel-dir "$WHEEL" "$CHATTERBOX"
-ls "$WHEEL"/chatterbox_tts-${CHATTERBOX_VERSION}-*.whl > "$OUT/CHATTERBOX_WHEEL.txt"
+CHATTERBOX_WHEEL="$(ls "$WHEEL"/chatterbox_tts-${CHATTERBOX_VERSION}-*.whl)"
+printf '%s\n' "$(basename "$CHATTERBOX_WHEEL")" > "$OUT/CHATTERBOX_WHEEL.txt"
 
 for env in "$ENV_A" "$ENV_B"; do
   python -m venv "$env"
   "$env/bin/python" -m pip install --disable-pip-version-check --no-input \
     --no-index --find-links "$WHEEL" -r "$OUT/requirements.offline.txt"
+  "$env/bin/python" -m pip install --disable-pip-version-check --no-input \
+    --no-index --no-deps "$CHATTERBOX_WHEEL"
   "$env/bin/python" - <<'PY'
 import hashlib, importlib, importlib.metadata, json, pathlib, platform, sys
 mods=['numpy','torch','torchaudio','librosa','omegaconf','safetensors','transformers','tokenizers','perth','conformer','spacy_pkuseg','pykakasi','diffusers','s3tokenizer']
@@ -148,7 +150,8 @@ lock={
   'offline_rebuilds':2,
   'offline_rebuild_freeze_equal':True,
   'import_probe':'PASS',
-  'frozen_chatterbox_source_blob_gate':'PASS'
+  'frozen_chatterbox_source_blob_gate':'PASS',
+  'chatterbox_offline_install_mode':'separate_no_deps_exact_wheel'
 }
 (out/'C05B_DEPENDENCY_LOCK.json').write_text(json.dumps(lock,indent=2,ensure_ascii=False),encoding='utf-8')
 sbom={'schema':'sindel.cp034.c05b.sbom.r3','packages':[]}
