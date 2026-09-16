@@ -24,15 +24,11 @@ jobs:
         run: |
           set -euo pipefail
           G='sindel/c05c/C05C_T3_PREFILL_PARITY_GATE_R4.json'
-          if [ ! -f "$G" ]; then
-            echo 'FAIL-CLOSED: parity/size gate evidence is absent.' >&2
-            exit 42
-          fi
+          test -f "$G" || { echo 'FAIL-CLOSED: parity/size gate evidence is absent.' >&2; exit 42; }
           python3 - <<'PY'
           import json
           from pathlib import Path
-          p=Path('sindel/c05c/C05C_T3_PREFILL_PARITY_GATE_R4.json')
-          d=json.loads(p.read_text(encoding='utf-8'))
+          d=json.loads(Path('sindel/c05c/C05C_T3_PREFILL_PARITY_GATE_R4.json').read_text(encoding='utf-8'))
           expected_pte='967728e7cda4b0f636f9813d288dafe0759216f17b6c690063397b3b4d1ad459'
           expected_comparator='07edd15b3fcdf3af533b0b9090de8e20918997793b20a3b267665bcb09539c13'
           expected_thresholds={'cosine_min':0.9999,'mean_abs_max':0.005,'max_abs_max':0.05,'finite_required':True}
@@ -131,6 +127,7 @@ jobs:
           sha256sum "$D/t3_prefill_external_r4.pte" "$D/t3_shared.ptd" "$D/C05C_T3_PREFILL_EXTERNAL_R4_EXPORT.json" > "$D/SHA256SUMS.txt"
           split -b 300M -d -a 2 "$D/t3_shared.ptd" "$D/t3_shared.ptd.part."
           sha256sum "$D"/t3_shared.ptd.part.* > "$D/PTD_PART_SHA256SUMS.txt"
+          test "$(find "$D" -maxdepth 1 -type f -name 't3_shared.ptd.part.*' | wc -l)" -eq 4
 
       - name: Real ExecuTorch PTE plus PTD forward smoke
         shell: bash
@@ -138,23 +135,44 @@ jobs:
           set -euo pipefail
           export OMP_NUM_THREADS=4 MKL_NUM_THREADS=4 OPENBLAS_NUM_THREADS=4
           "$SINDEL_PY" - <<'PY'
-          import os, torch
+          import hashlib, json, os, torch
+          from pathlib import Path
           from executorch.extension.pybindings.portable_lib import _load_for_executorch_from_buffer
-          d=os.path.join(os.environ['RUNNER_TEMP'],'c05c_external_r4')
-          with open(os.path.join(d,'t3_prefill_external_r4.pte'),'rb') as f: pte=f.read()
-          with open(os.path.join(d,'t3_shared.ptd'),'rb') as f: ptd=f.read()
+          d=Path(os.environ['RUNNER_TEMP'])/'c05c_external_r4'
+          pte=(d/'t3_prefill_external_r4.pte').read_bytes()
+          ptd=(d/'t3_shared.ptd').read_bytes()
           mod=_load_for_executorch_from_buffer(pte,ptd)
           ce=torch.zeros((1,34,1024),dtype=torch.float16)
           fixed=torch.zeros((2,258),dtype=torch.long)
           L=torch.tensor([66],dtype=torch.long)
           out=mod.forward((ce,fixed,L))
-          assert len(out)==3
-          assert all(torch.isfinite(x).all() for x in out)
-          assert list(out[0].shape)==[2,8194]
-          assert list(out[1].shape)==[30,2,16,294,64]
-          assert list(out[2].shape)==[30,2,16,294,64]
-          print('EXTERNAL_REAL_ET_FORWARD_SMOKE_PASS')
+          shapes=[list(x.shape) for x in out]
+          assert len(out)==3 and all(torch.isfinite(x).all() for x in out)
+          assert shapes==[[2,8194],[30,2,16,294,64],[30,2,16,294,64]]
+          rep={
+            'schema':'sindel.cp034.c05c.external-runtime-smoke-r4.v1',
+            'status':'PASS_L2_RUNTIME_SMOKE_NOT_PRIVATE_GOLDEN_PARITY',
+            'real_executorch_forward':True,
+            'pte_sha256':hashlib.sha256(pte).hexdigest(),
+            'ptd_sha256':hashlib.sha256(ptd).hexdigest(),
+            'output_shapes':shapes,
+            'all_finite':True,
+            'private_golden_used':False
+          }
+          (d/'C05C_T3_PREFILL_EXTERNAL_R4_RUNTIME_SMOKE.json').write_text(json.dumps(rep,indent=2,sort_keys=True),encoding='utf-8')
+          print(json.dumps(rep,indent=2,sort_keys=True))
           PY
+
+      - name: Reassemble chunk set and verify full PTD identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          D="$RUNNER_TEMP/c05c_external_r4"
+          cat "$D"/t3_shared.ptd.part.* > "$D/t3_shared.reassembled.ptd"
+          test "$(sha256sum "$D/t3_shared.reassembled.ptd" | awk '{print $1}')" = "$(sha256sum "$D/t3_shared.ptd" | awk '{print $1}')"
+          cmp -s "$D/t3_shared.reassembled.ptd" "$D/t3_shared.ptd"
+          rm "$D/t3_shared.reassembled.ptd"
+          echo PTD_CHUNK_REASSEMBLY_PASS
 
       - name: Upload PTE and evidence
         uses: actions/upload-artifact@v4
@@ -163,38 +181,17 @@ jobs:
           path: |
             ${{ runner.temp }}/c05c_external_r4/t3_prefill_external_r4.pte
             ${{ runner.temp }}/c05c_external_r4/C05C_T3_PREFILL_EXTERNAL_R4_EXPORT.json
+            ${{ runner.temp }}/c05c_external_r4/C05C_T3_PREFILL_EXTERNAL_R4_RUNTIME_SMOKE.json
             ${{ runner.temp }}/c05c_external_r4/SHA256SUMS.txt
             ${{ runner.temp }}/c05c_external_r4/PTD_PART_SHA256SUMS.txt
           compression-level: 0
           retention-days: 7
-      - name: Upload PTD part 00
+
+      - name: Upload complete PTD chunk set
         uses: actions/upload-artifact@v4
         with:
-          name: SINDEL_C05C_T3_SHARED_R4_PART00
-          path: ${{ runner.temp }}/c05c_external_r4/t3_shared.ptd.part.00
-          compression-level: 0
-          retention-days: 7
-      - name: Upload PTD part 01
-        if: ${{ hashFiles(format('{0}/c05c_external_r4/t3_shared.ptd.part.01', runner.temp)) != '' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: SINDEL_C05C_T3_SHARED_R4_PART01
-          path: ${{ runner.temp }}/c05c_external_r4/t3_shared.ptd.part.01
-          compression-level: 0
-          retention-days: 7
-      - name: Upload PTD part 02
-        if: ${{ hashFiles(format('{0}/c05c_external_r4/t3_shared.ptd.part.02', runner.temp)) != '' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: SINDEL_C05C_T3_SHARED_R4_PART02
-          path: ${{ runner.temp }}/c05c_external_r4/t3_shared.ptd.part.02
-          compression-level: 0
-          retention-days: 7
-      - name: Upload PTD part 03
-        if: ${{ hashFiles(format('{0}/c05c_external_r4/t3_shared.ptd.part.03', runner.temp)) != '' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: SINDEL_C05C_T3_SHARED_R4_PART03
-          path: ${{ runner.temp }}/c05c_external_r4/t3_shared.ptd.part.03
+          name: SINDEL_C05C_T3_SHARED_R4_PARTS
+          path: ${{ runner.temp }}/c05c_external_r4/t3_shared.ptd.part.*
+          if-no-files-found: error
           compression-level: 0
           retention-days: 7
