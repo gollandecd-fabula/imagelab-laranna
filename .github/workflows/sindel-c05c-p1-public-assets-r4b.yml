@@ -1,0 +1,111 @@
+name: SINDEL C05C P1 Public Assets R4B
+
+on:
+  push:
+    branches: [sindel-c05b-wheelhouse-r3]
+    paths:
+      - '.github/workflows/sindel-c05c-p1-public-assets-r4b.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  relay-public-assets:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Acquire exact public parity assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          W="$RUNNER_TEMP/c05c_p1_r4b"
+          mkdir -p "$W/python" "$W/source" "$W/model" "$W/parts" "$W/provenance"
+
+          PY_URL='https://github.com/astral-sh/python-build-standalone/releases/download/20260610/cpython-3.11.15%2B20260610-x86_64-unknown-linux-gnu-install_only.tar.gz'
+          PY_SHA='33b167b995254ff6a3e1bff13deddc1220f3879e73e48a013b53bceaa89432ae'
+          curl -L --fail --retry 5 --retry-delay 5 "$PY_URL" -o "$W/python/cpython-3.11.15+20260610-x86_64-unknown-linux-gnu-install_only.tar.gz"
+          test "$(sha256sum "$W/python/cpython-3.11.15+20260610-x86_64-unknown-linux-gnu-install_only.tar.gz" | awk '{print $1}')" = "$PY_SHA"
+
+          git clone --filter=blob:none --no-checkout https://github.com/resemble-ai/chatterbox.git "$W/source/repo"
+          git -C "$W/source/repo" fetch --depth=1 origin 5de7a54aa4e5e2baadb0182dde554908b48b85c2
+          git -C "$W/source/repo" checkout --detach 5de7a54aa4e5e2baadb0182dde554908b48b85c2
+          test "$(git -C "$W/source/repo" rev-parse HEAD)" = '5de7a54aa4e5e2baadb0182dde554908b48b85c2'
+          tar -C "$W/source/repo/src" -czf "$W/source/C05C_CHATTERBOX_SOURCE_5DE7A54_R4B.tar.gz" chatterbox
+
+          HF_REV='e2d6902dd4c1301892935d0a0277325551e8060e'
+          curl -L --fail --retry 5 --retry-delay 5 "https://huggingface.co/ResembleAI/chatterbox/resolve/${HF_REV}/grapheme_mtl_merged_expanded_v1.json?download=true" -o "$W/model/grapheme_mtl_merged_expanded_v1.json"
+          test "$(sha256sum "$W/model/grapheme_mtl_merged_expanded_v1.json" | awk '{print $1}')" = 'df81a7ca7c31796cbe97f7a7142d5a53b12e88e12417ebe98f66602cafaf0461'
+
+          curl -L --fail --retry 5 --retry-delay 10 "https://huggingface.co/ResembleAI/chatterbox/resolve/${HF_REV}/t3_mtl23ls_v3.safetensors?download=true" -o "$W/model/t3_mtl23ls_v3.safetensors"
+          test "$(stat -c %s "$W/model/t3_mtl23ls_v3.safetensors")" = '2143989928'
+          test "$(sha256sum "$W/model/t3_mtl23ls_v3.safetensors" | awk '{print $1}')" = '5abca8321ede76f8e61f1cc0d19aea6c946b28871017ce8726f8a69203f05953'
+          split -b 300000000 -d -a 2 "$W/model/t3_mtl23ls_v3.safetensors" "$W/parts/t3_mtl23ls_v3.safetensors.part."
+          test "$(find "$W/parts" -type f -name 't3_mtl23ls_v3.safetensors.part.*' | wc -l)" = '8'
+
+          python3 - "$W" <<'PY'
+          import hashlib,json,pathlib,sys
+          w=pathlib.Path(sys.argv[1])
+          def sha(p):
+              h=hashlib.sha256()
+              with open(p,'rb') as f:
+                  for b in iter(lambda:f.read(8*1024*1024),b''): h.update(b)
+              return h.hexdigest()
+          parts=[{'name':p.name,'size_bytes':p.stat().st_size,'sha256':sha(p)} for p in sorted((w/'parts').glob('t3_mtl23ls_v3.safetensors.part.*'))]
+          d={
+            'schema':'sindel.cp034.c05c.p1-public-assets.r4b',
+            'python_tar_sha256':sha(w/'python/cpython-3.11.15+20260610-x86_64-unknown-linux-gnu-install_only.tar.gz'),
+            'chatterbox_commit':'5de7a54aa4e5e2baadb0182dde554908b48b85c2',
+            'source_tar_sha256':sha(w/'source/C05C_CHATTERBOX_SOURCE_5DE7A54_R4B.tar.gz'),
+            'hf_revision':'e2d6902dd4c1301892935d0a0277325551e8060e',
+            'tokenizer_sha256':sha(w/'model/grapheme_mtl_merged_expanded_v1.json'),
+            't3_size_bytes':(w/'model/t3_mtl23ls_v3.safetensors').stat().st_size,
+            't3_sha256':sha(w/'model/t3_mtl23ls_v3.safetensors'),
+            'model_parts':parts,
+            'private_golden_included':False,
+            'status':'PUBLIC_ASSETS_VERIFIED'
+          }
+          (w/'provenance/C05C_P1_PUBLIC_ASSETS_R4B.json').write_text(json.dumps(d,indent=2)+'\n')
+          print(json.dumps(d,indent=2))
+          PY
+
+      - name: Upload Python runtime
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: C05C_PYTHON_31115_RUNTIME_R4B
+          path: ${{ runner.temp }}/c05c_p1_r4b/python/cpython-3.11.15+20260610-x86_64-unknown-linux-gnu-install_only.tar.gz
+          compression-level: 0
+          retention-days: 1
+      - name: Upload source tokenizer provenance
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: C05C_P1_SOURCE_TOKENIZER_PROVENANCE_R4B
+          path: |
+            ${{ runner.temp }}/c05c_p1_r4b/source/C05C_CHATTERBOX_SOURCE_5DE7A54_R4B.tar.gz
+            ${{ runner.temp }}/c05c_p1_r4b/model/grapheme_mtl_merged_expanded_v1.json
+            ${{ runner.temp }}/c05c_p1_r4b/provenance/C05C_P1_PUBLIC_ASSETS_R4B.json
+          compression-level: 0
+          retention-days: 1
+      - name: Upload T3 part 00
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with: {name: C05C_T3_V3_R4B_PART00, path: '${{ runner.temp }}/c05c_p1_r4b/parts/t3_mtl23ls_v3.safetensors.part.00', compression-level: 0, retention-days: 1}
+      - name: Upload T3 part 01
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with: {name: C05C_T3_V3_R4B_PART01, path: '${{ runner.temp }}/c05c_p1_r4b/parts/t3_mtl23ls_v3.safetensors.part.01', compression-level: 0, retention-days: 1}
+      - name: Upload T3 part 02
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with: {name: C05C_T3_V3_R4B_PART02, path: '${{ runner.temp }}/c05c_p1_r4b/parts/t3_mtl23ls_v3.safetensors.part.02', compression-level: 0, retention-days: 1}
+      - name: Upload T3 part 03
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with: {name: C05C_T3_V3_R4B_PART03, path: '${{ runner.temp }}/c05c_p1_r4b/parts/t3_mtl23ls_v3.safetensors.part.03', compression-level: 0, retention-days: 1}
+      - name: Upload T3 part 04
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with: {name: C05C_T3_V3_R4B_PART04, path: '${{ runner.temp }}/c05c_p1_r4b/parts/t3_mtl23ls_v3.safetensors.part.04', compression-level: 0, retention-days: 1}
+      - name: Upload T3 part 05
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with: {name: C05C_T3_V3_R4B_PART05, path: '${{ runner.temp }}/c05c_p1_r4b/parts/t3_mtl23ls_v3.safetensors.part.05', compression-level: 0, retention-days: 1}
+      - name: Upload T3 part 06
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with: {name: C05C_T3_V3_R4B_PART06, path: '${{ runner.temp }}/c05c_p1_r4b/parts/t3_mtl23ls_v3.safetensors.part.06', compression-level: 0, retention-days: 1}
+      - name: Upload T3 part 07
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with: {name: C05C_T3_V3_R4B_PART07, path: '${{ runner.temp }}/c05c_p1_r4b/parts/t3_mtl23ls_v3.safetensors.part.07', compression-level: 0, retention-days: 1}
