@@ -76,6 +76,12 @@ def runtime_prefill() -> dict:
     )
     checkpoint(stage, "OUTPUTS_SAVED", output_shapes=shapes, all_finite=True)
 
+    # Diagnostic-only fact capture. Uses the unchanged base.compare_arrays and
+    # therefore the same frozen thresholds as the original numerical final gate.
+    src = np.load(pre_dir / "source_outputs.npz")
+    run = np.load(d / "runtime_outputs.npz")
+    comparison = [base.compare_arrays(src[k], run[k], k) for k in ("logits", "k", "v")]
+
     return {
         "fresh_process_real_executorch_forward": True,
         "runtime_buffer_lifetime_fix": "PTE_AND_PTD_BYTES_RETAINED_THROUGH_FORWARD",
@@ -83,6 +89,7 @@ def runtime_prefill() -> dict:
         "pte_sha256": base.sha_file(pte),
         "output_shapes": shapes,
         "all_finite": True,
+        "comparison_facts_only": comparison,
     }
 
 
@@ -145,6 +152,14 @@ def runtime_decode() -> dict:
     )
     checkpoint(stage, "OUTPUTS_SAVED", output_shapes=shapes, all_finite=True)
 
+    # Diagnostic-only fact capture. No threshold or gate behavior is changed.
+    src = np.load(dec_dir / "source_outputs.npz")
+    run = np.load(d / "runtime_outputs.npz")
+    comparison = [
+        base.compare_arrays(src[k], run[k], k)
+        for k in ("logits", "k_delta", "v_delta")
+    ]
+
     return {
         "fresh_process_real_executorch_forward": True,
         "scope": "storage/runtime feasibility probe only; not production decode acceptance",
@@ -153,6 +168,7 @@ def runtime_decode() -> dict:
         "pte_sha256": base.sha_file(pte),
         "output_shapes": shapes,
         "all_finite": True,
+        "comparison_facts_only": comparison,
     }
 
 
