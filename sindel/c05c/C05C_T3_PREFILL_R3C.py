@@ -135,6 +135,7 @@ def source_static_parity(dtype, phrases):
    fixed,L=fixed_tokens(ids,m.hp.stop_text_token)
    slo,sk,sv=src(actual); wlo,wk,wv=sta(ce,fixed,L)
    sem=COND_LEN+len(ids)+BOS_COUNT
+   # static valid prefix is contiguous 0:sem
    row={'id':pid,'text_len':len(ids),'semantic_prefill_len':sem,'logits':metrics(slo,wlo),'k':metrics(sk,wk[:,:,:,:sem,:]),'v':metrics(sv,wv[:,:,:,:sem,:])}
    rows.append(row); print(json.dumps(row))
  return rows,m,sta
@@ -153,7 +154,9 @@ def main():
   report={'schema':'sindel.cp034.c05c.t3-prefill-source-static-parity.r3','dtype':'float32','thresholds':thr,'phrases':rows,'status':'PASS' if ok else 'FAIL'}
   p=W/'evidence/C05C_T3_PREFILL_SOURCE_STATIC_PARITY_R3.json'; p.write_text(json.dumps(report,indent=2),encoding='utf-8'); print('REPORT',p,sha(p),report['status']); raise SystemExit(0 if ok else 2)
  if args.mode=='export':
+  # Export uses FP16 static wrapper; source parity has already gated the layout in FP32.
   m=load_t3(torch.float16); sta=StaticPrefillInput(m).eval()
+  # Public/export-safe representatives: cond is an explicit input; no Golden bytes are needed for export.
   ce=torch.zeros((1,COND_LEN,1024),dtype=torch.float16)
   fixed=torch.zeros((2,TEXT_SLOTS),dtype=torch.long); L=torch.tensor([66],dtype=torch.long)
   with torch.no_grad():
@@ -167,6 +170,7 @@ def main():
   rep={'schema':'sindel.cp034.c05c.t3-prefill-export.r3c','path':str(out),'sha256':sha(out),'size':out.stat().st_size,'input_shapes':[list(ce.shape),list(fixed.shape),list(L.shape)],'output_shapes':[list(lo.shape),list(k.shape),list(v.shape)],'dtype':'fp16','status':'EXPORTED_NOT_YET_PTE_PARITY'}
   rp=W/'evidence/C05C_T3_PREFILL_EXPORT_R3.json'; rp.parent.mkdir(parents=True,exist_ok=True); rp.write_text(json.dumps(rep,indent=2),encoding='utf-8'); print(json.dumps(rep)); return
  if args.mode=='pte-parity':
+  # compare ExecuTorch to same FP16 wrapper on all frozen phrases
   m=load_t3(torch.float16); ce=load_cond().half(); sta=StaticPrefillInput(m).eval()
   from executorch.runtime import Runtime
   prog=Runtime.get().load_program(args.out); method=prog.load_method('forward')
