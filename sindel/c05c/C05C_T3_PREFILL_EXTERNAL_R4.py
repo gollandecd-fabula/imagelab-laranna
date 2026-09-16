@@ -1,9 +1,69 @@
 #!/usr/bin/env python3
 from pathlib import Path
 import hashlib, json, os, sys, time
-import torch
 
 ROOT = Path(__file__).resolve().parent
+GATE = ROOT / 'C05C_T3_PREFILL_PARITY_GATE_R4.json'
+EXPECTED_CANDIDATE_PTE_SHA256 = '967728e7cda4b0f636f9813d288dafe0759216f17b6c690063397b3b4d1ad459'
+EXPECTED_COMPARATOR_SHA256 = '07edd15b3fcdf3af533b0b9090de8e20918997793b20a3b267665bcb09539c13'
+EXPECTED_THRESHOLDS = {
+    'cosine_min': 0.9999,
+    'mean_abs_max': 0.005,
+    'max_abs_max': 0.05,
+    'finite_required': True,
+}
+
+
+def require_protocol_gate() -> None:
+    """Fail closed before torch/model work if C-05C parity+size evidence is absent."""
+    if not GATE.is_file():
+        raise SystemExit('FAIL-CLOSED: C05C parity/size gate evidence is absent')
+    try:
+        d = json.loads(GATE.read_text(encoding='utf-8'))
+    except Exception as exc:
+        raise SystemExit(f'FAIL-CLOSED: unreadable parity/size gate: {exc}') from exc
+
+    errors = []
+    if d.get('schema') != 'sindel.cp034.c05c.t3-prefill-parity-gate-r4.v1':
+        errors.append('schema')
+    if d.get('candidate_pte_sha256') != EXPECTED_CANDIDATE_PTE_SHA256:
+        errors.append('candidate_pte_sha256')
+    if d.get('comparator_sha256') != EXPECTED_COMPARATOR_SHA256:
+        errors.append('comparator_sha256')
+    if d.get('thresholds') != EXPECTED_THRESHOLDS:
+        errors.append('thresholds')
+
+    parity = d.get('parity', {})
+    for probe in ('P1', 'P2', 'P3'):
+        rec = parity.get(probe, {})
+        if rec.get('status') != 'PASS_L2':
+            errors.append(f'{probe}.status')
+        if rec.get('fresh_process') is not True:
+            errors.append(f'{probe}.fresh_process')
+        if rec.get('real_executorch_forward') is not True:
+            errors.append(f'{probe}.real_executorch_forward')
+        if rec.get('outputs_compared') != ['logits', 'k', 'v']:
+            errors.append(f'{probe}.outputs_compared')
+        if not rec.get('evidence_sha256'):
+            errors.append(f'{probe}.evidence_sha256')
+
+    size_gate = d.get('size_gate', {})
+    if size_gate.get('status') != 'OPEN':
+        errors.append('size_gate.status')
+    if not size_gate.get('evidence_sha256'):
+        errors.append('size_gate.evidence_sha256')
+    if d.get('golden_published') is not False:
+        errors.append('golden_published')
+
+    if errors:
+        raise SystemExit('FAIL-CLOSED: invalid parity/size gate: ' + ', '.join(errors))
+
+
+# Guard direct invocation as well as CI. Keep this before torch/model import.
+require_protocol_gate()
+
+import torch
+
 sys.path.insert(0, str(ROOT))
 import C05C_T3_PREFILL_R3C as base
 
