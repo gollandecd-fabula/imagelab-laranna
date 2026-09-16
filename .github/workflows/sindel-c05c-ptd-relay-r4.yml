@@ -1,0 +1,65 @@
+name: SINDEL C05C PTD Relay R4
+
+on:
+  push:
+    branches: [sindel-c05b-wheelhouse-r3]
+    paths:
+      - '.github/workflows/sindel-c05c-ptd-relay-r4.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  relay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download qualified run9 PTD chunk set
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          D="$RUNNER_TEMP/ptd"
+          mkdir -p "$D"
+          gh run download 35089186948 -R "$GITHUB_REPOSITORY" -n SINDEL_C05C_T3_SHARED_R4_PARTS -D "$D"
+          test "$(find "$D" -maxdepth 1 -type f -name 't3_shared.ptd.part.*' | wc -l)" -eq 4
+          for n in 00 01 02 03; do test -s "$D/t3_shared.ptd.part.$n"; done
+          cat "$D"/t3_shared.ptd.part.00 "$D"/t3_shared.ptd.part.01 "$D"/t3_shared.ptd.part.02 "$D"/t3_shared.ptd.part.03 > "$D/t3_shared.ptd"
+          test "$(stat -c %s "$D/t3_shared.ptd")" = '1023446912'
+          test "$(sha256sum "$D/t3_shared.ptd" | awk '{print $1}')" = 'a92e69a80f25e304ebe4a50c9e55e5457e381d0048d8e51debdab5b4dd3a0ea9'
+          sha256sum "$D"/t3_shared.ptd.part.* > "$D/PTD_RELAY_SHA256SUMS.txt"
+          rm "$D/t3_shared.ptd"
+          echo PTD_RELAY_PREUPLOAD_PASS
+      - name: Upload part 00
+        uses: actions/upload-artifact@v4
+        with:
+          name: SINDEL_C05C_T3_SHARED_R4_PART00_RELAY
+          path: ${{ runner.temp }}/ptd/t3_shared.ptd.part.00
+          compression-level: 0
+          retention-days: 7
+      - name: Upload part 01
+        uses: actions/upload-artifact@v4
+        with:
+          name: SINDEL_C05C_T3_SHARED_R4_PART01_RELAY
+          path: ${{ runner.temp }}/ptd/t3_shared.ptd.part.01
+          compression-level: 0
+          retention-days: 7
+      - name: Upload part 02
+        uses: actions/upload-artifact@v4
+        with:
+          name: SINDEL_C05C_T3_SHARED_R4_PART02_RELAY
+          path: ${{ runner.temp }}/ptd/t3_shared.ptd.part.02
+          compression-level: 0
+          retention-days: 7
+      - name: Upload part 03 and sums
+        uses: actions/upload-artifact@v4
+        with:
+          name: SINDEL_C05C_T3_SHARED_R4_PART03_RELAY
+          path: |
+            ${{ runner.temp }}/ptd/t3_shared.ptd.part.03
+            ${{ runner.temp }}/ptd/PTD_RELAY_SHA256SUMS.txt
+          compression-level: 0
+          retention-days: 7
