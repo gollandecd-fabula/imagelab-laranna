@@ -1,0 +1,134 @@
+name: SINDEL C05C T3 Prefill R3
+
+on:
+  push:
+    branches: [sindel-c05b-wheelhouse-r3]
+    paths:
+      - '.github/workflows/sindel-c05c-t3-prefill-r3.yml'
+      - 'sindel/c05c/export_t3_prefill_sindel_r3.py'
+      - 'sindel/c05c/C05C_NUMERICAL_TOLERANCE_R3.json'
+      - 'sindel/c05c/C05C_T3_STATIC_CONTRACT_R3.json'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  export-prefill:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      SINDEL_CHATTERBOX_COMMIT: 5de7a54aa4e5e2baadb0182dde554908b48b85c2
+      SINDEL_HF_WEIGHTS_REVISION: 5bb1f6ee58e50c3b8d408bc82a6d3740c2db6e18
+      OMP_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '2'
+      TOKENIZERS_PARALLELISM: 'false'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11.15'
+
+      - name: Restore immutable C05C export environment artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: C05C_EXPORT_ENV_R3
+          path: _c05c_env
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 35048094292
+
+      - name: Rebuild export environment fully offline
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m venv _venv
+          _venv/bin/python -m pip install --disable-pip-version-check --no-input \
+            --no-index --find-links _c05c_env/wheelhouse \
+            -r _c05c_env/requirements.offline.freeze.txt
+          _venv/bin/python - <<'PY'
+          import importlib.metadata as md, numpy, torch, torchaudio
+          assert torch.__version__ == '2.10.0+cpu'
+          assert torchaudio.__version__ == '2.10.0+cpu'
+          assert numpy.__version__ == '2.4.6'
+          assert md.version('executorch') == '1.1.0'
+          print('C05C_OFFLINE_EXPORT_ENV_PASS')
+          PY
+
+      - name: Restore exact frozen Chatterbox source and T3 V3 weight
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --quiet https://github.com/resemble-ai/chatterbox.git _chatterbox
+          git -C _chatterbox checkout --quiet "$SINDEL_CHATTERBOX_COMMIT"
+          test "$(git -C _chatterbox rev-parse HEAD)" = "$SINDEL_CHATTERBOX_COMMIT"
+          mkdir -p _ckpt
+          _venv/bin/python - <<'PY'
+          import hashlib, os
+          from pathlib import Path
+          from huggingface_hub import hf_hub_download
+          expected='5abca8321ede76f8e61f1cc0d19aea6c946b28871017ce8726f8a69203f05953'
+          p=Path(hf_hub_download(
+              repo_id='ResembleAI/chatterbox',
+              filename='t3_mtl23ls_v3.safetensors',
+              revision=os.environ['SINDEL_HF_WEIGHTS_REVISION'],
+              local_dir='_ckpt'))
+          h=hashlib.sha256()
+          with p.open('rb') as f:
+              for b in iter(lambda:f.read(4*1024*1024),b''): h.update(b)
+          got=h.hexdigest()
+          print('T3_SHA256',got)
+          if got != expected: raise SystemExit(f'T3 SHA mismatch {got}')
+          PY
+
+      - name: Static precheck and freeze identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          _venv/bin/python -m py_compile sindel/c05c/export_t3_prefill_sindel_r3.py
+          sha256sum \
+            sindel/c05c/export_t3_prefill_sindel_r3.py \
+            sindel/c05c/C05C_NUMERICAL_TOLERANCE_R3.json \
+            sindel/c05c/C05C_T3_STATIC_CONTRACT_R3.json | tee C05C_PREFILL_IMPLEMENTATION_SHA256.txt
+
+      - name: Source parity then export t3_prefill.pte then PTE parity
+        shell: bash
+        env:
+          SINDEL_CKPT_DIR: ${{ github.workspace }}/_ckpt
+          SINDEL_CHATTERBOX_SRC: ${{ github.workspace }}/_chatterbox
+          SINDEL_C05C_OUT: ${{ github.workspace }}/sindel/c05c/out/T3_PREFILL_R3
+        run: |
+          set -euo pipefail
+          _venv/bin/python sindel/c05c/export_t3_prefill_sindel_r3.py 2>&1 | tee C05C_T3_PREFILL_RUN.log
+          test -s sindel/c05c/out/T3_PREFILL_R3/t3_prefill.pte
+          test -s sindel/c05c/out/T3_PREFILL_R3/T3_PREFILL_SOURCE_PARITY_R3.json
+          test -s sindel/c05c/out/T3_PREFILL_R3/T3_PREFILL_PTE_REPORT_R3.json
+
+      - name: Seal prefill artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp C05C_PREFILL_IMPLEMENTATION_SHA256.txt sindel/c05c/out/T3_PREFILL_R3/
+          cp C05C_T3_PREFILL_RUN.log sindel/c05c/out/T3_PREFILL_R3/
+          (cd sindel/c05c/out/T3_PREFILL_R3 && sha256sum * > SHA256SUMS.txt)
+          python - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          p=Path('sindel/c05c/out/T3_PREFILL_R3')
+          rows=[]
+          for f in sorted(p.iterdir()):
+              if f.is_file():
+                  h=hashlib.sha256(f.read_bytes()).hexdigest()
+                  rows.append({'name':f.name,'size':f.stat().st_size,'sha256':h})
+          (p/'ARTIFACT_MANIFEST_R3.json').write_text(json.dumps({'schema':'sindel.cp034.c05c.t3-prefill-artifact.r3','status':'PASS','files':rows},indent=2),encoding='utf-8')
+          PY
+
+      - name: Upload immutable T3 prefill candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: SINDEL_C05C_T3_PREFILL_R3
+          path: sindel/c05c/out/T3_PREFILL_R3
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
