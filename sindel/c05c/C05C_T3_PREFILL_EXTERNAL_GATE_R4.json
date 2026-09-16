@@ -1,0 +1,23 @@
+{
+  "schema": "sindel.cp034.c05c.external-prefill-gate-r4.v1",
+  "status": "PASS_L2",
+  "pte": {
+    "sha256": "7b957ceb1917f1f5332df96b44711096c02daed037d6fa460d0b0639b8d377d9",
+    "size": 35317600
+  },
+  "ptd": {
+    "sha256": "a92e69a80f25e304ebe4a50c9e55e5457e381d0048d8e51debdab5b4dd3a0ea9",
+    "size": 1023446912,
+    "external_tag": "t3_shared"
+  },
+  "real_executorch_forward": true,
+  "private_parity": {
+    "P1": {"status": "PASS_L2", "evidence_sha256": "4499584e2a65ea422d28bfbb2c6c96a33bbcf9ae7612f99011defeae358a246d"},
+    "P2": {"status": "PASS_L2", "evidence_sha256": "da4985683ef400f35fc59a641d2ab24aa0778e03a518f3835627a4aa790d8962"},
+    "P3": {"status": "PASS_L2", "evidence_sha256": "6421fa7d5bdaf9d75c98d013ddca5260f17aa47f14c81b8baed6941efebf0c4a"}
+  },
+  "comparator_sha256": "07edd15b3fcdf3af533b0b9090de8e20918997793b20a3b267665bcb09539c13",
+  "thresholds": {"cosine_min": 0.9999, "mean_abs_max": 0.005, "max_abs_max": 0.05, "finite_required": true},
+  "private_golden_published": false,
+  "scope": "external prefill PTE+PTD only; shared prefill/decode PTD not yet proven"
+}
