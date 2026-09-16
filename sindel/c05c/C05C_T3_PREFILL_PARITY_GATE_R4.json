@@ -1,0 +1,43 @@
+{
+  "active_milestone": "C-05C",
+  "candidate_pte_sha256": "967728e7cda4b0f636f9813d288dafe0759216f17b6c690063397b3b4d1ad459",
+  "comparator_sha256": "07edd15b3fcdf3af533b0b9090de8e20918997793b20a3b267665bcb09539c13",
+  "golden_bytes_in_manifest": false,
+  "golden_published": false,
+  "parity": {
+    "P1": {
+      "evidence_sha256": "457375651b8b3584c8007be2492290b7fc5bbb5e911f958511cde4369fb39334",
+      "fresh_process": true,
+      "outputs_compared": ["logits", "k", "v"],
+      "real_executorch_forward": true,
+      "status": "PASS_L2"
+    },
+    "P2": {
+      "evidence_sha256": "d85c16c387f0a00223217321937fcf4741ee4d5073c6af610a87775299690ab2",
+      "fresh_process": true,
+      "outputs_compared": ["logits", "k", "v"],
+      "real_executorch_forward": true,
+      "status": "PASS_L2"
+    },
+    "P3": {
+      "evidence_sha256": "5ce553ed93d487d532d03fd6d19c49474cc67181edcf9e9f76741a05478c3755",
+      "fresh_process": true,
+      "outputs_compared": ["logits", "k", "v"],
+      "real_executorch_forward": true,
+      "status": "PASS_L2"
+    }
+  },
+  "protocol_item": "C05C-06 authorization input",
+  "schema": "sindel.cp034.c05c.t3-prefill-parity-gate-r4.v1",
+  "scope": "Authorizes external-constants prototype only; does not freeze/adopt external format and does not authorize t3_decode.",
+  "size_gate": {
+    "evidence_sha256": "a1cb7de0b2cfab88789dc371cb93c630a9bc5338f795e1b9d7d999cfef3b15b4",
+    "status": "OPEN"
+  },
+  "thresholds": {
+    "cosine_min": 0.9999,
+    "finite_required": true,
+    "max_abs_max": 0.05,
+    "mean_abs_max": 0.005
+  }
+}
