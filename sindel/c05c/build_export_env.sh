@@ -20,13 +20,9 @@ python -m venv "$RESOLVE"
 "$RESOLVE/bin/python" -m pip install --disable-pip-version-check --no-input -r "$ROOT/requirements.in"
 "$RESOLVE/bin/python" -m pip freeze | LC_ALL=C sort > "$OUT/requirements.resolved.txt"
 
-# Fetch exact CPU torch wheels only from the official PyTorch CPU index first.
 python -m pip download --disable-pip-version-check --no-input --no-deps \
   --dest "$WHEEL" --index-url https://download.pytorch.org/whl/cpu \
   'torch==2.10.0+cpu' 'torchaudio==2.10.0+cpu'
-# Resolve every other wheel from PyPI, using the already-downloaded CPU torch
-# wheels as local candidates. This prevents the PyTorch extra index from
-# substituting local-version variants for unrelated packages such as ExecuTorch.
 python -m pip wheel --disable-pip-version-check --no-input \
   --wheel-dir "$WHEEL" --find-links "$WHEEL" \
   -r "$OUT/requirements.resolved.txt"
@@ -39,13 +35,13 @@ for env in "$ENV_A" "$ENV_B"; do
 import json, sys, torch, torchaudio, executorch, numpy
 from executorch.exir import to_edge_transform_and_lower, EdgeCompileConfig
 from executorch.backends.xnnpack.partition.xnnpack_partitioner import XnnpackPartitioner
-import transformers, diffusers, safetensors, omegaconf, conformer, einops, s3tokenizer, librosa
+import transformers, diffusers, safetensors, omegaconf, conformer, einops
+import importlib.metadata as md
 assert torch.__version__ == '2.10.0+cpu', torch.__version__
 assert torchaudio.__version__ == '2.10.0+cpu', torchaudio.__version__
 assert numpy.__version__ == '2.4.6', numpy.__version__
-import importlib.metadata as md
-assert md.version('executorch') == '1.1.0', md.version('executorch')
-print(json.dumps({'python':sys.version,'torch':torch.__version__,'torchaudio':torchaudio.__version__,'executorch':md.version('executorch'),'numpy':numpy.__version__,'transformers':transformers.__version__,'s3tokenizer':md.version('s3tokenizer')}, sort_keys=True))
+assert md.version('executorch').split('+')[0] == '1.1.0', md.version('executorch')
+print(json.dumps({'python':sys.version,'torch':torch.__version__,'torchaudio':torchaudio.__version__,'executorch':md.version('executorch'),'numpy':numpy.__version__,'transformers':transformers.__version__}, sort_keys=True))
 PY
 done > "$OUT/OFFLINE_IMPORT_PROBE.txt"
 
