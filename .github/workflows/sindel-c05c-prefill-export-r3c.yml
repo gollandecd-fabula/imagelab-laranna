@@ -66,13 +66,14 @@ jobs:
           PY
           test "$(git hash-object sindel/c05c/C05C_T3_PREFILL_R3C.py)" = '1be8e6975c68ae6f2111b481a5ba6f5e305717ae'
           python - <<'PY'
-          import ast, hashlib
+          import ast, hashlib, sys
           from pathlib import Path
           p=Path('sindel/c05c/C05C_T3_PREFILL_R3C.py')
           d=ast.dump(ast.parse(p.read_text()),annotate_fields=True,include_attributes=False)
           h=hashlib.sha256(d.encode()).hexdigest()
-          assert h == '6a3c8c66ca74f3c695195bb564892e43e9ddbabfa5b00d49e2421fc5cff90906', h
-          print('EXPORTER_AST_PASS', h)
+          assert sys.version_info[:3] == (3,11,15), sys.version
+          assert h == '1b31a3a938437db077c78353fb6fa1e531c9f11394bed9a539651c0b10d9e22b', h
+          print('EXPORTER_AST_PASS_PY311', h)
           PY
 
       - name: Export FP16 XNNPACK t3_prefill.pte
