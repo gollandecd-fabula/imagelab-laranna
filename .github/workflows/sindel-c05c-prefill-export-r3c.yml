@@ -1,0 +1,109 @@
+name: SINDEL C05C Prefill Export R3C
+
+on:
+  push:
+    branches: [sindel-c05b-wheelhouse-r3]
+    paths:
+      - 'sindel/c05c/C05C_T3_PREFILL_R3C.py'
+      - '.github/workflows/sindel-c05c-prefill-export-r3c.yml'
+      - 'sindel/c05c/prefill-export-trigger.txt'
+
+permissions:
+  contents: read
+
+jobs:
+  export-prefill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11.15'
+          check-latest: false
+
+      - name: Install frozen export environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install --index-url https://download.pytorch.org/whl/cpu 'torch==2.10.0+cpu' 'torchaudio==2.10.0+cpu'
+          python -m pip install 'executorch==1.1.0'
+          python -m pip install 'numpy==2.4.6' 'transformers==5.2.0' 'safetensors==0.5.3' 'tokenizers==0.22.2' 'huggingface-hub==1.31.0'
+          python - <<'PY'
+          import importlib.metadata as md, torch, numpy
+          assert torch.__version__ == '2.10.0+cpu', torch.__version__
+          assert md.version('executorch') == '1.1.0', md.version('executorch')
+          assert numpy.__version__ == '2.4.6', numpy.__version__
+          print('ENV_PASS', torch.__version__, md.version('executorch'), numpy.__version__)
+          PY
+          flatc --version
+
+      - name: Prepare exact frozen source and T3 V3 weight
+        shell: bash
+        run: |
+          set -euo pipefail
+          W="$RUNNER_TEMP/sindel_c05c_work"
+          mkdir -p "$W/source" "$W/model" "$W/out" "$W/evidence"
+          git clone --quiet https://github.com/resemble-ai/chatterbox.git "$RUNNER_TEMP/chatterbox"
+          git -C "$RUNNER_TEMP/chatterbox" checkout --quiet 5de7a54aa4e5e2baadb0182dde554908b48b85c2
+          test "$(git -C "$RUNNER_TEMP/chatterbox" rev-parse HEAD)" = '5de7a54aa4e5e2baadb0182dde554908b48b85c2'
+          test "$(git -C "$RUNNER_TEMP/chatterbox" hash-object src/chatterbox/models/t3/t3.py)" = 'd83de261e249648f6654e2bac7cb10390af983c9'
+          test "$(git -C "$RUNNER_TEMP/chatterbox" hash-object src/chatterbox/models/t3/modules/learned_pos_emb.py)" = '9b197f218192688f743a904676d66ff741eb33e3'
+          cp -a "$RUNNER_TEMP/chatterbox/src/chatterbox" "$W/source/"
+          python - <<'PY'
+          from huggingface_hub import hf_hub_download
+          from pathlib import Path
+          import hashlib, shutil, os
+          W=Path(os.environ['RUNNER_TEMP'])/'sindel_c05c_work'
+          src=Path(hf_hub_download(repo_id='ResembleAI/chatterbox', filename='t3_mtl23ls_v3.safetensors'))
+          dst=W/'model/t3_mtl23ls_v3.safetensors'
+          shutil.copy2(src,dst)
+          h=hashlib.sha256(dst.read_bytes()).hexdigest()
+          assert h == '5abca8321ede76f8e61f1cc0d19aea6c946b28871017ce8726f8a69203f05953', h
+          print('T3_SHA_PASS', h, dst.stat().st_size)
+          PY
+          test "$(sha256sum sindel/c05c/C05C_T3_PREFILL_R3C.py | awk '{print $1}')" = '0b6e906bf4066606992f9b562989569567f623715ffe62f9b9a91b59fab44971'
+
+      - name: Export FP16 XNNPACK t3_prefill.pte
+        shell: bash
+        run: |
+          set -euo pipefail
+          W="$RUNNER_TEMP/sindel_c05c_work"
+          export SINDEL_C05C_WORK="$W"
+          export OMP_NUM_THREADS=4 MKL_NUM_THREADS=4 OPENBLAS_NUM_THREADS=4
+          free -h
+          python -u sindel/c05c/C05C_T3_PREFILL_R3C.py --mode export --out "$W/out/t3_prefill.pte" 2>&1 | tee "$W/evidence/export.log"
+          test -s "$W/out/t3_prefill.pte"
+          sha256sum "$W/out/t3_prefill.pte" | tee "$W/evidence/t3_prefill.sha256"
+
+      - name: ExecuTorch 1.1.0 load smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          W="$RUNNER_TEMP/sindel_c05c_work"
+          python - <<'PY'
+          from executorch.runtime import Runtime
+          import os
+          p=os.path.join(os.environ['RUNNER_TEMP'],'sindel_c05c_work','out','t3_prefill.pte')
+          prog=Runtime.get().load_program(p)
+          method=prog.load_method('forward')
+          print('EXECUTORCH_LOAD_PASS', p, method)
+          PY
+          python -m pip freeze | LC_ALL=C sort > "$W/evidence/pip-freeze.txt"
+          python --version > "$W/evidence/python-version.txt"
+
+      - name: Upload immutable prefill candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: SINDEL_C05C_T3_PREFILL_R3C
+          path: |
+            ${{ runner.temp }}/sindel_c05c_work/out/t3_prefill.pte
+            ${{ runner.temp }}/sindel_c05c_work/evidence/C05C_T3_PREFILL_EXPORT_R3.json
+            ${{ runner.temp }}/sindel_c05c_work/evidence/export.log
+            ${{ runner.temp }}/sindel_c05c_work/evidence/t3_prefill.sha256
+            ${{ runner.temp }}/sindel_c05c_work/evidence/pip-freeze.txt
+            ${{ runner.temp }}/sindel_c05c_work/evidence/python-version.txt
+          if-no-files-found: error
+          retention-days: 7
