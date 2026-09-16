@@ -63,6 +63,15 @@ jobs:
           git clone --quiet https://github.com/resemble-ai/chatterbox.git _chatterbox
           git -C _chatterbox checkout --quiet "$SINDEL_CHATTERBOX_COMMIT"
           test "$(git -C _chatterbox rev-parse HEAD)" = "$SINDEL_CHATTERBOX_COMMIT"
+          # Register only package metadata/source path. --no-deps prevents frozen C05C
+          # export dependencies from being replaced by Chatterbox's C05B-era requirements.
+          _venv/bin/python -m pip install --disable-pip-version-check --no-input \
+            --no-deps --no-build-isolation -e _chatterbox
+          _venv/bin/python - <<'PY'
+          import importlib.metadata as md
+          assert md.version('chatterbox-tts') == '0.1.7'
+          print('CHATTERBOX_METADATA_PASS')
+          PY
           mkdir -p _ckpt
           _venv/bin/python - <<'PY'
           import hashlib, os
