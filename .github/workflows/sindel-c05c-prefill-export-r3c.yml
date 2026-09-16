@@ -30,13 +30,14 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install --index-url https://download.pytorch.org/whl/cpu 'torch==2.10.0+cpu' 'torchaudio==2.10.0+cpu'
           python -m pip install 'executorch==1.1.0'
-          python -m pip install 'numpy==2.4.6' 'transformers==5.2.0' 'safetensors==0.5.3' 'tokenizers==0.22.2' 'huggingface-hub==1.31.0'
+          python -m pip install 'numpy==2.4.6' 'transformers==5.2.0' 'safetensors==0.5.3' 'tokenizers==0.22.2' 'huggingface-hub==1.31.0' 'einops==0.8.2'
           python - <<'PY'
-          import importlib.metadata as md, torch, numpy
+          import importlib.metadata as md, torch, numpy, einops
           assert torch.__version__ == '2.10.0+cpu', torch.__version__
           assert md.version('executorch') == '1.1.0', md.version('executorch')
           assert numpy.__version__ == '2.4.6', numpy.__version__
-          print('ENV_PASS', torch.__version__, md.version('executorch'), numpy.__version__)
+          assert md.version('einops') == '0.8.2', md.version('einops')
+          print('ENV_PASS', torch.__version__, md.version('executorch'), numpy.__version__, md.version('einops'))
           PY
           flatc --version
 
