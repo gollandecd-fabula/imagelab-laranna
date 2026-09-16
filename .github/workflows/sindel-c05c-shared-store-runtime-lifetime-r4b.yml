@@ -1,0 +1,201 @@
+name: SINDEL C05C Shared T3 Store Runtime Lifetime R4B
+
+on:
+  push:
+    branches: [sindel-c05b-wheelhouse-r3]
+    paths:
+      - 'sindel/c05c/C05C_T3_SHARED_STORE_RUNTIME_LIFETIME_R4B.py'
+      - '.github/workflows/sindel-c05c-shared-store-runtime-lifetime-r4b.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  shared-store-runtime-lifetime-r4b:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11.15'
+          check-latest: false
+
+      - name: Restore exact frozen export environment
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          E="$RUNNER_TEMP/C05C_EXPORT_ENV_R3"
+          mkdir -p "$E"
+          gh run download 35055036918 -R "$GITHUB_REPOSITORY" -n C05C_EXPORT_ENV_R3 -D "$E"
+          LOCK=$(find "$E" -name C05C_EXPORT_ENV_LOCK_R3.json -print -quit)
+          test -n "$LOCK"
+          BASE=$(dirname "$LOCK")
+          test "$(sha256sum "$BASE/C05C_EXPORT_ENV_LOCK_R3.json" | awk '{print $1}')" = '05ab0315a31ad48ef36b834b2305ea3c59dabe13ed104beb752d65686b7449d2'
+          test "$(sha256sum "$BASE/requirements.offline.freeze.txt" | awk '{print $1}')" = '52d2ac268b1defd446e6778c612c2de6b3a889165e0cd0737f927d264e6797b5'
+          (cd "$BASE" && sha256sum -c SHA256SUMS.txt)
+          python -m venv "$RUNNER_TEMP/c05c_exact_env"
+          "$RUNNER_TEMP/c05c_exact_env/bin/python" -m pip install --disable-pip-version-check --no-input --no-index --find-links "$BASE/wheelhouse" -r "$BASE/requirements.offline.freeze.txt"
+          "$RUNNER_TEMP/c05c_exact_env/bin/python" -m pip freeze | LC_ALL=C sort > "$RUNNER_TEMP/freeze.txt"
+          cmp -s "$RUNNER_TEMP/freeze.txt" "$BASE/requirements.offline.freeze.txt"
+          echo "SINDEL_PY=$RUNNER_TEMP/c05c_exact_env/bin/python" >> "$GITHUB_ENV"
+          echo "SINDEL_C05C_WORK=$RUNNER_TEMP/sindel_c05c_work" >> "$GITHUB_ENV"
+          echo "SINDEL_C05C_SHARED_OUT=$RUNNER_TEMP" >> "$GITHUB_ENV"
+          echo "OMP_NUM_THREADS=4" >> "$GITHUB_ENV"
+          echo "MKL_NUM_THREADS=4" >> "$GITHUB_ENV"
+          echo "OPENBLAS_NUM_THREADS=4" >> "$GITHUB_ENV"
+          echo "$RUNNER_TEMP/c05c_exact_env/bin" >> "$GITHUB_PATH"
+
+      - name: Static preflight and immutable thresholds
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$SINDEL_PY" -m py_compile sindel/c05c/C05C_T3_SHARED_STORE_ISOLATED_R4.py sindel/c05c/C05C_T3_SHARED_STORE_RUNTIME_LIFETIME_R4B.py
+          test -x "$RUNNER_TEMP/c05c_exact_env/bin/flatc"
+          test "$(command -v flatc)" = "$RUNNER_TEMP/c05c_exact_env/bin/flatc"
+          "$SINDEL_PY" - <<'PY'
+          import sys
+          sys.path.insert(0, 'sindel/c05c')
+          import C05C_T3_SHARED_STORE_ISOLATED_R4 as r
+          expected={'cosine_min':0.9999,'mean_abs_max':0.005,'max_abs_max':0.05,'finite_required':True}
+          assert r.THRESHOLDS == expected, (r.THRESHOLDS, expected)
+          assert r.EXPECTED_COMPARATOR_SHA == '07edd15b3fcdf3af533b0b9090de8e20918997793b20a3b267665bcb09539c13'
+          print('FROZEN_NUMERICAL_GATE_UNCHANGED_PASS')
+          PY
+
+      - name: Prepare frozen source and exact T3 V3
+        shell: bash
+        run: |
+          set -euo pipefail
+          W="$SINDEL_C05C_WORK"
+          mkdir -p "$W/source" "$W/model"
+          git clone --quiet https://github.com/resemble-ai/chatterbox.git "$RUNNER_TEMP/chatterbox"
+          git -C "$RUNNER_TEMP/chatterbox" checkout --quiet 5de7a54aa4e5e2baadb0182dde554908b48b85c2
+          test "$(git -C "$RUNNER_TEMP/chatterbox" rev-parse HEAD)" = '5de7a54aa4e5e2baadb0182dde554908b48b85c2'
+          cp -a "$RUNNER_TEMP/chatterbox/src/chatterbox" "$W/source/"
+          "$SINDEL_PY" - <<'PY'
+          from huggingface_hub import hf_hub_download
+          from pathlib import Path
+          import hashlib, shutil, os
+          W=Path(os.environ['SINDEL_C05C_WORK'])
+          src=Path(hf_hub_download(repo_id='ResembleAI/chatterbox', filename='t3_mtl23ls_v3.safetensors'))
+          dst=W/'model/t3_mtl23ls_v3.safetensors'; shutil.copy2(src,dst)
+          h=hashlib.sha256(dst.read_bytes()).hexdigest()
+          assert h=='5abca8321ede76f8e61f1cc0d19aea6c946b28871017ce8726f8a69203f05953', h
+          print('T3_SHA_PASS',h)
+          PY
+          test "$(sha256sum sindel/c05c/C05C_T3_PREFILL_R3C.py | awk '{print $1}')" = '0b6e906bf4066606992f9b562989569567f623715ffe62f9b9a91b59fab44971'
+
+      - name: 01 fresh process - export prefill
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$SINDEL_PY" -u sindel/c05c/C05C_T3_SHARED_STORE_ISOLATED_R4.py export-prefill
+
+      - name: 02 fresh process - export decode probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$SINDEL_PY" -u sindel/c05c/C05C_T3_SHARED_STORE_ISOLATED_R4.py export-decode
+
+      - name: 03 fresh process - merge shared PTD
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$SINDEL_PY" -u sindel/c05c/C05C_T3_SHARED_STORE_ISOLATED_R4.py merge-store
+
+      - name: 04 fresh process - prefill real forward, retained buffers
+        id: runtime_prefill
+        continue-on-error: true
+        shell: bash
+        run: |
+          set +e
+          D="$RUNNER_TEMP/c05c_shared_store_isolated_r4/diag/04_runtime_prefill"; mkdir -p "$D"
+          date -u +%FT%TZ > "$D/started.txt"; free -h > "$D/free_before.txt"
+          /usr/bin/time -v -o "$D/time.txt" "$SINDEL_PY" -u sindel/c05c/C05C_T3_SHARED_STORE_RUNTIME_LIFETIME_R4B.py runtime-prefill > >(tee "$D/stdout.txt") 2> >(tee "$D/stderr.txt" >&2)
+          rc=$?; echo "$rc" > "$D/exit_code.txt"; free -h > "$D/free_after.txt"; date -u +%FT%TZ > "$D/finished.txt"
+          exit "$rc"
+
+      - name: 05 fresh process - decode real forward, same PTD, retained buffers
+        id: runtime_decode
+        continue-on-error: true
+        shell: bash
+        run: |
+          set +e
+          D="$RUNNER_TEMP/c05c_shared_store_isolated_r4/diag/05_runtime_decode"; mkdir -p "$D"
+          date -u +%FT%TZ > "$D/started.txt"; free -h > "$D/free_before.txt"
+          /usr/bin/time -v -o "$D/time.txt" "$SINDEL_PY" -u sindel/c05c/C05C_T3_SHARED_STORE_RUNTIME_LIFETIME_R4B.py runtime-decode > >(tee "$D/stdout.txt") 2> >(tee "$D/stderr.txt" >&2)
+          rc=$?; echo "$rc" > "$D/exit_code.txt"; free -h > "$D/free_after.txt"; date -u +%FT%TZ > "$D/finished.txt"
+          exit "$rc"
+
+      - name: 06 fresh process - unchanged numerical final gate
+        id: verify
+        if: always()
+        continue-on-error: true
+        shell: bash
+        run: |
+          set +e
+          D="$RUNNER_TEMP/c05c_shared_store_isolated_r4/diag/06_verify"; mkdir -p "$D"
+          date -u +%FT%TZ > "$D/started.txt"
+          /usr/bin/time -v -o "$D/time.txt" "$SINDEL_PY" -u sindel/c05c/C05C_T3_SHARED_STORE_ISOLATED_R4.py verify > >(tee "$D/stdout.txt") 2> >(tee "$D/stderr.txt" >&2)
+          rc=$?; echo "$rc" > "$D/exit_code.txt"; date -u +%FT%TZ > "$D/finished.txt"
+          exit "$rc"
+
+      - name: Preserve R4B numerical evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SINDEL_C05C_SHARED_RUNTIME_LIFETIME_R4B_EVIDENCE
+          path: |
+            ${{ runner.temp }}/c05c_shared_store_isolated_r4/03_merge_store/stage_result.json
+            ${{ runner.temp }}/c05c_shared_store_isolated_r4/04_runtime_prefill/stage_start.json
+            ${{ runner.temp }}/c05c_shared_store_isolated_r4/04_runtime_prefill/stage_result.json
+            ${{ runner.temp }}/c05c_shared_store_isolated_r4/04_runtime_prefill/runtime_checkpoint.json
+            ${{ runner.temp }}/c05c_shared_store_isolated_r4/05_runtime_decode/stage_start.json
+            ${{ runner.temp }}/c05c_shared_store_isolated_r4/05_runtime_decode/stage_result.json
+            ${{ runner.temp }}/c05c_shared_store_isolated_r4/05_runtime_decode/runtime_checkpoint.json
+            ${{ runner.temp }}/c05c_shared_store_isolated_r4/06_verify/**
+            ${{ runner.temp }}/c05c_shared_store_isolated_r4/C05C_T3_SHARED_STORE_ISOLATED_R4_FINAL.json
+            ${{ runner.temp }}/c05c_shared_store_isolated_r4/diag/04_runtime_prefill/**
+            ${{ runner.temp }}/c05c_shared_store_isolated_r4/diag/05_runtime_decode/**
+            ${{ runner.temp }}/c05c_shared_store_isolated_r4/diag/06_verify/**
+          compression-level: 0
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: C05C-09 FAIL-CLOSED final status
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$SINDEL_PY" - <<'PY'
+          import json, os
+          from pathlib import Path
+          root=Path(os.environ['SINDEL_C05C_SHARED_OUT'])/'c05c_shared_store_isolated_r4'
+          expected={'cosine_min':0.9999,'mean_abs_max':0.005,'max_abs_max':0.05,'finite_required':True}
+          for stage in ('04_runtime_prefill','05_runtime_decode','06_verify'):
+              p=root/stage/'stage_result.json'
+              assert p.is_file(), f'missing {p}'
+              d=json.loads(p.read_text())
+              assert d.get('status')=='PASS', (stage,d)
+          final=root/'C05C_T3_SHARED_STORE_ISOLATED_R4_FINAL.json'
+          assert final.is_file(), final
+          d=json.loads(final.read_text())
+          assert d.get('status')=='PASS_L2', d
+          assert d.get('thresholds')==expected, d.get('thresholds')
+          assert d.get('shared_ptd',{}).get('same_exact_bytes_used_by_prefill_and_decode') is True
+          for group in ('prefill','decode_probe'):
+              assert d[group]['real_forward'] is True
+              for rec in d[group]['comparison']:
+                  assert rec['finite'] is True, rec
+                  assert rec['accepted'] is True, rec
+                  assert rec['cosine_raw'] >= expected['cosine_min'], rec
+                  assert rec['mean_abs'] <= expected['mean_abs_max'], rec
+                  assert rec['max_abs'] <= expected['max_abs_max'], rec
+          print('C05C_09_PASS_L2_UNCHANGED_THRESHOLDS')
+          PY
