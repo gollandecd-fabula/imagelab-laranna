@@ -64,7 +64,16 @@ jobs:
           assert h == '5abca8321ede76f8e61f1cc0d19aea6c946b28871017ce8726f8a69203f05953', h
           print('T3_SHA_PASS', h, dst.stat().st_size)
           PY
-          test "$(sha256sum sindel/c05c/C05C_T3_PREFILL_R3C.py | awk '{print $1}')" = '0b6e906bf4066606992f9b562989569567f623715ffe62f9b9a91b59fab44971'
+          test "$(git hash-object sindel/c05c/C05C_T3_PREFILL_R3C.py)" = '017fd568315bb4269b5991dd810322b39f55a8b3'
+          python - <<'PY'
+          import ast, hashlib
+          from pathlib import Path
+          p=Path('sindel/c05c/C05C_T3_PREFILL_R3C.py')
+          d=ast.dump(ast.parse(p.read_text()),annotate_fields=True,include_attributes=False)
+          h=hashlib.sha256(d.encode()).hexdigest()
+          assert h == '6a3c8c66ca74f3c695195bb564892e43e9ddbabfa5b00d49e2421fc5cff90906', h
+          print('EXPORTER_AST_PASS', h)
+          PY
 
       - name: Export FP16 XNNPACK t3_prefill.pte
         shell: bash
