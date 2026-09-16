@@ -20,9 +20,15 @@ python -m venv "$RESOLVE"
 "$RESOLVE/bin/python" -m pip install --disable-pip-version-check --no-input -r "$ROOT/requirements.in"
 "$RESOLVE/bin/python" -m pip freeze | LC_ALL=C sort > "$OUT/requirements.resolved.txt"
 
+# Fetch exact CPU torch wheels only from the official PyTorch CPU index first.
+python -m pip download --disable-pip-version-check --no-input --no-deps \
+  --dest "$WHEEL" --index-url https://download.pytorch.org/whl/cpu \
+  'torch==2.10.0+cpu' 'torchaudio==2.10.0+cpu'
+# Resolve every other wheel from PyPI, using the already-downloaded CPU torch
+# wheels as local candidates. This prevents the PyTorch extra index from
+# substituting local-version variants for unrelated packages such as ExecuTorch.
 python -m pip wheel --disable-pip-version-check --no-input \
-  --wheel-dir "$WHEEL" \
-  --extra-index-url https://download.pytorch.org/whl/cpu \
+  --wheel-dir "$WHEEL" --find-links "$WHEEL" \
   -r "$OUT/requirements.resolved.txt"
 
 for env in "$ENV_A" "$ENV_B"; do
@@ -30,15 +36,16 @@ for env in "$ENV_A" "$ENV_B"; do
   "$env/bin/python" -m pip install --disable-pip-version-check --no-input \
     --no-index --find-links "$WHEEL" -r "$OUT/requirements.resolved.txt"
   "$env/bin/python" - <<'PY'
-import json, sys, torch, torchaudio, executorch
+import json, sys, torch, torchaudio, executorch, numpy
 from executorch.exir import to_edge_transform_and_lower, EdgeCompileConfig
 from executorch.backends.xnnpack.partition.xnnpack_partitioner import XnnpackPartitioner
-import transformers, diffusers, safetensors, omegaconf, conformer, einops
+import transformers, diffusers, safetensors, omegaconf, conformer, einops, s3tokenizer, librosa
 assert torch.__version__ == '2.10.0+cpu', torch.__version__
 assert torchaudio.__version__ == '2.10.0+cpu', torchaudio.__version__
+assert numpy.__version__ == '2.4.6', numpy.__version__
 import importlib.metadata as md
-assert md.version('executorch') == '1.1.0'
-print(json.dumps({'python':sys.version,'torch':torch.__version__,'torchaudio':torchaudio.__version__,'executorch':md.version('executorch'),'transformers':transformers.__version__}, sort_keys=True))
+assert md.version('executorch') == '1.1.0', md.version('executorch')
+print(json.dumps({'python':sys.version,'torch':torch.__version__,'torchaudio':torchaudio.__version__,'executorch':md.version('executorch'),'numpy':numpy.__version__,'transformers':transformers.__version__,'s3tokenizer':md.version('s3tokenizer')}, sort_keys=True))
 PY
 done > "$OUT/OFFLINE_IMPORT_PROBE.txt"
 
@@ -61,7 +68,7 @@ def sha(p):
 wheels=[]
 for p in sorted((out/'wheelhouse').iterdir(), key=lambda x:x.name.lower()):
  if p.is_file(): wheels.append({'name':p.name,'size':p.stat().st_size,'sha256':sha(p)})
-lock={'schema':'sindel.cp034.c05c.export-env.r3','python':'3.11.15','torch':'2.10.0+cpu','torchaudio':'2.10.0+cpu','executorch':'1.1.0','android_runtime_target':'executorch-android-1.1.0','offline_rebuilds':2,'offline_rebuild_freeze_equal':True,'wheel_count':len(wheels),'wheels':wheels,'freeze':(out/'requirements.offline.freeze.txt').read_text().splitlines()}
+lock={'schema':'sindel.cp034.c05c.export-env.r3','python':'3.11.15','torch':'2.10.0+cpu','torchaudio':'2.10.0+cpu','executorch':'1.1.0','numpy':'2.4.6','android_runtime_target':'executorch-android-1.1.0','offline_rebuilds':2,'offline_rebuild_freeze_equal':True,'wheel_count':len(wheels),'wheels':wheels,'freeze':(out/'requirements.offline.freeze.txt').read_text().splitlines()}
 (out/'C05C_EXPORT_ENV_LOCK_R3.json').write_text(json.dumps(lock,indent=2),encoding='utf-8')
 PY
 python - "$OUT" <<'PY'
