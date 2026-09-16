@@ -7,6 +7,7 @@ on:
       - 'sindel/c05c/C05C_T3_SHARED_STORE_ISOLATED_R4.py'
       - 'sindel/c05c/C05C_T3_PREFILL_EXTERNAL_GATE_R4.json'
       - 'sindel/c05c/C05C_07_PREACTION_ISOLATED_SHARED_STORE_R4.json'
+      - 'sindel/c05c/C05C_07_PREACTION_ISOLATED_SHARED_STORE_RETRY1_R4.json'
       - '.github/workflows/sindel-c05c-shared-store-isolated-r4.yml'
 
 permissions:
@@ -50,14 +51,21 @@ jobs:
           echo "OMP_NUM_THREADS=4" >> "$GITHUB_ENV"
           echo "MKL_NUM_THREADS=4" >> "$GITHUB_ENV"
           echo "OPENBLAS_NUM_THREADS=4" >> "$GITHUB_ENV"
+          # The proven external-prefill workflow prepends this exact frozen
+          # venv bin directory before XNNPACK lowering. ExecuTorch's flatc
+          # console tool lives here and is not visible through setup-python PATH.
+          echo "$RUNNER_TEMP/c05c_exact_env/bin" >> "$GITHUB_PATH"
 
-      - name: Static compile isolated runner
+      - name: Static compile and frozen flatc preflight
         shell: bash
         run: |
           set -euo pipefail
           "$SINDEL_PY" -m py_compile sindel/c05c/C05C_T3_SHARED_STORE_ISOLATED_R4.py
           "$SINDEL_PY" sindel/c05c/C05C_T3_SHARED_STORE_ISOLATED_R4.py --help >/dev/null
-          echo STATIC_COMPILE_PASS
+          test -x "$RUNNER_TEMP/c05c_exact_env/bin/flatc"
+          test "$(command -v flatc)" = "$RUNNER_TEMP/c05c_exact_env/bin/flatc"
+          flatc --version | tee "$RUNNER_TEMP/C05C_ISOLATED_FLATC_VERSION.txt"
+          echo STATIC_COMPILE_AND_FLATC_PASS
 
       - name: Prepare frozen source and exact T3 V3
         shell: bash
@@ -90,6 +98,7 @@ jobs:
           set +e
           D="$RUNNER_TEMP/c05c_shared_store_isolated_r4/diag/01_export_prefill"; mkdir -p "$D"
           date -u +%FT%TZ > "$D/started.txt"; free -h > "$D/free_before.txt"; ulimit -a > "$D/ulimit.txt" 2>&1
+          command -v flatc > "$D/flatc_path.txt" 2>&1; flatc --version > "$D/flatc_version.txt" 2>&1
           /usr/bin/time -v -o "$D/time.txt" "$SINDEL_PY" -u sindel/c05c/C05C_T3_SHARED_STORE_ISOLATED_R4.py export-prefill > >(tee "$D/stdout.txt") 2> >(tee "$D/stderr.txt" >&2)
           rc=$?; echo "$rc" > "$D/exit_code.txt"; free -h > "$D/free_after.txt"; date -u +%FT%TZ > "$D/finished.txt"
           exit "$rc"
@@ -100,6 +109,7 @@ jobs:
         with:
           name: SINDEL_C05C_ISO_R4_01_PREFILL_META
           path: |
+            ${{ runner.temp }}/C05C_ISOLATED_FLATC_VERSION.txt
             ${{ runner.temp }}/c05c_shared_store_isolated_r4/01_export_prefill/**
             !${{ runner.temp }}/c05c_shared_store_isolated_r4/01_export_prefill/t3_shared.ptd
             ${{ runner.temp }}/c05c_shared_store_isolated_r4/diag/01_export_prefill/**
@@ -115,6 +125,7 @@ jobs:
           set +e
           D="$RUNNER_TEMP/c05c_shared_store_isolated_r4/diag/02_export_decode"; mkdir -p "$D"
           date -u +%FT%TZ > "$D/started.txt"; free -h > "$D/free_before.txt"; ulimit -a > "$D/ulimit.txt" 2>&1
+          command -v flatc > "$D/flatc_path.txt" 2>&1; flatc --version > "$D/flatc_version.txt" 2>&1
           /usr/bin/time -v -o "$D/time.txt" "$SINDEL_PY" -u sindel/c05c/C05C_T3_SHARED_STORE_ISOLATED_R4.py export-decode > >(tee "$D/stdout.txt") 2> >(tee "$D/stderr.txt" >&2)
           rc=$?; echo "$rc" > "$D/exit_code.txt"; free -h > "$D/free_after.txt"; date -u +%FT%TZ > "$D/finished.txt"
           exit "$rc"
