@@ -1,0 +1,27 @@
+{
+  "schema": "sindel.cp034.c05c.preaction.isolated-shared-store-retry1-r4.v1",
+  "milestone": "C05C-07",
+  "failed_run": 35099163903,
+  "diagnosis": {
+    "primary_failure": "both isolated export processes failed before PTE/PTD creation because XNNPACK flatbuffer serialization could not resolve executable 'flatc'",
+    "prefill_exception": "FileNotFoundError: [Errno 2] No such file or directory: 'flatc'",
+    "decode_exception": "FileNotFoundError: [Errno 2] No such file or directory: 'flatc'",
+    "segfault_reached": false,
+    "diagnostics_preserved": true
+  },
+  "root_cause": "the proven external-prefill workflow prepends the exact frozen venv bin directory to PATH before export; the new isolated workflow restored the same venv but did not expose its console tools on PATH",
+  "change_boundary": [
+    "workflow environment only: prepend $RUNNER_TEMP/c05c_exact_env/bin to PATH using GITHUB_PATH",
+    "add an explicit flatc executable/version preflight before heavy export",
+    "do not change Python package freeze",
+    "do not modify isolated model/export logic",
+    "do not modify accepted prefill PTE/PTD bytes",
+    "do not modify comparator or thresholds",
+    "do not publish private Golden",
+    "do not start Android/APK work"
+  ],
+  "next_test": "exact frozen venv, flatc preflight, then six fresh isolated processes; preserve every stage diagnostic artifact; final gate only PASS when both real forwards use the exact same union PTD and numerical comparisons pass",
+  "rollback": "revert workflow-only PATH/preflight change; accepted external prefill PTE/PTD and all protected model/evidence remain unchanged",
+  "evidence_ceiling": "L2 source runtime",
+  "status": "AUTHORIZED_TO_EXECUTE"
+}
