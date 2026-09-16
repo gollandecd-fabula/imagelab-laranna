@@ -5,6 +5,7 @@ on:
     branches: [sindel-c05b-wheelhouse-r3]
     paths:
       - 'sindel/c05c/C05C_T3_PREFILL_EXTERNAL_R4.py'
+      - 'sindel/c05c/C05C_T3_PREFILL_PARITY_GATE_R4.json'
       - '.github/workflows/sindel-c05c-prefill-external-r4.yml'
 
 permissions:
@@ -16,6 +17,72 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+
+      # STRAZHNIK fail-closed gate.
+      # Authoritative CP034 C-05C R4 handoff forbids external-constants work
+      # until P1/P2/P3 real ExecuTorch parity is 3/3 PASS and the T3 size gate
+      # has explicitly opened.  Absence, malformed content, wrong protected
+      # hashes, or any non-PASS state MUST stop this job before model download,
+      # export, PTD creation, or any downstream artifact publication.
+      - name: STRAZHNIK gate - require P1 P2 P3 parity and open size gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          G='sindel/c05c/C05C_T3_PREFILL_PARITY_GATE_R4.json'
+          if [ ! -f "$G" ]; then
+            echo 'FAIL-CLOSED: parity/size gate evidence is absent.' >&2
+            exit 42
+          fi
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          p = Path('sindel/c05c/C05C_T3_PREFILL_PARITY_GATE_R4.json')
+          d = json.loads(p.read_text(encoding='utf-8'))
+
+          EXPECTED_PTE = '967728e7cda4b0f636f9813d288dafe0759216f17b6c690063397b3b4d1ad459'
+          EXPECTED_COMPARATOR = '07edd15b3fcdf3af533b0b9090de8e20918997793b20a3b267665bcb09539c13'
+          EXPECTED_THRESHOLDS = {
+              'cosine_min': 0.9999,
+              'mean_abs_max': 0.005,
+              'max_abs_max': 0.05,
+              'finite_required': True,
+          }
+
+          errors = []
+          if d.get('schema') != 'sindel.cp034.c05c.t3-prefill-parity-gate-r4.v1':
+              errors.append('schema')
+          if d.get('candidate_pte_sha256') != EXPECTED_PTE:
+              errors.append('candidate_pte_sha256')
+          if d.get('comparator_sha256') != EXPECTED_COMPARATOR:
+              errors.append('comparator_sha256')
+          if d.get('thresholds') != EXPECTED_THRESHOLDS:
+              errors.append('thresholds')
+          parity = d.get('parity', {})
+          for probe in ('P1', 'P2', 'P3'):
+              if parity.get(probe, {}).get('status') != 'PASS_L2':
+                  errors.append(f'{probe}.status')
+              if parity.get(probe, {}).get('fresh_process') is not True:
+                  errors.append(f'{probe}.fresh_process')
+              if parity.get(probe, {}).get('real_executorch_forward') is not True:
+                  errors.append(f'{probe}.real_executorch_forward')
+              if parity.get(probe, {}).get('outputs_compared') != ['logits', 'k', 'v']:
+                  errors.append(f'{probe}.outputs_compared')
+              if not parity.get(probe, {}).get('evidence_sha256'):
+                  errors.append(f'{probe}.evidence_sha256')
+          size_gate = d.get('size_gate', {})
+          if size_gate.get('status') != 'OPEN':
+              errors.append('size_gate.status')
+          if not size_gate.get('evidence_sha256'):
+              errors.append('size_gate.evidence_sha256')
+          if d.get('golden_published') is not False:
+              errors.append('golden_published')
+
+          if errors:
+              raise SystemExit('FAIL-CLOSED: invalid parity/size gate: ' + ', '.join(errors))
+          print('STRAZHNIK_GATE_PASS')
+          PY
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11.15'
