@@ -1,0 +1,42 @@
+{
+  "schema": "sindel.cp034.c05c.preaction.isolated-shared-store-r4.v1",
+  "milestone": "C05C-07",
+  "protocol_item": "shared T3 external constant store feasibility before production decode",
+  "reason": "previous combined-process probe crashed with native segmentation fault exit 139 after export/lowering; isolate process boundaries to localize the fault and preserve evidence",
+  "change_boundary": [
+    "add a new isolated shared-store probe script",
+    "add a new diagnostic GitHub Actions workflow",
+    "do not modify accepted external prefill PTE/PTD bytes",
+    "do not modify comparator or thresholds",
+    "do not publish private Golden conditioning",
+    "do not claim production t3_decode acceptance",
+    "do not start Android runtime or APK changes"
+  ],
+  "protected": {
+    "accepted_prefill_pte_sha256": "7b957ceb1917f1f5332df96b44711096c02daed037d6fa460d0b0639b8d377d9",
+    "accepted_prefill_ptd_sha256": "a92e69a80f25e304ebe4a50c9e55e5457e381d0048d8e51debdab5b4dd3a0ea9",
+    "comparator_sha256": "07edd15b3fcdf3af533b0b9090de8e20918997793b20a3b267665bcb09539c13",
+    "thresholds": {
+      "cosine_min": 0.9999,
+      "mean_abs_max": 0.005,
+      "max_abs_max": 0.05,
+      "finite_required": true
+    },
+    "t3_model_sha256": "5abca8321ede76f8e61f1cc0d19aea6c946b28871017ce8726f8a69203f05953",
+    "chatterbox_commit": "5de7a54aa4e5e2baadb0182dde554908b48b85c2"
+  },
+  "isolated_sequence": [
+    "fresh process: export prefill and save source outputs + PTE + own PTD",
+    "fresh process: export decode storage probe and save source outputs + PTE + own PTD",
+    "fresh process: deserialize and merge the two NamedDataStore payloads, prove key/data compatibility, serialize one union t3_shared PTD",
+    "fresh process: real ExecuTorch prefill forward using prefill PTE + the union PTD",
+    "fresh process: real ExecuTorch decode forward using decode PTE + the same union PTD",
+    "fresh process: compare saved runtime outputs to saved source outputs and emit final gate evidence"
+  ],
+  "diagnostic_rule": "each stage gets start marker, /usr/bin/time -v resource report, exit-code marker, stage JSON when Python survives, and artifacts uploaded with if: always(); a segfault must not erase earlier-stage evidence",
+  "next_test": "all six isolated stages PASS; both runtime stages consume a byte-identical union PTD SHA; prefill and decode outputs are finite/schema-correct and meet frozen numerical thresholds",
+  "rollback": "reject the isolated probe artifacts and retain the already-qualified external prefill PTE/PTD unchanged",
+  "evidence_ceiling": "L2 source runtime",
+  "release_effect": "none until shared-store gate passes",
+  "status": "AUTHORIZED_TO_EXECUTE"
+}
