@@ -87,10 +87,11 @@ def main() -> None:
         lo, k, v = sta(ce, fixed, L)
         assert torch.isfinite(lo).all() and torch.isfinite(k).all() and torch.isfinite(v).all()
 
-    # ExecuTorch 1.1 XNNPACK external-data contract: tag get_attr constants on
-    # an UNLIFTED graph, then re-export.  Tagging after XNNPACK lowering does
-    # not move delegate named_data and was rejected in Attempt 1.
-    first_ep = export(sta, (ce, fixed, L), strict=True)
+    # Match the already accepted R3C capture semantics.  The frozen exporter
+    # calls torch.export.export without strict=True.  Forcing strict=True here
+    # rejects the same inline DynamicCache import, so R4 must not silently
+    # change capture semantics while testing storage externalization.
+    first_ep = export(sta, (ce, fixed, L), strict=False)
     tagged_module = first_ep.module()
     delegate_external_constants_pass_unlifted(
         module=tagged_module,
@@ -107,7 +108,8 @@ def main() -> None:
     if not tagged_get_attrs:
         raise SystemExit('FAIL-CLOSED: no delegate constants were tagged before lowering')
 
-    tagged_ep = export(tagged_module, (ce, fixed, L), strict=True)
+    # Preserve the same non-strict capture semantics for the tagged graph.
+    tagged_ep = export(tagged_module, (ce, fixed, L), strict=False)
     edge = to_edge_transform_and_lower(
         tagged_ep,
         compile_config=EdgeCompileConfig(_check_ir_validity=False),
@@ -134,8 +136,6 @@ def main() -> None:
         'pte_fraction_of_embedded': pte.stat().st_size / ACCEPTED_EMBEDDED_PTE_BYTES,
         'ptd_fraction_of_embedded': ptd.stat().st_size / ACCEPTED_EMBEDDED_PTE_BYTES,
     }
-    # Structural prototype acceptance only. Numerical adoption still requires
-    # private-Golden P1/P2/P3 parity after this export.
     structural_ok = (
         separation['external_pte_bytes'] < ACCEPTED_EMBEDDED_PTE_BYTES
         and separation['external_ptd_bytes'] > separation['external_pte_bytes']
@@ -145,9 +145,10 @@ def main() -> None:
         raise SystemExit('FAIL-CLOSED: external constants did not materially separate T3 storage')
 
     rep = {
-        'schema': 'sindel.cp034.c05c.prefill-external-r4.v2',
+        'schema': 'sindel.cp034.c05c.prefill-external-r4.v3',
         'status': 'EXPORTED_STRUCTURAL_PASS_PRIVATE_PARITY_REQUIRED',
         'base_exporter_sha256': actual_base_sha256,
+        'capture_strict': False,
         'tagging_order': 'export -> unlift -> delegate tag -> re-export -> XNNPACK lower',
         'tagged_get_attr_count': len(tagged_get_attrs),
         'tensor_data_tags': tags,
