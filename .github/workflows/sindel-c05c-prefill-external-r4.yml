@@ -1,0 +1,126 @@
+name: SINDEL C05C Prefill External R4
+
+on:
+  push:
+    branches: [sindel-c05b-wheelhouse-r3]
+    paths:
+      - 'sindel/c05c/C05C_T3_PREFILL_EXTERNAL_R4.py'
+      - '.github/workflows/sindel-c05c-prefill-external-r4.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  export-external:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11.15'
+          check-latest: false
+      - name: Install exact export line
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install --index-url https://download.pytorch.org/whl/cpu 'torch==2.10.0+cpu' 'torchaudio==2.10.0+cpu'
+          python -m pip install 'executorch==1.1.0'
+          python -m pip install 'numpy==2.4.6' 'transformers==5.2.0' 'safetensors==0.5.3' 'tokenizers==0.22.2' 'huggingface-hub==1.31.0' 'einops==0.8.2'
+          python - <<'PY'
+          import importlib.metadata as md, torch, numpy
+          assert torch.__version__ == '2.10.0+cpu'
+          assert md.version('executorch') == '1.1.0'
+          assert numpy.__version__ == '2.4.6'
+          print('ENV_PASS')
+          PY
+      - name: Prepare frozen source and exact T3 V3
+        shell: bash
+        run: |
+          set -euo pipefail
+          W="$RUNNER_TEMP/sindel_c05c_work"
+          mkdir -p "$W/source" "$W/model"
+          git clone --quiet https://github.com/resemble-ai/chatterbox.git "$RUNNER_TEMP/chatterbox"
+          git -C "$RUNNER_TEMP/chatterbox" checkout --quiet 5de7a54aa4e5e2baadb0182dde554908b48b85c2
+          test "$(git -C "$RUNNER_TEMP/chatterbox" rev-parse HEAD)" = '5de7a54aa4e5e2baadb0182dde554908b48b85c2'
+          cp -a "$RUNNER_TEMP/chatterbox/src/chatterbox" "$W/source/"
+          python - <<'PY'
+          from huggingface_hub import hf_hub_download
+          from pathlib import Path
+          import hashlib, shutil, os
+          W=Path(os.environ['RUNNER_TEMP'])/'sindel_c05c_work'
+          src=Path(hf_hub_download(repo_id='ResembleAI/chatterbox', filename='t3_mtl23ls_v3.safetensors'))
+          dst=W/'model/t3_mtl23ls_v3.safetensors'; shutil.copy2(src,dst)
+          h=hashlib.sha256(dst.read_bytes()).hexdigest()
+          assert h == '5abca8321ede76f8e61f1cc0d19aea6c946b28871017ce8726f8a69203f05953', h
+          print('T3_SHA_PASS', h)
+          PY
+          test "$(git hash-object sindel/c05c/C05C_T3_PREFILL_R3C.py)" = '1be8e6975c68ae6f2111b481a5ba6f5e305717ae'
+      - name: Export external constants prototype
+        shell: bash
+        run: |
+          set -euo pipefail
+          W="$RUNNER_TEMP/sindel_c05c_work"
+          export SINDEL_C05C_WORK="$W"
+          export SINDEL_C05C_EXTERNAL_OUT="$RUNNER_TEMP/c05c_external_r4"
+          export OMP_NUM_THREADS=4 MKL_NUM_THREADS=4 OPENBLAS_NUM_THREADS=4
+          python -u sindel/c05c/C05C_T3_PREFILL_EXTERNAL_R4.py
+          test -s "$RUNNER_TEMP/c05c_external_r4/t3_prefill_external_r4.pte"
+          test -s "$RUNNER_TEMP/c05c_external_r4/t3_shared.ptd"
+          sha256sum "$RUNNER_TEMP/c05c_external_r4"/* > "$RUNNER_TEMP/c05c_external_r4/SHA256SUMS.txt"
+          split -b 300M -d -a 2 "$RUNNER_TEMP/c05c_external_r4/t3_shared.ptd" "$RUNNER_TEMP/c05c_external_r4/t3_shared.ptd.part."
+          sha256sum "$RUNNER_TEMP/c05c_external_r4"/t3_shared.ptd.part.* > "$RUNNER_TEMP/c05c_external_r4/PTD_PART_SHA256SUMS.txt"
+      - name: Load smoke with PTD
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          from executorch.extension.pybindings.portable_lib import _load_for_executorch
+          d=os.path.join(os.environ['RUNNER_TEMP'],'c05c_external_r4')
+          m=_load_for_executorch(os.path.join(d,'t3_prefill_external_r4.pte'), data_path=os.path.join(d,'t3_shared.ptd'))
+          print('EXTERNAL_LOAD_PASS', m)
+          PY
+      - name: Upload PTE and evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: SINDEL_C05C_T3_PREFILL_EXTERNAL_R4_META
+          path: |
+            ${{ runner.temp }}/c05c_external_r4/t3_prefill_external_r4.pte
+            ${{ runner.temp }}/c05c_external_r4/C05C_T3_PREFILL_EXTERNAL_R4_EXPORT.json
+            ${{ runner.temp }}/c05c_external_r4/SHA256SUMS.txt
+            ${{ runner.temp }}/c05c_external_r4/PTD_PART_SHA256SUMS.txt
+          compression-level: 0
+          retention-days: 7
+      - name: Upload PTD part 00
+        uses: actions/upload-artifact@v4
+        with:
+          name: SINDEL_C05C_T3_SHARED_R4_PART00
+          path: ${{ runner.temp }}/c05c_external_r4/t3_shared.ptd.part.00
+          compression-level: 0
+          retention-days: 7
+      - name: Upload PTD part 01
+        if: ${{ hashFiles(format('{0}/c05c_external_r4/t3_shared.ptd.part.01', runner.temp)) != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: SINDEL_C05C_T3_SHARED_R4_PART01
+          path: ${{ runner.temp }}/c05c_external_r4/t3_shared.ptd.part.01
+          compression-level: 0
+          retention-days: 7
+      - name: Upload PTD part 02
+        if: ${{ hashFiles(format('{0}/c05c_external_r4/t3_shared.ptd.part.02', runner.temp)) != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: SINDEL_C05C_T3_SHARED_R4_PART02
+          path: ${{ runner.temp }}/c05c_external_r4/t3_shared.ptd.part.02
+          compression-level: 0
+          retention-days: 7
+      - name: Upload PTD part 03
+        if: ${{ hashFiles(format('{0}/c05c_external_r4/t3_shared.ptd.part.03', runner.temp)) != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: SINDEL_C05C_T3_SHARED_R4_PART03
+          path: ${{ runner.temp }}/c05c_external_r4/t3_shared.ptd.part.03
+          compression-level: 0
+          retention-days: 7
