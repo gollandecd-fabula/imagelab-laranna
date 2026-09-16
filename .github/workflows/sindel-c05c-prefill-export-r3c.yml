@@ -64,7 +64,7 @@ jobs:
           assert h == '5abca8321ede76f8e61f1cc0d19aea6c946b28871017ce8726f8a69203f05953', h
           print('T3_SHA_PASS', h, dst.stat().st_size)
           PY
-          test "$(git hash-object sindel/c05c/C05C_T3_PREFILL_R3C.py)" = '017fd568315bb4269b5991dd810322b39f55a8b3'
+          test "$(git hash-object sindel/c05c/C05C_T3_PREFILL_R3C.py)" = '1be8e6975c68ae6f2111b481a5ba6f5e305717ae'
           python - <<'PY'
           import ast, hashlib
           from pathlib import Path
