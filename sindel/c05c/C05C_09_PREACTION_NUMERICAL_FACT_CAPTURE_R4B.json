@@ -1,0 +1,16 @@
+{
+  "schema": "sindel.cp034.c05c.preaction-r4b.v1",
+  "milestone": "C05C-09 numerical final gate diagnosis",
+  "protocol_item": "read exact six output metrics and exact fail-closed assertion without weakening thresholds",
+  "change_boundary": "diagnostic-only: add post-forward comparison facts to R4B runtime stage_result; no model/export/PTD/threshold/Android changes",
+  "frozen_thresholds": {
+    "cosine_min": 0.9999,
+    "mean_abs_max": 0.005,
+    "max_abs_max": 0.05,
+    "finite_required": true
+  },
+  "next_test": "rerun existing R4B workflow; require fresh prefill/decode real forwards, capture compare_arrays output for logits/K/V and logits/K_delta/V_delta, then observe unchanged original verify and final fail-closed gate",
+  "rollback": "revert only the diagnostic comparison additions in C05C_T3_SHARED_STORE_RUNTIME_LIFETIME_R4B.py",
+  "evidence_level_target": "L2",
+  "android_mutation": false
+}
