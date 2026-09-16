@@ -1,0 +1,56 @@
+{
+  "schema": "sindel.cp034.c05c.numerical-tolerance.r3",
+  "frozen_before_first_candidate": true,
+  "scope": [
+    "t3_prefill",
+    "t3_decode",
+    "s3gen_encoder",
+    "cfm_step",
+    "hifigan"
+  ],
+  "reference": {
+    "chatterbox_commit": "5de7a54aa4e5e2baadb0182dde554908b48b85c2",
+    "t3_sha256": "5abca8321ede76f8e61f1cc0d19aea6c946b28871017ce8726f8a69203f05953",
+    "s3gen_sha256": "9b9ff07e60b20c136e2b1b3d7563a24604e8d2c4c267888d1ee929dd0151d2a3",
+    "golden_conditioning_sha256": "a204d69807fbf8605157fcd045cfdba2bee9002396baeb633f613065fdf1e5e0",
+    "executorch": "1.1.0",
+    "torch_export": "2.10.0+cpu"
+  },
+  "t3_source_vs_adapted_fp32": {
+    "logits_max_abs": 0.0001,
+    "logits_mean_abs": 0.00001,
+    "logits_cosine_min": 0.999999,
+    "cfg_top1_must_match": true,
+    "valid_kv_max_abs": 0.0001,
+    "valid_kv_mean_abs": 0.00001,
+    "valid_kv_cosine_min": 0.999999
+  },
+  "t3_pytorch_fp16_vs_pte_fp16": {
+    "logits_max_abs": 0.08,
+    "logits_mean_abs": 0.01,
+    "logits_cosine_min": 0.999,
+    "cfg_top1_must_match": true,
+    "valid_kv_max_abs": 0.08,
+    "valid_kv_mean_abs": 0.01,
+    "valid_kv_cosine_min": 0.999
+  },
+  "s3gen_encoder": {
+    "float_max_abs": 0.001,
+    "float_mean_abs": 0.0001,
+    "cosine_min": 0.99999,
+    "integer_outputs_exact": true
+  },
+  "cfm_step": {
+    "float_max_abs": 0.002,
+    "float_mean_abs": 0.0002,
+    "cosine_min": 0.9999
+  },
+  "hifigan": {
+    "float_max_abs": 0.005,
+    "float_mean_abs": 0.0005,
+    "waveform_cosine_min": 0.999,
+    "finite_required": true
+  },
+  "fail_closed": true,
+  "note": "Thresholds frozen before any C-05C PTE candidate is exported or evaluated. They may only be revised by a new protocol revision before a fresh candidate family, never after observing a candidate result."
+}
