@@ -5,8 +5,6 @@ transformers==5.2.0
 diffusers==0.29.0
 conformer==0.3.2
 safetensors==0.5.3
-s3tokenizer==0.3.0
 omegaconf==2.3.1
 einops==0.8.2
-librosa==0.11.0
 resemble-perth==1.0.1
