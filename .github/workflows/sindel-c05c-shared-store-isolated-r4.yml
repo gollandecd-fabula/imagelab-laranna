@@ -1,0 +1,337 @@
+name: SINDEL C05C Shared T3 Store Isolated R4
+
+on:
+  push:
+    branches: [sindel-c05b-wheelhouse-r3]
+    paths:
+      - 'sindel/c05c/C05C_T3_SHARED_STORE_ISOLATED_R4.py'
+      - 'sindel/c05c/C05C_T3_PREFILL_EXTERNAL_GATE_R4.json'
+      - 'sindel/c05c/C05C_07_PREACTION_ISOLATED_SHARED_STORE_R4.json'
+      - '.github/workflows/sindel-c05c-shared-store-isolated-r4.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  isolated-shared-store-probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11.15'
+          check-latest: false
+
+      - name: Restore exact frozen export environment
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          E="$RUNNER_TEMP/C05C_EXPORT_ENV_R3"
+          mkdir -p "$E"
+          gh run download 35055036918 -R "$GITHUB_REPOSITORY" -n C05C_EXPORT_ENV_R3 -D "$E"
+          LOCK=$(find "$E" -name C05C_EXPORT_ENV_LOCK_R3.json -print -quit)
+          test -n "$LOCK"
+          BASE=$(dirname "$LOCK")
+          test "$(sha256sum "$BASE/C05C_EXPORT_ENV_LOCK_R3.json" | awk '{print $1}')" = '05ab0315a31ad48ef36b834b2305ea3c59dabe13ed104beb752d65686b7449d2'
+          test "$(sha256sum "$BASE/requirements.offline.freeze.txt" | awk '{print $1}')" = '52d2ac268b1defd446e6778c612c2de6b3a889165e0cd0737f927d264e6797b5'
+          (cd "$BASE" && sha256sum -c SHA256SUMS.txt)
+          python -m venv "$RUNNER_TEMP/c05c_exact_env"
+          "$RUNNER_TEMP/c05c_exact_env/bin/python" -m pip install --disable-pip-version-check --no-input --no-index --find-links "$BASE/wheelhouse" -r "$BASE/requirements.offline.freeze.txt"
+          "$RUNNER_TEMP/c05c_exact_env/bin/python" -m pip freeze | LC_ALL=C sort > "$RUNNER_TEMP/freeze.txt"
+          cmp -s "$RUNNER_TEMP/freeze.txt" "$BASE/requirements.offline.freeze.txt"
+          echo "SINDEL_PY=$RUNNER_TEMP/c05c_exact_env/bin/python" >> "$GITHUB_ENV"
+          echo "SINDEL_C05C_WORK=$RUNNER_TEMP/sindel_c05c_work" >> "$GITHUB_ENV"
+          echo "SINDEL_C05C_SHARED_OUT=$RUNNER_TEMP" >> "$GITHUB_ENV"
+          echo "OMP_NUM_THREADS=4" >> "$GITHUB_ENV"
+          echo "MKL_NUM_THREADS=4" >> "$GITHUB_ENV"
+          echo "OPENBLAS_NUM_THREADS=4" >> "$GITHUB_ENV"
+
+      - name: Static compile isolated runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$SINDEL_PY" -m py_compile sindel/c05c/C05C_T3_SHARED_STORE_ISOLATED_R4.py
+          "$SINDEL_PY" sindel/c05c/C05C_T3_SHARED_STORE_ISOLATED_R4.py --help >/dev/null
+          echo STATIC_COMPILE_PASS
+
+      - name: Prepare frozen source and exact T3 V3
+        shell: bash
+        run: |
+          set -euo pipefail
+          W="$SINDEL_C05C_WORK"
+          mkdir -p "$W/source" "$W/model"
+          git clone --quiet https://github.com/resemble-ai/chatterbox.git "$RUNNER_TEMP/chatterbox"
+          git -C "$RUNNER_TEMP/chatterbox" checkout --quiet 5de7a54aa4e5e2baadb0182dde554908b48b85c2
+          test "$(git -C "$RUNNER_TEMP/chatterbox" rev-parse HEAD)" = '5de7a54aa4e5e2baadb0182dde554908b48b85c2'
+          cp -a "$RUNNER_TEMP/chatterbox/src/chatterbox" "$W/source/"
+          "$SINDEL_PY" - <<'PY'
+          from huggingface_hub import hf_hub_download
+          from pathlib import Path
+          import hashlib, shutil, os
+          W=Path(os.environ['SINDEL_C05C_WORK'])
+          src=Path(hf_hub_download(repo_id='ResembleAI/chatterbox', filename='t3_mtl23ls_v3.safetensors'))
+          dst=W/'model/t3_mtl23ls_v3.safetensors'; shutil.copy2(src,dst)
+          h=hashlib.sha256(dst.read_bytes()).hexdigest()
+          assert h=='5abca8321ede76f8e61f1cc0d19aea6c946b28871017ce8726f8a69203f05953', h
+          print('T3_SHA_PASS',h)
+          PY
+          test "$(sha256sum sindel/c05c/C05C_T3_PREFILL_R3C.py | awk '{print $1}')" = '0b6e906bf4066606992f9b562989569567f623715ffe62f9b9a91b59fab44971'
+
+      - name: 01 fresh process - export prefill
+        id: export_prefill
+        continue-on-error: true
+        shell: bash
+        run: |
+          set +e
+          D="$RUNNER_TEMP/c05c_shared_store_isolated_r4/diag/01_export_prefill"; mkdir -p "$D"
+          date -u +%FT%TZ > "$D/started.txt"; free -h > "$D/free_before.txt"; ulimit -a > "$D/ulimit.txt" 2>&1
+          /usr/bin/time -v -o "$D/time.txt" "$SINDEL_PY" -u sindel/c05c/C05C_T3_SHARED_STORE_ISOLATED_R4.py export-prefill > >(tee "$D/stdout.txt") 2> >(tee "$D/stderr.txt" >&2)
+          rc=$?; echo "$rc" > "$D/exit_code.txt"; free -h > "$D/free_after.txt"; date -u +%FT%TZ > "$D/finished.txt"
+          exit "$rc"
+
+      - name: Preserve 01 diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SINDEL_C05C_ISO_R4_01_PREFILL_META
+          path: |
+            ${{ runner.temp }}/c05c_shared_store_isolated_r4/01_export_prefill/**
+            !${{ runner.temp }}/c05c_shared_store_isolated_r4/01_export_prefill/t3_shared.ptd
+            ${{ runner.temp }}/c05c_shared_store_isolated_r4/diag/01_export_prefill/**
+          compression-level: 0
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: 02 fresh process - export decode probe
+        id: export_decode
+        continue-on-error: true
+        shell: bash
+        run: |
+          set +e
+          D="$RUNNER_TEMP/c05c_shared_store_isolated_r4/diag/02_export_decode"; mkdir -p "$D"
+          date -u +%FT%TZ > "$D/started.txt"; free -h > "$D/free_before.txt"; ulimit -a > "$D/ulimit.txt" 2>&1
+          /usr/bin/time -v -o "$D/time.txt" "$SINDEL_PY" -u sindel/c05c/C05C_T3_SHARED_STORE_ISOLATED_R4.py export-decode > >(tee "$D/stdout.txt") 2> >(tee "$D/stderr.txt" >&2)
+          rc=$?; echo "$rc" > "$D/exit_code.txt"; free -h > "$D/free_after.txt"; date -u +%FT%TZ > "$D/finished.txt"
+          exit "$rc"
+
+      - name: Preserve 02 diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SINDEL_C05C_ISO_R4_02_DECODE_META
+          path: |
+            ${{ runner.temp }}/c05c_shared_store_isolated_r4/02_export_decode/**
+            !${{ runner.temp }}/c05c_shared_store_isolated_r4/02_export_decode/t3_shared.ptd
+            ${{ runner.temp }}/c05c_shared_store_isolated_r4/diag/02_export_decode/**
+          compression-level: 0
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: 03 fresh process - merge and verify constant-store identity
+        id: merge_store
+        continue-on-error: true
+        shell: bash
+        run: |
+          set +e
+          D="$RUNNER_TEMP/c05c_shared_store_isolated_r4/diag/03_merge_store"; mkdir -p "$D"
+          date -u +%FT%TZ > "$D/started.txt"; free -h > "$D/free_before.txt"; ulimit -a > "$D/ulimit.txt" 2>&1
+          /usr/bin/time -v -o "$D/time.txt" "$SINDEL_PY" -u sindel/c05c/C05C_T3_SHARED_STORE_ISOLATED_R4.py merge-store > >(tee "$D/stdout.txt") 2> >(tee "$D/stderr.txt" >&2)
+          rc=$?; echo "$rc" > "$D/exit_code.txt"; free -h > "$D/free_after.txt"; date -u +%FT%TZ > "$D/finished.txt"
+          exit "$rc"
+
+      - name: Preserve 03 diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SINDEL_C05C_ISO_R4_03_MERGE_META
+          path: |
+            ${{ runner.temp }}/c05c_shared_store_isolated_r4/03_merge_store/**
+            !${{ runner.temp }}/c05c_shared_store_isolated_r4/03_merge_store/t3_shared_union.ptd
+            ${{ runner.temp }}/c05c_shared_store_isolated_r4/diag/03_merge_store/**
+          compression-level: 0
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: 04 fresh process - prefill real forward with union PTD
+        id: runtime_prefill
+        continue-on-error: true
+        shell: bash
+        run: |
+          set +e
+          D="$RUNNER_TEMP/c05c_shared_store_isolated_r4/diag/04_runtime_prefill"; mkdir -p "$D"
+          date -u +%FT%TZ > "$D/started.txt"; free -h > "$D/free_before.txt"; ulimit -a > "$D/ulimit.txt" 2>&1
+          /usr/bin/time -v -o "$D/time.txt" "$SINDEL_PY" -u sindel/c05c/C05C_T3_SHARED_STORE_ISOLATED_R4.py runtime-prefill > >(tee "$D/stdout.txt") 2> >(tee "$D/stderr.txt" >&2)
+          rc=$?; echo "$rc" > "$D/exit_code.txt"; free -h > "$D/free_after.txt"; date -u +%FT%TZ > "$D/finished.txt"
+          exit "$rc"
+
+      - name: Preserve 04 diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SINDEL_C05C_ISO_R4_04_PREFILL_RUNTIME
+          path: |
+            ${{ runner.temp }}/c05c_shared_store_isolated_r4/04_runtime_prefill/**
+            ${{ runner.temp }}/c05c_shared_store_isolated_r4/diag/04_runtime_prefill/**
+          compression-level: 0
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: 05 fresh process - decode real forward with same union PTD
+        id: runtime_decode
+        continue-on-error: true
+        shell: bash
+        run: |
+          set +e
+          D="$RUNNER_TEMP/c05c_shared_store_isolated_r4/diag/05_runtime_decode"; mkdir -p "$D"
+          date -u +%FT%TZ > "$D/started.txt"; free -h > "$D/free_before.txt"; ulimit -a > "$D/ulimit.txt" 2>&1
+          /usr/bin/time -v -o "$D/time.txt" "$SINDEL_PY" -u sindel/c05c/C05C_T3_SHARED_STORE_ISOLATED_R4.py runtime-decode > >(tee "$D/stdout.txt") 2> >(tee "$D/stderr.txt" >&2)
+          rc=$?; echo "$rc" > "$D/exit_code.txt"; free -h > "$D/free_after.txt"; date -u +%FT%TZ > "$D/finished.txt"
+          exit "$rc"
+
+      - name: Preserve 05 diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SINDEL_C05C_ISO_R4_05_DECODE_RUNTIME
+          path: |
+            ${{ runner.temp }}/c05c_shared_store_isolated_r4/05_runtime_decode/**
+            ${{ runner.temp }}/c05c_shared_store_isolated_r4/diag/05_runtime_decode/**
+          compression-level: 0
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: 06 fresh process - numerical final gate
+        id: verify
+        continue-on-error: true
+        shell: bash
+        run: |
+          set +e
+          D="$RUNNER_TEMP/c05c_shared_store_isolated_r4/diag/06_verify"; mkdir -p "$D"
+          date -u +%FT%TZ > "$D/started.txt"; free -h > "$D/free_before.txt"; ulimit -a > "$D/ulimit.txt" 2>&1
+          /usr/bin/time -v -o "$D/time.txt" "$SINDEL_PY" -u sindel/c05c/C05C_T3_SHARED_STORE_ISOLATED_R4.py verify > >(tee "$D/stdout.txt") 2> >(tee "$D/stderr.txt" >&2)
+          rc=$?; echo "$rc" > "$D/exit_code.txt"; free -h > "$D/free_after.txt"; date -u +%FT%TZ > "$D/finished.txt"
+          exit "$rc"
+
+      - name: Preserve 06 final evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SINDEL_C05C_ISO_R4_06_FINAL
+          path: |
+            ${{ runner.temp }}/c05c_shared_store_isolated_r4/C05C_T3_SHARED_STORE_ISOLATED_R4_FINAL.json
+            ${{ runner.temp }}/c05c_shared_store_isolated_r4/06_verify/**
+            ${{ runner.temp }}/c05c_shared_store_isolated_r4/diag/06_verify/**
+          compression-level: 0
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Prepare retained PTD diagnostic parts
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          R="$RUNNER_TEMP/c05c_shared_store_isolated_r4"
+          mkdir -p "$R/retained_parts/decode" "$R/retained_parts/union"
+          if [ -s "$R/02_export_decode/t3_shared.ptd" ]; then
+            split -b 225M -d -a 2 "$R/02_export_decode/t3_shared.ptd" "$R/retained_parts/decode/t3_shared_decode.ptd.part."
+            sha256sum "$R"/retained_parts/decode/* > "$R/retained_parts/decode/SHA256SUMS.txt"
+          fi
+          if [ -s "$R/03_merge_store/t3_shared_union.ptd" ]; then
+            split -b 225M -d -a 2 "$R/03_merge_store/t3_shared_union.ptd" "$R/retained_parts/union/t3_shared_union.ptd.part."
+            sha256sum "$R"/retained_parts/union/* > "$R/retained_parts/union/SHA256SUMS.txt"
+          fi
+          exit 0
+
+      - name: Upload retained PTD checksum manifests
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SINDEL_C05C_ISO_R4_PTD_CHECKSUMS
+          path: |
+            ${{ runner.temp }}/c05c_shared_store_isolated_r4/retained_parts/**/SHA256SUMS.txt
+          compression-level: 0
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Upload decode PTD part 00
+        if: ${{ always() && hashFiles(format('{0}/c05c_shared_store_isolated_r4/retained_parts/decode/t3_shared_decode.ptd.part.00', runner.temp)) != '' }}
+        uses: actions/upload-artifact@v4
+        with: {name: SINDEL_C05C_ISO_R4_DECODE_PTD_00, path: '${{ runner.temp }}/c05c_shared_store_isolated_r4/retained_parts/decode/t3_shared_decode.ptd.part.00', compression-level: 0, retention-days: 7}
+      - name: Upload decode PTD part 01
+        if: ${{ always() && hashFiles(format('{0}/c05c_shared_store_isolated_r4/retained_parts/decode/t3_shared_decode.ptd.part.01', runner.temp)) != '' }}
+        uses: actions/upload-artifact@v4
+        with: {name: SINDEL_C05C_ISO_R4_DECODE_PTD_01, path: '${{ runner.temp }}/c05c_shared_store_isolated_r4/retained_parts/decode/t3_shared_decode.ptd.part.01', compression-level: 0, retention-days: 7}
+      - name: Upload decode PTD part 02
+        if: ${{ always() && hashFiles(format('{0}/c05c_shared_store_isolated_r4/retained_parts/decode/t3_shared_decode.ptd.part.02', runner.temp)) != '' }}
+        uses: actions/upload-artifact@v4
+        with: {name: SINDEL_C05C_ISO_R4_DECODE_PTD_02, path: '${{ runner.temp }}/c05c_shared_store_isolated_r4/retained_parts/decode/t3_shared_decode.ptd.part.02', compression-level: 0, retention-days: 7}
+      - name: Upload decode PTD part 03
+        if: ${{ always() && hashFiles(format('{0}/c05c_shared_store_isolated_r4/retained_parts/decode/t3_shared_decode.ptd.part.03', runner.temp)) != '' }}
+        uses: actions/upload-artifact@v4
+        with: {name: SINDEL_C05C_ISO_R4_DECODE_PTD_03, path: '${{ runner.temp }}/c05c_shared_store_isolated_r4/retained_parts/decode/t3_shared_decode.ptd.part.03', compression-level: 0, retention-days: 7}
+      - name: Upload decode PTD part 04
+        if: ${{ always() && hashFiles(format('{0}/c05c_shared_store_isolated_r4/retained_parts/decode/t3_shared_decode.ptd.part.04', runner.temp)) != '' }}
+        uses: actions/upload-artifact@v4
+        with: {name: SINDEL_C05C_ISO_R4_DECODE_PTD_04, path: '${{ runner.temp }}/c05c_shared_store_isolated_r4/retained_parts/decode/t3_shared_decode.ptd.part.04', compression-level: 0, retention-days: 7}
+      - name: Upload decode PTD part 05
+        if: ${{ always() && hashFiles(format('{0}/c05c_shared_store_isolated_r4/retained_parts/decode/t3_shared_decode.ptd.part.05', runner.temp)) != '' }}
+        uses: actions/upload-artifact@v4
+        with: {name: SINDEL_C05C_ISO_R4_DECODE_PTD_05, path: '${{ runner.temp }}/c05c_shared_store_isolated_r4/retained_parts/decode/t3_shared_decode.ptd.part.05', compression-level: 0, retention-days: 7}
+
+      - name: Upload union PTD part 00
+        if: ${{ always() && hashFiles(format('{0}/c05c_shared_store_isolated_r4/retained_parts/union/t3_shared_union.ptd.part.00', runner.temp)) != '' }}
+        uses: actions/upload-artifact@v4
+        with: {name: SINDEL_C05C_ISO_R4_UNION_PTD_00, path: '${{ runner.temp }}/c05c_shared_store_isolated_r4/retained_parts/union/t3_shared_union.ptd.part.00', compression-level: 0, retention-days: 7}
+      - name: Upload union PTD part 01
+        if: ${{ always() && hashFiles(format('{0}/c05c_shared_store_isolated_r4/retained_parts/union/t3_shared_union.ptd.part.01', runner.temp)) != '' }}
+        uses: actions/upload-artifact@v4
+        with: {name: SINDEL_C05C_ISO_R4_UNION_PTD_01, path: '${{ runner.temp }}/c05c_shared_store_isolated_r4/retained_parts/union/t3_shared_union.ptd.part.01', compression-level: 0, retention-days: 7}
+      - name: Upload union PTD part 02
+        if: ${{ always() && hashFiles(format('{0}/c05c_shared_store_isolated_r4/retained_parts/union/t3_shared_union.ptd.part.02', runner.temp)) != '' }}
+        uses: actions/upload-artifact@v4
+        with: {name: SINDEL_C05C_ISO_R4_UNION_PTD_02, path: '${{ runner.temp }}/c05c_shared_store_isolated_r4/retained_parts/union/t3_shared_union.ptd.part.02', compression-level: 0, retention-days: 7}
+      - name: Upload union PTD part 03
+        if: ${{ always() && hashFiles(format('{0}/c05c_shared_store_isolated_r4/retained_parts/union/t3_shared_union.ptd.part.03', runner.temp)) != '' }}
+        uses: actions/upload-artifact@v4
+        with: {name: SINDEL_C05C_ISO_R4_UNION_PTD_03, path: '${{ runner.temp }}/c05c_shared_store_isolated_r4/retained_parts/union/t3_shared_union.ptd.part.03', compression-level: 0, retention-days: 7}
+      - name: Upload union PTD part 04
+        if: ${{ always() && hashFiles(format('{0}/c05c_shared_store_isolated_r4/retained_parts/union/t3_shared_union.ptd.part.04', runner.temp)) != '' }}
+        uses: actions/upload-artifact@v4
+        with: {name: SINDEL_C05C_ISO_R4_UNION_PTD_04, path: '${{ runner.temp }}/c05c_shared_store_isolated_r4/retained_parts/union/t3_shared_union.ptd.part.04', compression-level: 0, retention-days: 7}
+      - name: Upload union PTD part 05
+        if: ${{ always() && hashFiles(format('{0}/c05c_shared_store_isolated_r4/retained_parts/union/t3_shared_union.ptd.part.05', runner.temp)) != '' }}
+        uses: actions/upload-artifact@v4
+        with: {name: SINDEL_C05C_ISO_R4_UNION_PTD_05, path: '${{ runner.temp }}/c05c_shared_store_isolated_r4/retained_parts/union/t3_shared_union.ptd.part.05', compression-level: 0, retention-days: 7}
+
+      - name: Final fail-closed isolated gate
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          R="$RUNNER_TEMP/c05c_shared_store_isolated_r4"
+          for s in 01_export_prefill 02_export_decode 03_merge_store 04_runtime_prefill 05_runtime_decode 06_verify; do
+            test -f "$R/diag/$s/exit_code.txt"
+            test "$(cat "$R/diag/$s/exit_code.txt")" = '0'
+            test -f "$R/$s/stage_result.json"
+            "$SINDEL_PY" - "$R/$s/stage_result.json" <<'PY'
+          import json,sys
+          p=sys.argv[1]
+          d=json.load(open(p,encoding='utf-8'))
+          assert d.get('status')=='PASS', (p,d)
+          PY
+          done
+          test -s "$R/C05C_T3_SHARED_STORE_ISOLATED_R4_FINAL.json"
+          "$SINDEL_PY" - "$R/C05C_T3_SHARED_STORE_ISOLATED_R4_FINAL.json" <<'PY'
+          import json,sys
+          d=json.load(open(sys.argv[1],encoding='utf-8'))
+          assert d['status']=='PASS_L2', d
+          assert d['shared_ptd']['same_exact_bytes_used_by_prefill_and_decode'] is True
+          assert d['prefill']['real_forward'] is True
+          assert d['decode_probe']['real_forward'] is True
+          print('ISOLATED_SHARED_STORE_GATE_PASS')
+          PY
