@@ -1,0 +1,37 @@
+{
+  "schema": "sindel.cp034.c05c.preaction-runtime-buffer-lifetime-r4.v1",
+  "milestone": "C05C-09",
+  "protocol_item": "shared T3 store real ExecuTorch runtime + numerical final gate",
+  "observed_run": 35100161539,
+  "observed_failure": {
+    "runtime_prefill_exit_code": 139,
+    "runtime_decode_exit_code": 139,
+    "runtime_prefill_signal": 11,
+    "runtime_decode_signal": 11,
+    "numerical_gate_reached_comparison": false,
+    "verify_failure": "missing 04_runtime_prefill/stage_result.json"
+  },
+  "diagnosis": "The numerical thresholds were not the failing condition. Both real runtime stages crashed before producing outputs. The current shared-store runner passes pte.read_bytes() as a temporary object to _load_for_executorch_from_buffer while retaining only PTD bytes. The already-qualified isolated prefill runner keeps both pte_bytes and ptd_bytes alive for the module lifetime. A local exact-environment toy test also confirmed that a union PTD with multiple aliases is valid, so the shared-map concept itself is not rejected by this evidence.",
+  "change_boundary": [
+    "retain PTE bytes in a named local variable through load and forward for prefill",
+    "retain PTE bytes in a named local variable through load and forward for decode probe",
+    "write crash-surviving checkpoints before load, after load, and after forward"
+  ],
+  "forbidden_changes": [
+    "no comparator threshold changes",
+    "no model-weight changes",
+    "no Golden changes",
+    "no PTD merge-format changes",
+    "no Android work"
+  ],
+  "frozen_thresholds": {
+    "cosine_min": 0.9999,
+    "mean_abs_max": 0.005,
+    "max_abs_max": 0.05,
+    "finite_required": true
+  },
+  "next_test": "rerun the same isolated shared-store workflow; require stages 04 and 05 to exit 0 and stage 06 to compare source/runtime outputs at the unchanged thresholds",
+  "evidence_target": "L2",
+  "rollback": "revert the runner change to parent commit 82b44d171a07fa283d48fcda5008714ebc7e1c34",
+  "status": "PREACTION_RECORDED"
+}
