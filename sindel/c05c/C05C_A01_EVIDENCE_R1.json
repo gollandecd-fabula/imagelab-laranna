@@ -1,0 +1,56 @@
+{
+  "active_milestone": "C-05C",
+  "artifacts": {
+    "gate_module": {
+      "name": "C05C_PARITY_GATE_STRICT_R5.py",
+      "sha256": "6c7c0205cd6d50518f6ff1a7a62c480b1de1f6e5a6c3042eb2a8f0eb9ec2e9da"
+    },
+    "glaz_decision": {
+      "name": "SINDEL_PHONE_GLAZ_RULES_REMOVED_2026-09-17.json",
+      "sha256": "f8369ad387225b6742c62637200c363c93bfb655f8a7e56e2f2a0adb70e1a286"
+    },
+    "selftest": {
+      "name": "C05C_PARITY_GATE_SELFTEST_R5.py",
+      "sha256": "c91f2db2e2dd4f878dd08990b1dd412bebd51046e8b22d87ea25937c2ec85e92"
+    },
+    "selftest_report": {
+      "name": "PARITY_GATE_SELFTEST.json",
+      "sha256": "4d90b790f83c6eac0428ccdd9eb1bb0177dd84c192d9b88addd2d17f159ba956"
+    }
+  },
+  "baseline_commit": "a89e1ea34e1c5229f693aa2ecbbf6a03b9ab4df3",
+  "branch": "sindel/c05c-a01-20260917",
+  "case_count": 10,
+  "change_boundary": [
+    "strict comparator",
+    "status aggregation",
+    "CFG top1 gate",
+    "failure report persistence",
+    "T01 selftest"
+  ],
+  "date": "2026-09-17",
+  "evidence_level": "L1",
+  "forbidden_changes": [
+    "frozen thresholds",
+    "V5B voice",
+    "conditioning",
+    "model weights",
+    "Android/UI",
+    "F01 numerical result"
+  ],
+  "next_step_if_pass": "A02 original-qualified-PTD vs union-PTD controlled A/B",
+  "passed_count": 10,
+  "requirements": [
+    "F02",
+    "F03",
+    "F04",
+    "F05",
+    "F06",
+    "F08"
+  ],
+  "rollback": "delete A01 candidate files/branch and return to baseline commit a89e1ea34e1c5229f693aa2ecbbf6a03b9ab4df3",
+  "schema": "sindel.cp034.c05c.a01-evidence-r1.v1",
+  "status": "PASS_L1",
+  "step": "A01",
+  "test": "T01"
+}
