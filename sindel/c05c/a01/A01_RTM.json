@@ -1,0 +1,11 @@
+{
+  "schema": "sindel.cp034.a01.rtm.v1",
+  "rows": [
+    {"requirement":"F02","milestone":"C-05C/A01","action":"fail-close stage status when numerical acceptance is false/missing","test":"T01 stage_guard accepted=false + incomplete mandatory set","evidence_level":"L1","artifact":"PARITY_GATE_SELFTEST.json","pass_criterion":"false/missing numerical gate => overall FAIL","status":"IMPLEMENTED_IN_CANDIDATE_UNVERIFIED_UNTIL_T01"},
+    {"requirement":"F03","milestone":"C-05C/A01","action":"compare original tensor shapes before flattening and enforce frozen output schema","test":"T01 [2,3] vs [3,2]","evidence_level":"L1","artifact":"PARITY_GATE_SELFTEST.json","pass_criterion":"axis permutation rejected","status":"IMPLEMENTED_IN_CANDIDATE_UNVERIFIED_UNTIL_T01"},
+    {"requirement":"F04","milestone":"C-05C/A01","action":"check source/runtime dtype and expected dtype before FP64 metrics","test":"T01 FP16 vs FP32","evidence_level":"L1","artifact":"PARITY_GATE_SELFTEST.json","pass_criterion":"dtype mismatch rejected","status":"IMPLEMENTED_IN_CANDIDATE_UNVERIFIED_UNTIL_T01"},
+    {"requirement":"F05","milestone":"C-05C/A01","action":"reject empty outputs before norms/metrics","test":"T01 empty vs empty","evidence_level":"L1","artifact":"PARITY_GATE_SELFTEST.json","pass_criterion":"empty output rejected","status":"IMPLEMENTED_IN_CANDIDATE_UNVERIFIED_UNTIL_T01"},
+    {"requirement":"F06","milestone":"C-05C/A01","action":"independent CFG top1 check using frozen cfg_weight 0.03","test":"T01 near logits with changed CFG top1","evidence_level":"L1","artifact":"PARITY_GATE_SELFTEST.json","pass_criterion":"top1 mismatch rejected","status":"IMPLEMENTED_IN_CANDIDATE_UNVERIFIED_UNTIL_T01"},
+    {"requirement":"F08","milestone":"C-05C/A01","action":"write detailed final report before raising numerical failure","test":"T01 failure-report persistence + nonzero failure","evidence_level":"L1","artifact":"PARITY_GATE_SELFTEST.json + R5 final report on runtime","pass_criterion":"machine-readable detailed report survives failed verify","status":"PARTIAL_L1_HELPER_READY_RUNTIME_REPORT_UNVERIFIED"}
+  ]
+}
