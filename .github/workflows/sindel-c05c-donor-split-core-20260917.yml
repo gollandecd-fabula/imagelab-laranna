@@ -37,16 +37,20 @@ jobs:
           root=Path('donor_models')
           names=['t3_prefill.pte','t3_decode.pte','s3gen_encoder.pte','cfm_step.pte','hifigan.pte']
           out=Path('parts'); out.mkdir()
-          manifest={'schema':'sindel.cp034.c05c.donor-core-split.v1','chunk_bytes':250_000_000,'files':[]}
+          chunk_bytes=450_000_000
+          manifest={'schema':'sindel.cp034.c05c.donor-core-split.v1','chunk_bytes':chunk_bytes,'files':[]}
           for name in names:
             p=root/name
             if not p.is_file(): raise SystemExit(f'MISSING:{name}')
-            h=hashlib.sha256(p.read_bytes()).hexdigest()
-            row={'name':name,'size':p.stat().st_size,'sha256':h,'parts':[]}
+            h=hashlib.sha256()
+            with p.open('rb') as f:
+              for b in iter(lambda:f.read(8*1024*1024),b''):
+                h.update(b)
+            row={'name':name,'size':p.stat().st_size,'sha256':h.hexdigest(),'parts':[]}
             with p.open('rb') as f:
               i=0
               while True:
-                b=f.read(250_000_000)
+                b=f.read(chunk_bytes)
                 if not b: break
                 part=out/f'{name}.part{i:02d}'
                 part.write_bytes(b)
@@ -78,7 +82,7 @@ jobs:
         with: {name: prefill_03, path: parts/t3_prefill.pte.part03, compression-level: 0, retention-days: 1}
       - name: Upload prefill part 04
         uses: actions/upload-artifact@v4
-        with: {name: prefill_04, path: parts/t3_prefill.pte.part04, compression-level: 0, retention-days: 1, if-no-files-found: ignore}
+        with: {name: prefill_04, path: parts/t3_prefill.pte.part04, compression-level: 0, retention-days: 1}
 
       - name: Upload decode part 00
         uses: actions/upload-artifact@v4
@@ -94,7 +98,7 @@ jobs:
         with: {name: decode_03, path: parts/t3_decode.pte.part03, compression-level: 0, retention-days: 1}
       - name: Upload decode part 04
         uses: actions/upload-artifact@v4
-        with: {name: decode_04, path: parts/t3_decode.pte.part04, compression-level: 0, retention-days: 1, if-no-files-found: ignore}
+        with: {name: decode_04, path: parts/t3_decode.pte.part04, compression-level: 0, retention-days: 1}
 
       - name: Upload s3gen
         uses: actions/upload-artifact@v4
