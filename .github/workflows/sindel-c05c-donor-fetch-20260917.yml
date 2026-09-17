@@ -1,0 +1,85 @@
+name: SINDEL C05C Donor Runtime Fetch 20260917
+
+on:
+  push:
+    branches:
+      - sindel-cp034-a01-parity-gate-r5-20260917
+    paths:
+      - '.github/workflows/sindel-c05c-donor-fetch-20260917.yml'
+      - 'sindel/donor_probe/**'
+
+permissions:
+  contents: read
+
+jobs:
+  fetch-donor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install downloader
+        run: python -m pip install --upgrade huggingface_hub
+
+      - name: Download exact donor PTE set
+        env:
+          HF_HUB_DISABLE_TELEMETRY: '1'
+        run: |
+          set -euo pipefail
+          mkdir -p donor_models
+          python - <<'PY'
+          from huggingface_hub import snapshot_download
+          p = snapshot_download(
+              repo_id='acul3/chatterbox-executorch',
+              repo_type='model',
+              local_dir='donor_models',
+              allow_patterns=['*.pte'],
+          )
+          print(p)
+          PY
+
+      - name: Verify nine expected PTE and hash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          root=Path('donor_models')
+          expected=[
+            'voice_encoder.pte','xvector_encoder.pte','t3_cond_speech_emb.pte','t3_cond_enc.pte',
+            't3_prefill.pte','t3_decode.pte','s3gen_encoder.pte','cfm_step.pte','hifigan.pte'
+          ]
+          rows=[]
+          for name in expected:
+            p=root/name
+            if not p.is_file() or p.stat().st_size == 0:
+              raise SystemExit(f'MISSING_OR_EMPTY:{name}')
+            h=hashlib.sha256()
+            with p.open('rb') as f:
+              for b in iter(lambda:f.read(8*1024*1024), b''):
+                h.update(b)
+            rows.append({'name':name,'size':p.stat().st_size,'sha256':h.hexdigest()})
+          extras=sorted(x.name for x in root.glob('*.pte') if x.name not in expected)
+          manifest={
+            'schema':'sindel.cp034.c05c.donor-runtime-fetch.v1',
+            'donor':'acul3/chatterbox-executorch',
+            'expected_count':9,
+            'files':rows,
+            'extra_pte':extras,
+            'status':'FETCHED_9_OF_9'
+          }
+          Path('donor_models/DONOR_PTE_MANIFEST.json').write_text(json.dumps(manifest,indent=2,sort_keys=True),encoding='utf-8')
+          print(json.dumps(manifest,indent=2))
+          PY
+
+      - name: Upload donor runtime artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SINDEL_C05C_DONOR_9PTE_20260917
+          path: |
+            donor_models/*.pte
+            donor_models/DONOR_PTE_MANIFEST.json
+          compression-level: 0
+          retention-days: 1
+          if-no-files-found: error
