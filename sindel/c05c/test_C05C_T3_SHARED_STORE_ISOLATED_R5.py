@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 from pathlib import Path
 
@@ -45,6 +46,7 @@ def main() -> int:
     r = gate.compare_arrays(inf, base, "inf")
     record("inf_fails", r["accepted"] is False and r.get("reason") == "non_finite", r)
 
+    # Metrics can pass while CFG top1 changes: make two close two-row logits with swapped combined maxima.
     a = np.zeros((2, 4), dtype=np.float16)
     b = np.zeros((2, 4), dtype=np.float16)
     a[0, 0], a[0, 1] = np.float16(1.0), np.float16(0.999)
