@@ -1,0 +1,42 @@
+name: SINDEL C05C Runtime Wheel 20260917
+
+on:
+  push:
+    branches:
+      - sindel-cp034-a01-parity-gate-r5-20260917
+    paths:
+      - '.github/workflows/sindel-c05c-runtime-wheel-20260917.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  wheels:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Download runtime-only wheels
+        run: |
+          set -euo pipefail
+          mkdir -p wheels
+          python -m pip download --no-deps -d wheels executorch==1.1.0 tokenizers==0.22.1 flatbuffers
+          python - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          rows=[]
+          for p in sorted(Path('wheels').glob('*.whl')):
+            rows.append({'name':p.name,'size':p.stat().st_size,'sha256':hashlib.sha256(p.read_bytes()).hexdigest()})
+          Path('wheels/WHEEL_MANIFEST.json').write_text(json.dumps({'schema':'sindel.cp034.c05c.runtime-wheel.v1','python':'3.13','files':rows},indent=2),encoding='utf-8')
+          print(json.dumps(rows,indent=2))
+          PY
+      - name: Upload wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: SINDEL_C05C_RUNTIME_WHEELS_PY313
+          path: wheels/
+          retention-days: 1
+          compression-level: 0
