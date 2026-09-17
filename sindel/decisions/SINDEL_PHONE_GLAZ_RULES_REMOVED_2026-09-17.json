@@ -1,0 +1,36 @@
+{
+  "schema": "sindel.phone.protocol-decision.v1",
+  "decision_id": "SINDEL-PHONE-DEC-2026-09-17-NO-GLAZ",
+  "date": "2026-09-17",
+  "scope": "SINDEL phone only",
+  "status": "ACTIVE",
+  "user_directive": "Remove all GLAZ rules from the SINDEL phone project and continue work according to the remaining plan.",
+  "supersedes": [
+    "GLAZ-01",
+    "SINDEL MASTER v1.3 section 25.1 GLAZ PRE_CHANGE requirement",
+    "SINDEL MASTER v1.3 section 25.1 GLAZ POST_CHANGE requirement",
+    "SINDEL MASTER v1.3 GLAZ stop_right requirement",
+    "any SINDEL-phone blocker whose only cause is GLAZ unavailable/unverified"
+  ],
+  "preserved_controls": [
+    "protocol requirement registry",
+    "milestone ordering and dependency gates",
+    "change boundary and rollback checks",
+    "frozen numerical thresholds",
+    "ordinary unit/source/package/installed/physical evidence levels L0-L5",
+    "fail-closed behavior for unresolved mandatory technical requirements",
+    "P0 physical user-path requirements remain L5",
+    "sandbox/source/package checks that do not depend on GLAZ"
+  ],
+  "not_in_scope": [
+    "GLAZ project itself",
+    "ImageLab",
+    "Quantum or Quantum Lite",
+    "other projects unless separately directed by the user"
+  ],
+  "effect": "GLAZ-specific gates are removed and must not block SINDEL phone development, testing, milestone progression, or finalization. Historical GLAZ evidence remains historical and is not deleted or reinterpreted.",
+  "release_ready": false,
+  "milestone_complete": false,
+  "current_active_milestone": "C-05C",
+  "next_required_step": "A02 original-qualified PTD versus union/shared PTD differential runtime test using identical PTE/input/environment with frozen thresholds unchanged"
+}
