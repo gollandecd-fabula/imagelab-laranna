@@ -1,0 +1,70 @@
+{
+  "case_count": 10,
+  "cases": [
+    {
+      "detail": "{\"accepted\": true, \"candidate_cfg_top1\": 0, \"candidate_dtype\": \"float16\", \"candidate_shape\": [2, 4], \"cfg_top1_match\": true, \"cfg_weight\": 0.03, \"cosine_raw\": 1.0, \"finite\": true, \"max_abs\": 0.0, \"mean_abs\": 0.0, \"name\": \"logits\", \"numerical_ok\": true, \"reason\": \"accepted\", \"reference_cfg_top1\": 0, \"reference_dtype\": \"float16\", \"reference_shape\": [2, 4]}",
+      "name": "positive_nonempty_zero",
+      "passed": true
+    },
+    {
+      "detail": "{\"accepted\": false, \"candidate_dtype\": \"float16\", \"candidate_shape\": [3, 2], \"name\": \"k\", \"reason\": \"shape_mismatch\", \"reference_dtype\": \"float16\", \"reference_shape\": [2, 3]}",
+      "name": "shape_mismatch",
+      "passed": true
+    },
+    {
+      "detail": "{\"accepted\": false, \"candidate_dtype\": \"float32\", \"candidate_shape\": [2, 3], \"name\": \"k\", \"reason\": \"dtype_mismatch\", \"reference_dtype\": \"float16\", \"reference_shape\": [2, 3]}",
+      "name": "dtype_mismatch",
+      "passed": true
+    },
+    {
+      "detail": "{\"accepted\": false, \"candidate_dtype\": \"float16\", \"candidate_shape\": [0], \"name\": \"k\", \"reason\": \"empty_output\", \"reference_dtype\": \"float16\", \"reference_shape\": [0]}",
+      "name": "empty_output",
+      "passed": true
+    },
+    {
+      "detail": "{\"accepted\": false, \"candidate_dtype\": \"float16\", \"candidate_shape\": [2], \"finite\": false, \"name\": \"k\", \"reason\": \"non_finite\", \"reference_dtype\": \"float16\", \"reference_shape\": [2]}",
+      "name": "nan_inf",
+      "passed": true
+    },
+    {
+      "detail": "{\"accepted\": false, \"duplicates\": [], \"failed\": [\"v\"], \"missing\": [], \"numerical_status\": \"FAILED\", \"observed_names\": [\"k\", \"logits\", \"v\"], \"required_names\": [\"logits\", \"k\", \"v\"], \"unexpected\": []}",
+      "name": "missing_output",
+      "passed": true
+    },
+    {
+      "detail": "{\"accepted\": false, \"candidate_cfg_top1\": 1, \"candidate_dtype\": \"float16\", \"candidate_shape\": [2, 2], \"cfg_top1_match\": false, \"cfg_weight\": 0.03, \"cosine_raw\": 0.9999998807324885, \"finite\": true, \"max_abs\": 0.00048828125, \"mean_abs\": 0.000244140625, \"name\": \"logits\", \"numerical_ok\": true, \"reason\": \"cfg_top1_mismatch\", \"reference_cfg_top1\": 0, \"reference_dtype\": \"float16\", \"reference_shape\": [2, 2]}",
+      "name": "cfg_top1_mismatch",
+      "passed": true
+    },
+    {
+      "detail": "{\"accepted\": false, \"duplicates\": [], \"failed\": [\"v\"], \"missing\": [], \"numerical_status\": \"FAILED\", \"observed_names\": [\"k\", \"v\"], \"required_names\": [\"k\", \"v\"], \"unexpected\": []}",
+      "name": "one_numerical_false",
+      "passed": true
+    },
+    {
+      "detail": "{\"aggregate\": {\"accepted\": false, \"duplicates\": [], \"failed\": [\"k\"], \"missing\": [], \"numerical_status\": \"FAILED\", \"observed_names\": [\"k\"], \"required_names\": [\"k\"], \"unexpected\": []}, \"candidate_npz\": \"/tmp/tmpvgp9zbcu/cand.npz\", \"cfg_weight\": 0.03, \"checks\": [{\"accepted\": false, \"candidate_dtype\": \"float16\", \"candidate_shape\": [2, 3], \"cosine_raw\": 0.6359337738364604, \"finite\": true, \"max_abs\": 9.0, \"mean_abs\": 1.5, \"name\": \"k\", \"numerical_ok\": false, \"reason\": \"numerical_threshold_failed\", \"reference_dtype\": \"float16\", \"reference_shape\": [2, 3]}], \"execution_status\": \"PASS\", \"numerical_status\": \"FAILED\", \"reference_npz\": \"/tmp/tmpvgp9zbcu/ref.npz\", \"schema\": \"sindel.cp034.c05c.parity-gate-strict-r5.v1\", \"status\": \"FAILED\", \"thresholds\": {\"cosine_min\": 0.9999, \"finite_required\": true, \"max_abs_max\": 0.05, \"mean_abs_max\": 0.005}}",
+      "name": "failure_report_before_raise",
+      "passed": true
+    },
+    {
+      "detail": "write_json_atomic raised as required",
+      "name": "report_write_error_fail_closed",
+      "passed": true
+    }
+  ],
+  "evidence_level": "L1",
+  "gate_module": "C05C_PARITY_GATE_STRICT_R5.py",
+  "gate_module_sha256": "6c7c0205cd6d50518f6ff1a7a62c480b1de1f6e5a6c3042eb2a8f0eb9ec2e9da",
+  "passed_count": 10,
+  "requirements": [
+    "F02",
+    "F03",
+    "F04",
+    "F05",
+    "F06",
+    "F08"
+  ],
+  "schema": "sindel.cp034.c05c.parity-gate-selftest-r5.v1",
+  "status": "PASS_L1",
+  "test": "T01"
+}
