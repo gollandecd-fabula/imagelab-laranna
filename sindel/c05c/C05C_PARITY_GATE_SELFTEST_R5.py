@@ -89,10 +89,17 @@ def main() -> int:
         except gate.GateFailed:
             raised = True
         saved = json.loads(report.read_text(encoding="utf-8")) if report.is_file() else {}
+        stable_saved = {
+            "status": saved.get("status"),
+            "execution_status": saved.get("execution_status"),
+            "numerical_status": saved.get("numerical_status"),
+            "aggregate": saved.get("aggregate"),
+            "checks": saved.get("checks"),
+        }
         rows.append(case(
             "failure_report_before_raise",
             raised and saved.get("status") == "FAILED" and saved.get("numerical_status") == "FAILED" and bool(saved.get("checks")),
-            json.dumps(saved, sort_keys=True),
+            json.dumps(stable_saved, sort_keys=True),
         ))
 
     # Report/JSON write failure itself must not be converted to PASS.
