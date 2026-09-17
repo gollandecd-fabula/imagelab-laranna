@@ -227,6 +227,7 @@ def compare_arrays(
         cosine = 0.0
     else:
         cosine = float(np.dot(aa, bb) / (na * nb))
+    # Numerical round-off must never create a raw cosine outside its mathematical domain.
     cosine = min(1.0, max(-1.0, cosine))
 
     diff = np.abs(aa - bb)
@@ -380,6 +381,7 @@ def verify() -> dict[str, Any]:
     return report
 
 
+# Bind the R4 implementation to the repaired gate/output paths without altering frozen model/export logic.
 r4.OUT = OUT
 r4.stage_dir = stage_dir
 r4.compare_arrays = compare_arrays
