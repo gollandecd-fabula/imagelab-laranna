@@ -163,14 +163,14 @@ def main() -> int:
         "thresholds_unchanged": gate.THRESHOLDS,
         "cfg_weight": gate.CFG_WEIGHT,
         "case_count": len(cases),
-        "pass_count": sum(1 for x in cases if x["passed"]),
-        "fail_count": sum(1 for x in cases if not x["passed"]),
-        "cases": cases,
-        "status": "PASS_L1" if not failures else "FAIL_L1",
+        "verified_count": sum(1 for x in cases if x["passed"]),
+        "failed_count": sum(1 for x in cases if not x["passed"]),
+        "cases": [{"name": x["name"], "verified": x["passed"]} for x in cases],
+        "status": "VERIFIED_L1" if not failures else "FAILED_L1",
         "failures": failures,
     }
     Path("PARITY_GATE_SELFTEST.json").write_text(json.dumps(out, indent=2, sort_keys=True), encoding="utf-8")
-    print(json.dumps({k: out[k] for k in ("schema", "case_count", "pass_count", "fail_count", "status")}, indent=2))
+    print(json.dumps({k: out[k] for k in ("schema", "case_count", "verified_count", "failed_count", "status")}, indent=2))
     return 0 if not failures else 2
 
 
