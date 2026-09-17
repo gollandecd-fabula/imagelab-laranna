@@ -26,26 +26,33 @@ def case(name, passed, detail=""):
 def main() -> int:
     rows = []
     f16 = np.dtype("float16")
+
+    # Positive baseline, including all-zero but NON-empty tensors.
     z = np.zeros((2, 4), dtype=f16)
     r = gate.compare_arrays(z, z.copy(), "logits", expected_shape=(2, 4), expected_dtype=f16, cfg_top1_must_match=True)
     rows.append(case("positive_nonempty_zero", r["accepted"] is True, json.dumps(r, sort_keys=True)))
 
+    # F03: same flattened values but different shape must fail.
     a = np.arange(6, dtype=f16).reshape(2, 3)
     b = np.arange(6, dtype=f16).reshape(3, 2)
     r = gate.compare_arrays(a, b, "k")
     rows.append(case("shape_mismatch", r["accepted"] is False and r["reason"] == "shape_mismatch", json.dumps(r, sort_keys=True)))
 
+    # F04: numerically equal FP16/FP32 must fail.
     r = gate.compare_arrays(a, a.astype(np.float32), "k")
     rows.append(case("dtype_mismatch", r["accepted"] is False and r["reason"] == "dtype_mismatch", json.dumps(r, sort_keys=True)))
 
+    # F05: empty outputs must never compare equal.
     empty = np.array([], dtype=f16)
     r = gate.compare_arrays(empty, empty.copy(), "k")
     rows.append(case("empty_output", r["accepted"] is False and r["reason"] == "empty_output", json.dumps(r, sort_keys=True)))
 
+    # Non-finite values must fail closed.
     nf = np.array([1.0, np.nan], dtype=f16)
     r = gate.compare_arrays(nf, nf.copy(), "k")
     rows.append(case("nan_inf", r["accepted"] is False and r["reason"] == "non_finite", json.dumps(r, sort_keys=True)))
 
+    # Missing output must fail aggregate completeness.
     evaluated = gate.evaluate_output_sets(
         {"logits": z, "k": a, "v": a},
         {"logits": z.copy(), "k": a.copy()},
@@ -54,11 +61,13 @@ def main() -> int:
     )
     rows.append(case("missing_output", evaluated["aggregate"]["accepted"] is False and "v" in evaluated["aggregate"]["failed"], json.dumps(evaluated["aggregate"], sort_keys=True)))
 
+    # F06: tiny changes that stay inside numeric thresholds but change CFG top1 must fail.
     ref_logits = np.array([[1.0000, 0.9997], [0.0, 0.0]], dtype=f16)
     cand_logits = np.array([[0.9997, 1.0000], [0.0, 0.0]], dtype=f16)
     r = gate.compare_arrays(ref_logits, cand_logits, "logits", cfg_top1_must_match=True)
     rows.append(case("cfg_top1_mismatch", r["accepted"] is False and r["reason"] == "cfg_top1_mismatch" and r.get("numerical_ok") is True, json.dumps(r, sort_keys=True)))
 
+    # F02: a single numerical false must make overall status FAILED.
     bad = a.copy(); bad[0, 0] = np.float16(9.0)
     evaluated = gate.evaluate_output_sets(
         {"k": a, "v": a},
@@ -68,6 +77,7 @@ def main() -> int:
     )
     rows.append(case("one_numerical_false", evaluated["aggregate"]["accepted"] is False and evaluated["aggregate"]["numerical_status"] == "FAILED", json.dumps(evaluated["aggregate"], sort_keys=True)))
 
+    # F08: failed run must persist machine-readable detail BEFORE raising.
     with tempfile.TemporaryDirectory() as td:
         td = Path(td)
         ref = td / "ref.npz"; cand = td / "cand.npz"; report = td / "failure.json"
@@ -85,6 +95,7 @@ def main() -> int:
             json.dumps(saved, sort_keys=True),
         ))
 
+    # Report/JSON write failure itself must not be converted to PASS.
     with tempfile.TemporaryDirectory() as td:
         bad_path = Path(td) / "occupied"
         bad_path.mkdir()
