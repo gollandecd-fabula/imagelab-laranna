@@ -1,0 +1,107 @@
+name: SINDEL C05C Donor Split Core 20260917
+
+on:
+  push:
+    branches:
+      - sindel-cp034-a01-parity-gate-r5-20260917
+    paths:
+      - '.github/workflows/sindel-c05c-donor-split-core-20260917.yml'
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  split-core:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download previously qualified 9-PTE artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p donor_models
+          gh run download 35204283725 -n SINDEL_C05C_DONOR_9PTE_20260917 -D donor_models
+          ls -lh donor_models
+
+      - name: Verify and split five core runtime models
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          root=Path('donor_models')
+          names=['t3_prefill.pte','t3_decode.pte','s3gen_encoder.pte','cfm_step.pte','hifigan.pte']
+          out=Path('parts'); out.mkdir()
+          manifest={'schema':'sindel.cp034.c05c.donor-core-split.v1','chunk_bytes':250_000_000,'files':[]}
+          for name in names:
+            p=root/name
+            if not p.is_file(): raise SystemExit(f'MISSING:{name}')
+            h=hashlib.sha256(p.read_bytes()).hexdigest()
+            row={'name':name,'size':p.stat().st_size,'sha256':h,'parts':[]}
+            with p.open('rb') as f:
+              i=0
+              while True:
+                b=f.read(250_000_000)
+                if not b: break
+                part=out/f'{name}.part{i:02d}'
+                part.write_bytes(b)
+                row['parts'].append({'name':part.name,'size':len(b),'sha256':hashlib.sha256(b).hexdigest()})
+                i+=1
+            manifest['files'].append(row)
+          Path('parts/CORE_SPLIT_MANIFEST.json').write_text(json.dumps(manifest,indent=2,sort_keys=True),encoding='utf-8')
+          print(json.dumps(manifest,indent=2))
+          PY
+
+      - name: Upload manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: CORE_SPLIT_MANIFEST
+          path: parts/CORE_SPLIT_MANIFEST.json
+          retention-days: 1
+
+      - name: Upload prefill part 00
+        uses: actions/upload-artifact@v4
+        with: {name: prefill_00, path: parts/t3_prefill.pte.part00, compression-level: 0, retention-days: 1}
+      - name: Upload prefill part 01
+        uses: actions/upload-artifact@v4
+        with: {name: prefill_01, path: parts/t3_prefill.pte.part01, compression-level: 0, retention-days: 1}
+      - name: Upload prefill part 02
+        uses: actions/upload-artifact@v4
+        with: {name: prefill_02, path: parts/t3_prefill.pte.part02, compression-level: 0, retention-days: 1}
+      - name: Upload prefill part 03
+        uses: actions/upload-artifact@v4
+        with: {name: prefill_03, path: parts/t3_prefill.pte.part03, compression-level: 0, retention-days: 1}
+      - name: Upload prefill part 04
+        uses: actions/upload-artifact@v4
+        with: {name: prefill_04, path: parts/t3_prefill.pte.part04, compression-level: 0, retention-days: 1, if-no-files-found: ignore}
+
+      - name: Upload decode part 00
+        uses: actions/upload-artifact@v4
+        with: {name: decode_00, path: parts/t3_decode.pte.part00, compression-level: 0, retention-days: 1}
+      - name: Upload decode part 01
+        uses: actions/upload-artifact@v4
+        with: {name: decode_01, path: parts/t3_decode.pte.part01, compression-level: 0, retention-days: 1}
+      - name: Upload decode part 02
+        uses: actions/upload-artifact@v4
+        with: {name: decode_02, path: parts/t3_decode.pte.part02, compression-level: 0, retention-days: 1}
+      - name: Upload decode part 03
+        uses: actions/upload-artifact@v4
+        with: {name: decode_03, path: parts/t3_decode.pte.part03, compression-level: 0, retention-days: 1}
+      - name: Upload decode part 04
+        uses: actions/upload-artifact@v4
+        with: {name: decode_04, path: parts/t3_decode.pte.part04, compression-level: 0, retention-days: 1, if-no-files-found: ignore}
+
+      - name: Upload s3gen
+        uses: actions/upload-artifact@v4
+        with: {name: s3gen, path: parts/s3gen_encoder.pte.part00, compression-level: 0, retention-days: 1}
+      - name: Upload cfm
+        uses: actions/upload-artifact@v4
+        with: {name: cfm, path: parts/cfm_step.pte.part00, compression-level: 0, retention-days: 1}
+      - name: Upload hifigan
+        uses: actions/upload-artifact@v4
+        with: {name: hifigan, path: parts/hifigan.pte.part00, compression-level: 0, retention-days: 1}
