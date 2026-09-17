@@ -1,0 +1,38 @@
+{
+  "schema": "sindel.cp034.a01.prechange-lock.v1",
+  "project": "SINDEL Mobile",
+  "checkpoint": "CP034",
+  "active_milestone": "C-05C",
+  "active_step": "A01",
+  "protocol_source": "SINDEL_PHONE_AUDIT_AND_FIX_PLAN_2026-09-16(1)(1).docx",
+  "requirements": ["F02", "F03", "F04", "F05", "F06", "F08"],
+  "allowed_diff": [
+    "new R5 parity-gate wrapper under sindel/c05c",
+    "new A01 unit self-test",
+    "A01 evidence/lock artifacts"
+  ],
+  "protected": [
+    "frozen numerical thresholds",
+    "V5B authority",
+    "Golden Conditioning",
+    "R4 source bytes",
+    "Android source",
+    "installer source"
+  ],
+  "next_test": "T01 parity gate negative/positive unit self-test",
+  "evidence_ceiling": "L1",
+  "rollback": "delete branch sindel-cp034-a01-parity-gate-r5-20260917; base commit a89e1ea34e1c5229f693aa2ecbbf6a03b9ab4df3 remains unchanged",
+  "base_commit": "a89e1ea34e1c5229f693aa2ecbbf6a03b9ab4df3",
+  "frozen_thresholds": {
+    "cosine_min": 0.9999,
+    "mean_abs_max": 0.005,
+    "max_abs_max": 0.05,
+    "finite_required": true
+  },
+  "known_source_sha256": {
+    "C05C_NUMERICAL_TOLERANCE_R3.json": "9d2768e30e9d81474db7eb43c1cda7d216bdc2fe4d5a6026768399aa47e7a6f1",
+    "C05C_T3_SHARED_STORE_ISOLATED_R4.py": "037fa55274f8423c25c273ac6d88bd2d006a43463e221858eef2f3a209f0a0aa",
+    "C05C_T3_SHARED_STORE_RUNTIME_LIFETIME_R4B.py": "21f00e5e81909ae215f7fb40680b70ef9ddb6d6fd00c4e190e6419bfe7ce8d55"
+  },
+  "status": "LOCKED_FOR_A01_ONLY"
+}
