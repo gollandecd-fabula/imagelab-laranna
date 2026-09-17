@@ -83,6 +83,8 @@ def stage_dir(name: str) -> Path:
 def rejected_result(value) -> bool:
     """Propagate explicit failed checks without treating forward completion as parity."""
     if isinstance(value, dict):
+        if value.get("numerical_status") in ("FAIL", "BLOCKED"):
+            return True
         if "accepted" in value and value["accepted"] is not True:
             return True
         if "status" in value and value["status"] not in ("PASS", "PASS_L2", "COMPLETED"):
