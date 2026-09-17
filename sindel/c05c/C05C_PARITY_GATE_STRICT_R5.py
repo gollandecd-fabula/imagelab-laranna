@@ -289,6 +289,7 @@ def run_gate(
             "exception": str(exc)[:4000],
         })
 
+    # F08: report is persisted before process failure is surfaced.
     write_json_atomic(report_path, report)
     report["report_sha256"] = sha256_file(report_path)
     if report["status"] != "PASS":
