@@ -95,6 +95,64 @@ def main() -> int:
             p2 = Path(td) / "exception" / "stage_result.json"
             data2 = json.loads(p2.read_text(encoding="utf-8"))
             record("stage_guard_exception_is_failed", exc_failed and data2.get("status") == "FAIL" and data2.get("exception_type") == "ValueError", data2)
+
+            # F08: a failed numerical verify must preserve a detailed machine-readable report before raising.
+            old_schemas = gate.EXPECTED_SCHEMAS
+            old_require_gate = gate.r4.require_gate
+            old_load_stage_result = gate.r4.load_stage_result
+            try:
+                gate.EXPECTED_SCHEMAS = {
+                    "prefill": {
+                        "logits": ((2, 4), np.dtype("float16")),
+                        "k": ((1, 1), np.dtype("float16")),
+                        "v": ((1, 1), np.dtype("float16")),
+                    },
+                    "decode_probe": {
+                        "logits": ((2, 4), np.dtype("float16")),
+                        "k_delta": ((1, 1), np.dtype("float16")),
+                        "v_delta": ((1, 1), np.dtype("float16")),
+                    },
+                }
+                union_sha = "u" * 64
+                stage_map = {
+                    "01_export_prefill": {"status": "PASS"},
+                    "02_export_decode": {"status": "PASS"},
+                    "03_merge_store": {"status": "PASS", "union_ptd": {"sha256": union_sha, "size": 123}},
+                    "04_runtime_prefill": {"status": "PASS", "union_ptd_sha256": union_sha},
+                    "05_runtime_decode": {"status": "PASS", "union_ptd_sha256": union_sha},
+                }
+                gate.r4.require_gate = lambda: {}
+                gate.r4.load_stage_result = lambda name: stage_map[name]
+
+                good_logits = np.array([[1.0, 0.9, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0]], dtype=np.float16)
+                bad_logits = np.array([[0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0]], dtype=np.float16)
+                tiny = np.array([[1.0]], dtype=np.float16)
+                np.savez(gate.stage_dir("01_export_prefill") / "source_outputs.npz", logits=good_logits, k=tiny, v=tiny)
+                np.savez(gate.stage_dir("04_runtime_prefill") / "runtime_outputs.npz", logits=bad_logits, k=tiny, v=tiny)
+                np.savez(gate.stage_dir("02_export_decode") / "source_outputs.npz", logits=good_logits, k_delta=tiny, v_delta=tiny)
+                np.savez(gate.stage_dir("05_runtime_decode") / "runtime_outputs.npz", logits=good_logits, k_delta=tiny, v_delta=tiny)
+
+                try:
+                    gate.verify()
+                    verify_failed = False
+                except RuntimeError:
+                    verify_failed = True
+                final_report = Path(td) / "C05C_T3_SHARED_STORE_ISOLATED_R5_FINAL.json"
+                report_data = json.loads(final_report.read_text(encoding="utf-8")) if final_report.is_file() else {}
+                record(
+                    "failed_verify_preserves_detailed_report",
+                    verify_failed
+                    and final_report.is_file()
+                    and report_data.get("status") == "FAIL_L2"
+                    and report_data.get("accepted") is False
+                    and isinstance(report_data.get("prefill", {}).get("comparison"), list)
+                    and report_data.get("raw_outputs", {}).get("prefill_source_npz_sha256") not in (None, "MISSING"),
+                    report_data,
+                )
+            finally:
+                gate.EXPECTED_SCHEMAS = old_schemas
+                gate.r4.require_gate = old_require_gate
+                gate.r4.load_stage_result = old_load_stage_result
         finally:
             gate.OUT = old_out
             gate.r4.OUT = old_r4_out
