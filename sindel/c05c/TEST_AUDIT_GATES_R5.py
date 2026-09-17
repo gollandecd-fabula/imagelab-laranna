@@ -54,6 +54,9 @@ class StageTests(unittest.TestCase):
     def test_explicit_fail_not_overwritten(self):
         with self.assertRaises(RuntimeError):gate.stage_guard('test',lambda:{'status':'FAIL'})
         self.assertEqual(self.result()['status'],'FAIL')
+    def test_explicit_numerical_failure(self):
+        with self.assertRaises(RuntimeError):gate.stage_guard('test',lambda:{'numerical_status':'FAIL'})
+        self.assertEqual(self.result()['status'],'FAIL')
     def test_forward_scope(self):
         gate.stage_guard('test',lambda:{'fresh_process_real_executorch_forward':True})
         self.assertEqual(self.result()['numerical_status'],'NOT_EVALUATED')
