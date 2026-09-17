@@ -1,0 +1,241 @@
+{
+  "schema": "sindel.audit-fixes.r5",
+  "base_commit": "a89e1ea34e1c5229f693aa2ecbbf6a03b9ab4df3",
+  "authorization": "2026-09-17: пользователь: продолжай работу, требование с глазом не учитывай",
+  "glaz": "NOT_ATTACHED; requirement waived by user for this work",
+  "active_milestone": "C-05C",
+  "scope": "A01 gate fixes; A02 original/union diagnosis; no Android or threshold changes",
+  "rollback": "discard isolated branch; baseline untouched",
+  "test": "TEST_AUDIT_GATES_R5.py: 19 tests passed",
+  "evidence_ceiling": "L1; full model L2 pending; no L3/L4/L5 claims",
+  "release_status": "RELEASE_BLOCKED",
+  "findings": [
+    {
+      "id": "F01",
+      "status": "OPEN",
+      "action": "A02",
+      "test": "Required test from original audit; not yet completed",
+      "evidence": "Original audit only",
+      "artifact": "PENDING",
+      "pass_criterion": "Unchanged criterion in original audit"
+    },
+    {
+      "id": "F02",
+      "status": "IMPLEMENTED_VERIFIED_L1",
+      "action": "A01",
+      "test": "TEST_AUDIT_GATES_R5.py",
+      "evidence": "L1",
+      "artifact": "C05C_T3_SHARED_STORE_ISOLATED_R4.py",
+      "pass_criterion": "All regression negatives rejected; full runtime separately required"
+    },
+    {
+      "id": "F03",
+      "status": "IMPLEMENTED_VERIFIED_L1",
+      "action": "A01",
+      "test": "TEST_AUDIT_GATES_R5.py",
+      "evidence": "L1",
+      "artifact": "C05C_T3_SHARED_STORE_ISOLATED_R4.py",
+      "pass_criterion": "All regression negatives rejected; full runtime separately required"
+    },
+    {
+      "id": "F04",
+      "status": "IMPLEMENTED_VERIFIED_L1",
+      "action": "A01",
+      "test": "TEST_AUDIT_GATES_R5.py",
+      "evidence": "L1",
+      "artifact": "C05C_T3_SHARED_STORE_ISOLATED_R4.py",
+      "pass_criterion": "All regression negatives rejected; full runtime separately required"
+    },
+    {
+      "id": "F05",
+      "status": "IMPLEMENTED_VERIFIED_L1",
+      "action": "A01",
+      "test": "TEST_AUDIT_GATES_R5.py",
+      "evidence": "L1",
+      "artifact": "C05C_T3_SHARED_STORE_ISOLATED_R4.py",
+      "pass_criterion": "All regression negatives rejected; full runtime separately required"
+    },
+    {
+      "id": "F06",
+      "status": "IMPLEMENTED_VERIFIED_L1",
+      "action": "A01",
+      "test": "TEST_AUDIT_GATES_R5.py",
+      "evidence": "L1",
+      "artifact": "C05C_T3_SHARED_STORE_ISOLATED_R4.py",
+      "pass_criterion": "All regression negatives rejected; full runtime separately required"
+    },
+    {
+      "id": "F07",
+      "status": "OPEN",
+      "action": "Follow audit dependency order",
+      "test": "Required test from original audit; not yet completed",
+      "evidence": "Original audit only",
+      "artifact": "PENDING",
+      "pass_criterion": "Unchanged criterion in original audit"
+    },
+    {
+      "id": "F08",
+      "status": "IMPLEMENTED_VERIFIED_L1",
+      "action": "A01",
+      "test": "TEST_AUDIT_GATES_R5.py",
+      "evidence": "L1",
+      "artifact": "C05C_T3_SHARED_STORE_ISOLATED_R4.py",
+      "pass_criterion": "All regression negatives rejected; full runtime separately required"
+    },
+    {
+      "id": "F09",
+      "status": "OPEN",
+      "action": "Follow audit dependency order",
+      "test": "Required test from original audit; not yet completed",
+      "evidence": "Original audit only",
+      "artifact": "PENDING",
+      "pass_criterion": "Unchanged criterion in original audit"
+    },
+    {
+      "id": "F10",
+      "status": "OPEN",
+      "action": "Follow audit dependency order",
+      "test": "Required test from original audit; not yet completed",
+      "evidence": "Original audit only",
+      "artifact": "PENDING",
+      "pass_criterion": "Unchanged criterion in original audit"
+    },
+    {
+      "id": "F11",
+      "status": "OPEN",
+      "action": "Follow audit dependency order",
+      "test": "Required test from original audit; not yet completed",
+      "evidence": "Original audit only",
+      "artifact": "PENDING",
+      "pass_criterion": "Unchanged criterion in original audit"
+    },
+    {
+      "id": "F12",
+      "status": "OPEN",
+      "action": "Follow audit dependency order",
+      "test": "Required test from original audit; not yet completed",
+      "evidence": "Original audit only",
+      "artifact": "PENDING",
+      "pass_criterion": "Unchanged criterion in original audit"
+    },
+    {
+      "id": "F13",
+      "status": "OPEN",
+      "action": "Follow audit dependency order",
+      "test": "Required test from original audit; not yet completed",
+      "evidence": "Original audit only",
+      "artifact": "PENDING",
+      "pass_criterion": "Unchanged criterion in original audit"
+    },
+    {
+      "id": "F14",
+      "status": "OPEN",
+      "action": "Follow audit dependency order",
+      "test": "Required test from original audit; not yet completed",
+      "evidence": "Original audit only",
+      "artifact": "PENDING",
+      "pass_criterion": "Unchanged criterion in original audit"
+    },
+    {
+      "id": "F15",
+      "status": "OPEN",
+      "action": "Follow audit dependency order",
+      "test": "Required test from original audit; not yet completed",
+      "evidence": "Original audit only",
+      "artifact": "PENDING",
+      "pass_criterion": "Unchanged criterion in original audit"
+    },
+    {
+      "id": "F16",
+      "status": "OPEN",
+      "action": "Follow audit dependency order",
+      "test": "Required test from original audit; not yet completed",
+      "evidence": "Original audit only",
+      "artifact": "PENDING",
+      "pass_criterion": "Unchanged criterion in original audit"
+    },
+    {
+      "id": "F17",
+      "status": "OPEN",
+      "action": "Follow audit dependency order",
+      "test": "Required test from original audit; not yet completed",
+      "evidence": "Original audit only",
+      "artifact": "PENDING",
+      "pass_criterion": "Unchanged criterion in original audit"
+    },
+    {
+      "id": "F18",
+      "status": "OPEN",
+      "action": "Follow audit dependency order",
+      "test": "Required test from original audit; not yet completed",
+      "evidence": "Original audit only",
+      "artifact": "PENDING",
+      "pass_criterion": "Unchanged criterion in original audit"
+    },
+    {
+      "id": "F19",
+      "status": "OPEN",
+      "action": "Follow audit dependency order",
+      "test": "Required test from original audit; not yet completed",
+      "evidence": "Original audit only",
+      "artifact": "PENDING",
+      "pass_criterion": "Unchanged criterion in original audit"
+    },
+    {
+      "id": "F20",
+      "status": "OPEN",
+      "action": "Follow audit dependency order",
+      "test": "Required test from original audit; not yet completed",
+      "evidence": "Original audit only",
+      "artifact": "PENDING",
+      "pass_criterion": "Unchanged criterion in original audit"
+    },
+    {
+      "id": "F21",
+      "status": "OPEN",
+      "action": "Follow audit dependency order",
+      "test": "Required test from original audit; not yet completed",
+      "evidence": "Original audit only",
+      "artifact": "PENDING",
+      "pass_criterion": "Unchanged criterion in original audit"
+    },
+    {
+      "id": "F22",
+      "status": "OPEN",
+      "action": "Follow audit dependency order",
+      "test": "Required test from original audit; not yet completed",
+      "evidence": "Original audit only",
+      "artifact": "PENDING",
+      "pass_criterion": "Unchanged criterion in original audit"
+    },
+    {
+      "id": "F23",
+      "status": "OPEN",
+      "action": "Follow audit dependency order",
+      "test": "Required test from original audit; not yet completed",
+      "evidence": "Original audit only",
+      "artifact": "PENDING",
+      "pass_criterion": "Unchanged criterion in original audit"
+    },
+    {
+      "id": "F24",
+      "status": "OPEN",
+      "action": "Follow audit dependency order",
+      "test": "Required test from original audit; not yet completed",
+      "evidence": "Original audit only",
+      "artifact": "PENDING",
+      "pass_criterion": "Unchanged criterion in original audit"
+    }
+  ],
+  "sha256": {
+    "TEST_AUDIT_GATES_R5.py": "e4295d95e72c7ae42cc405a00244af6bd3fc256d69aa6349b23cce5b8e1aef8a",
+    "C05C_COMPARE_STORES_R5.py": "342d41796ccf35fe938965cbd6975546e6f11fd9551be1d8cf7483cb4ee45764"
+  },
+  "protocol_registry_reference": {
+    "file": "SINDEL_PHONE_AUDIT_AND_FIX_PLAN_2026-09-16.docx",
+    "sha256": "e9ed81ade1e0d731b9dd2e34cbaa540bab28e9c968d27c6ab66fdcb0be180e11",
+    "embedded_registry": "customXml/sindel_audit_registry.xml",
+    "all_446_requirements_retained": true,
+    "current_delta": "F02-F06/F08 have L1 fixes only; A02 L2 in progress; original release gates remain blocked"
+  }
+}
