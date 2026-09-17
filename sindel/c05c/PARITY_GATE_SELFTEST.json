@@ -42,7 +42,7 @@
       "passed": true
     },
     {
-      "detail": "{\"aggregate\": {\"accepted\": false, \"duplicates\": [], \"failed\": [\"k\"], \"missing\": [], \"numerical_status\": \"FAILED\", \"observed_names\": [\"k\"], \"required_names\": [\"k\"], \"unexpected\": []}, \"candidate_npz\": \"/tmp/tmpvgp9zbcu/cand.npz\", \"cfg_weight\": 0.03, \"checks\": [{\"accepted\": false, \"candidate_dtype\": \"float16\", \"candidate_shape\": [2, 3], \"cosine_raw\": 0.6359337738364604, \"finite\": true, \"max_abs\": 9.0, \"mean_abs\": 1.5, \"name\": \"k\", \"numerical_ok\": false, \"reason\": \"numerical_threshold_failed\", \"reference_dtype\": \"float16\", \"reference_shape\": [2, 3]}], \"execution_status\": \"PASS\", \"numerical_status\": \"FAILED\", \"reference_npz\": \"/tmp/tmpvgp9zbcu/ref.npz\", \"schema\": \"sindel.cp034.c05c.parity-gate-strict-r5.v1\", \"status\": \"FAILED\", \"thresholds\": {\"cosine_min\": 0.9999, \"finite_required\": true, \"max_abs_max\": 0.05, \"mean_abs_max\": 0.005}}",
+      "detail": "{\"aggregate\": {\"accepted\": false, \"duplicates\": [], \"failed\": [\"k\"], \"missing\": [], \"numerical_status\": \"FAILED\", \"observed_names\": [\"k\"], \"required_names\": [\"k\"], \"unexpected\": []}, \"checks\": [{\"accepted\": false, \"candidate_dtype\": \"float16\", \"candidate_shape\": [2, 3], \"cosine_raw\": 0.6359337738364604, \"finite\": true, \"max_abs\": 9.0, \"mean_abs\": 1.5, \"name\": \"k\", \"numerical_ok\": false, \"reason\": \"numerical_threshold_failed\", \"reference_dtype\": \"float16\", \"reference_shape\": [2, 3]}], \"execution_status\": \"PASS\", \"numerical_status\": \"FAILED\", \"status\": \"FAILED\"}",
       "name": "failure_report_before_raise",
       "passed": true
     },
