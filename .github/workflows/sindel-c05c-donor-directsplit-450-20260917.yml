@@ -1,0 +1,88 @@
+name: SINDEL C05C Donor Direct Split 450 20260917
+
+on:
+  push:
+    branches:
+      - sindel-cp034-a01-parity-gate-r5-20260917
+    paths:
+      - '.github/workflows/sindel-c05c-donor-directsplit-450-20260917.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  directsplit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install downloader
+        run: python -m pip install --upgrade huggingface_hub
+      - name: Download exact five core donor PTE directly
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from huggingface_hub import snapshot_download
+          p=snapshot_download(repo_id='acul3/chatterbox-executorch',repo_type='model',local_dir='donor_models',allow_patterns=['t3_prefill.pte','t3_decode.pte','s3gen_encoder.pte','cfm_step.pte','hifigan.pte'])
+          print(p)
+          PY
+      - name: Verify and split 450 MB
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          expected={
+            't3_prefill.pte':('721d268943818b5a90530e7dadfae0edb9d3fd0227f93557c2a153ecee675e51',2116538624),
+            't3_decode.pte':('0704783d9c4c7c621f9f398de40d8fc3829ad2769bca8194505cd86f0aee9ca3',2098677504),
+            's3gen_encoder.pte':('4f087015bb08526d0689eed1f94baa60761d1777d37b25f7944d6f4944ecce88',185724864),
+            'cfm_step.pte':('5ffb90558c0dbada80ac94bd9a6864101cc07826c0f9192dfd0363d190922079',286434240),
+            'hifigan.pte':('f5239799e82fb2be2aeb63db2de9bef676d2decf7905692a5ccafac7ae3530e2',83634944),
+          }
+          root=Path('donor_models'); out=Path('parts'); out.mkdir(); chunk=450_000_000
+          manifest={'schema':'sindel.cp034.c05c.donor-directsplit.v1','chunk_bytes':chunk,'files':[]}
+          for name,(sha,size) in expected.items():
+            p=root/name
+            if not p.is_file() or p.stat().st_size!=size: raise SystemExit(f'IDENTITY_SIZE_FAIL:{name}')
+            h=hashlib.sha256()
+            with p.open('rb') as f:
+              for b in iter(lambda:f.read(8*1024*1024),b''): h.update(b)
+            if h.hexdigest()!=sha: raise SystemExit(f'IDENTITY_SHA_FAIL:{name}:{h.hexdigest()}')
+            row={'name':name,'size':size,'sha256':sha,'parts':[]}
+            with p.open('rb') as f:
+              i=0
+              while (b:=f.read(chunk)):
+                q=out/f'{name}.part{i:02d}'; q.write_bytes(b)
+                row['parts'].append({'name':q.name,'size':len(b),'sha256':hashlib.sha256(b).hexdigest()}); i+=1
+            manifest['files'].append(row)
+          Path('parts/MANIFEST.json').write_text(json.dumps(manifest,indent=2,sort_keys=True),encoding='utf-8')
+          print(json.dumps(manifest,indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with: {name: direct_manifest, path: parts/MANIFEST.json, retention-days: 1}
+      - uses: actions/upload-artifact@v4
+        with: {name: d_prefill_00, path: parts/t3_prefill.pte.part00, compression-level: 0, retention-days: 1}
+      - uses: actions/upload-artifact@v4
+        with: {name: d_prefill_01, path: parts/t3_prefill.pte.part01, compression-level: 0, retention-days: 1}
+      - uses: actions/upload-artifact@v4
+        with: {name: d_prefill_02, path: parts/t3_prefill.pte.part02, compression-level: 0, retention-days: 1}
+      - uses: actions/upload-artifact@v4
+        with: {name: d_prefill_03, path: parts/t3_prefill.pte.part03, compression-level: 0, retention-days: 1}
+      - uses: actions/upload-artifact@v4
+        with: {name: d_prefill_04, path: parts/t3_prefill.pte.part04, compression-level: 0, retention-days: 1}
+      - uses: actions/upload-artifact@v4
+        with: {name: d_decode_00, path: parts/t3_decode.pte.part00, compression-level: 0, retention-days: 1}
+      - uses: actions/upload-artifact@v4
+        with: {name: d_decode_01, path: parts/t3_decode.pte.part01, compression-level: 0, retention-days: 1}
+      - uses: actions/upload-artifact@v4
+        with: {name: d_decode_02, path: parts/t3_decode.pte.part02, compression-level: 0, retention-days: 1}
+      - uses: actions/upload-artifact@v4
+        with: {name: d_decode_03, path: parts/t3_decode.pte.part03, compression-level: 0, retention-days: 1}
+      - uses: actions/upload-artifact@v4
+        with: {name: d_decode_04, path: parts/t3_decode.pte.part04, compression-level: 0, retention-days: 1}
+      - uses: actions/upload-artifact@v4
+        with: {name: d_s3gen, path: parts/s3gen_encoder.pte.part00, compression-level: 0, retention-days: 1}
+      - uses: actions/upload-artifact@v4
+        with: {name: d_cfm, path: parts/cfm_step.pte.part00, compression-level: 0, retention-days: 1}
+      - uses: actions/upload-artifact@v4
+        with: {name: d_hifigan, path: parts/hifigan.pte.part00, compression-level: 0, retention-days: 1}
