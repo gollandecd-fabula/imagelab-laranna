@@ -45,7 +45,7 @@ def sha_file(path: Path) -> str:
 def write_json(path: Path, data: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(data, indent=2, sort_keys=True), encoding="utf-8")
+    tmp.write_text(json.dumps(data, indent=2, sort_keys=True, allow_nan=False), encoding="utf-8")
     tmp.replace(path)
 
 
@@ -80,36 +80,51 @@ def stage_dir(name: str) -> Path:
     return p
 
 
+def rejected_result(value) -> bool:
+    """Propagate explicit failed checks without treating forward completion as parity."""
+    if isinstance(value, dict):
+        if "accepted" in value and value["accepted"] is not True:
+            return True
+        if "status" in value and value["status"] not in ("PASS", "PASS_L2", "COMPLETED"):
+            return True
+        return any(rejected_result(v) for v in value.values())
+    if isinstance(value, (list, tuple)):
+        return any(rejected_result(v) for v in value)
+    return False
+
+
 def stage_guard(name: str, fn) -> None:
     d = stage_dir(name)
     started = time.time()
+    # A failed retry must not leave an earlier result looking current.
+    (d / "stage_result.json").unlink(missing_ok=True)
     write_json(d / "stage_start.json", {
-        "stage": name,
-        "status": "STARTED",
-        "pid": os.getpid(),
-        "started_unix": started,
-        "python": sys.version,
+        "stage": name, "status": "STARTED", "pid": os.getpid(),
+        "started_unix": started, "python": sys.version,
     })
+    result = {}
+    completed = False
     try:
-        result = fn()
-        result = dict(result)
+        result = dict(fn())
+        completed = True
+        failed = rejected_result(result)
+        numerical = result.get("numerical_status", "NOT_EVALUATED")
         result.update({
-            "stage": name,
-            "status": "PASS",
-            "pid": os.getpid(),
-            "elapsed_s": time.time() - started,
+            "stage": name, "status": "FAIL" if failed else "PASS",
+            "execution_status": "COMPLETED", "numerical_status": numerical,
+            "pid": os.getpid(), "elapsed_s": time.time() - started,
         })
         write_json(d / "stage_result.json", result)
+        if failed:
+            raise RuntimeError(f"stage {name} contains rejected checks")
     except BaseException as exc:
-        failure = {
-            "stage": name,
-            "status": "FAIL",
-            "pid": os.getpid(),
-            "elapsed_s": time.time() - started,
-            "exception_type": type(exc).__name__,
-            "exception": str(exc)[:2000],
-        }
-        write_json(d / "stage_result.json", failure)
+        result.update({
+            "stage": name, "status": "FAIL",
+            "execution_status": "COMPLETED" if completed else "FAILED",
+            "pid": os.getpid(), "elapsed_s": time.time() - started,
+            "exception_type": type(exc).__name__, "exception": str(exc)[:2000],
+        })
+        write_json(d / "stage_result.json", result)
         (d / "traceback.txt").write_text(traceback.format_exc()[-20000:], encoding="utf-8")
         raise
 
@@ -349,12 +364,12 @@ def export_decode() -> dict:
     }
 
 
-def load_stage_result(name: str) -> dict:
+def load_stage_result(name: str, *, allow_completed: bool = False) -> dict:
     p = stage_dir(name) / "stage_result.json"
     if not p.is_file():
         raise RuntimeError(f"missing {p}")
     d = json.loads(p.read_text(encoding="utf-8"))
-    if d.get("status") != "PASS":
+    if d.get("status") != "PASS" and not (allow_completed and d.get("execution_status") == "COMPLETED"):
         raise RuntimeError(f"prerequisite stage {name} is not PASS")
     return d
 
@@ -461,7 +476,8 @@ def runtime_prefill() -> dict:
     fixed = torch.zeros((2, base.TEXT_SLOTS), dtype=torch.long)
     text_len = torch.tensor([66], dtype=torch.long)
     ptd_bytes = union_ptd.read_bytes()
-    mod = _load_for_executorch_from_buffer(pte.read_bytes(), ptd_bytes)
+    pte_bytes = pte.read_bytes()
+    mod = _load_for_executorch_from_buffer(pte_bytes, ptd_bytes)
     with torch.inference_mode():
         out = mod.forward((ce, fixed, text_len))
     shapes = [list(x.shape) for x in out]
@@ -497,7 +513,8 @@ def runtime_decode() -> dict:
     kv_k = torch.zeros((N_LAYERS, 2, N_HEADS, max_kv, HD), dtype=torch.float16)
     kv_v = torch.zeros_like(kv_k)
     ptd_bytes = union_ptd.read_bytes()
-    mod = _load_for_executorch_from_buffer(pte.read_bytes(), ptd_bytes)
+    pte_bytes = pte.read_bytes()
+    mod = _load_for_executorch_from_buffer(pte_bytes, ptd_bytes)
     with torch.inference_mode():
         out = mod.forward((prev, spos, kv_k, kv_v))
     delta = [N_LAYERS, 2, N_HEADS, 1, HD]
@@ -519,29 +536,54 @@ def runtime_decode() -> dict:
 
 def compare_arrays(a, b, name: str) -> dict:
     import numpy as np
-    aa = np.asarray(a, dtype=np.float64).reshape(-1)
-    bb = np.asarray(b, dtype=np.float64).reshape(-1)
-    if aa.shape != bb.shape:
-        return {"name": name, "accepted": False, "reason": "shape_mismatch", "a": list(aa.shape), "b": list(bb.shape)}
-    finite = bool(np.isfinite(aa).all() and np.isfinite(bb).all())
-    na = float(np.linalg.norm(aa)); nb = float(np.linalg.norm(bb))
-    if na == 0.0 and nb == 0.0:
-        cosine = 1.0
-    elif na == 0.0 or nb == 0.0:
-        cosine = 0.0
-    else:
-        cosine = float(np.dot(aa, bb) / (na * nb))
-    diff = np.abs(aa - bb)
-    mean_abs = float(diff.mean()) if diff.size else 0.0
-    max_abs = float(diff.max()) if diff.size else 0.0
-    accepted = finite and cosine >= THRESHOLDS["cosine_min"] and mean_abs <= THRESHOLDS["mean_abs_max"] and max_abs <= THRESHOLDS["max_abs_max"]
-    return {"name": name, "finite": finite, "cosine_raw": cosine, "mean_abs": mean_abs, "max_abs": max_abs, "accepted": accepted}
+    a, b = np.asarray(a), np.asarray(b)
+    result = {"name": name, "accepted": False,
+              "source_shape": list(a.shape), "runtime_shape": list(b.shape),
+              "source_dtype": str(a.dtype), "runtime_dtype": str(b.dtype)}
+    for invalid, reason in (
+        (a.shape != b.shape, "shape_mismatch"),
+        (a.dtype != b.dtype, "dtype_mismatch"),
+        (a.size == 0 or b.size == 0, "empty_output"),
+        (a.dtype.kind not in "fiu" or b.dtype.kind not in "fiu", "unsupported_dtype"),
+    ):
+        if invalid:
+            return {**result, "reason": reason}
+    if not (np.isfinite(a).all() and np.isfinite(b).all()):
+        return {**result, "finite": False, "reason": "nonfinite_output"}
+    if a.dtype.kind in "iu":
+        equal = bool(np.array_equal(a, b))
+        return {**result, "finite": True, "integer_exact": equal, "accepted": equal}
+    aa, bb = a.astype(np.float64).reshape(-1), b.astype(np.float64).reshape(-1)
+    with np.errstate(over="ignore", invalid="ignore"):
+        na, nb = float(np.linalg.norm(aa)), float(np.linalg.norm(bb))
+        cosine = 1.0 if na == nb == 0 else (0.0 if na == 0 or nb == 0 else float(np.dot(aa, bb) / (na * nb)))
+        diff = np.abs(aa - bb)
+        mean_abs, max_abs = float(diff.mean()), float(diff.max())
+    if not all(np.isfinite(x) for x in (cosine, mean_abs, max_abs)):
+        return {**result, "finite": True, "reason": "nonfinite_metrics"}
+    accepted = cosine >= THRESHOLDS["cosine_min"] and mean_abs <= THRESHOLDS["mean_abs_max"] and max_abs <= THRESHOLDS["max_abs_max"]
+    result.update(finite=True, cosine_raw=cosine, mean_abs=mean_abs, max_abs=max_abs, accepted=bool(accepted))
+    if name == "logits":
+        if a.ndim != 2 or a.shape[0] != 2:
+            return {**result, "accepted": False, "reason": "cfg_logits_schema"}
+        # Frozen T3 combines cond + cfg * (cond - uncond) in logits dtype.
+        # V5B authority fixes cfg_weight=0.03. Do not compare raw-row top1.
+        cfg = np.asarray(0.03, dtype=a.dtype)
+        with np.errstate(over="ignore", invalid="ignore"):
+            ac = a[0] + cfg * (a[0] - a[1])
+            bc = b[0] + cfg * (b[0] - b[1])
+        if not (np.isfinite(ac).all() and np.isfinite(bc).all()):
+            return {**result, "accepted": False, "reason": "nonfinite_cfg"}
+        at, bt = int(ac.argmax()), int(bc.argmax())
+        result.update(cfg_weight=0.03, source_cfg_top1=at, runtime_cfg_top1=bt,
+                      cfg_top1_match=at == bt, accepted=bool(accepted and at == bt))
+    return result
 
 
-def verify() -> dict:
+def _verify() -> dict:
     require_gate()
     for name in ("01_export_prefill", "02_export_decode", "03_merge_store", "04_runtime_prefill", "05_runtime_decode"):
-        load_stage_result(name)
+        load_stage_result(name, allow_completed=name.startswith(("04_", "05_")))
     import numpy as np
     pre_src = np.load(stage_dir("01_export_prefill") / "source_outputs.npz")
     pre_run = np.load(stage_dir("04_runtime_prefill") / "runtime_outputs.npz")
@@ -551,15 +593,17 @@ def verify() -> dict:
     dec_cmp = [compare_arrays(dec_src[k], dec_run[k], k) for k in ("logits", "k_delta", "v_delta")]
     pre_ok = all(x.get("accepted") is True for x in pre_cmp)
     dec_ok = all(x.get("accepted") is True for x in dec_cmp)
-    pre_rt = load_stage_result("04_runtime_prefill")
-    dec_rt = load_stage_result("05_runtime_decode")
+    pre_rt = load_stage_result("04_runtime_prefill", allow_completed=True)
+    dec_rt = load_stage_result("05_runtime_decode", allow_completed=True)
     merged = load_stage_result("03_merge_store")
     same_sha = pre_rt["union_ptd_sha256"] == dec_rt["union_ptd_sha256"] == merged["union_ptd"]["sha256"]
-    if not (pre_ok and dec_ok and same_sha):
-        raise RuntimeError("isolated shared-store final gate failed")
+    accepted = pre_ok and dec_ok and same_sha
     report = {
         "schema": "sindel.cp034.c05c.t3-shared-store-isolated-r4.v1",
-        "status": "PASS_L2",
+        "status": "PASS_L2" if accepted else "FAIL",
+        "accepted": accepted,
+        "numerical_status": "PASS" if pre_ok and dec_ok else "FAIL",
+        "comparator_sha256": sha_file(Path(__file__)),
         "scope": "shared external-store feasibility; decode remains a storage/runtime probe, not production decode acceptance",
         "process_isolation": {
             "export_prefill": "fresh_process",
@@ -581,6 +625,24 @@ def verify() -> dict:
     }
     write_json(OUT / "C05C_T3_SHARED_STORE_ISOLATED_R4_FINAL.json", report)
     return report
+
+
+def verify() -> dict:
+    report_path = OUT / "C05C_T3_SHARED_STORE_ISOLATED_R4_FINAL.json"
+    report_path.unlink(missing_ok=True)
+    try:
+        return _verify()
+    except Exception as exc:
+        report = {
+            "schema": "sindel.cp034.c05c.t3-shared-store-isolated-r4.v1",
+            "status": "FAIL", "accepted": False,
+            "numerical_status": "NOT_EVALUATED",
+            "exception_type": type(exc).__name__, "exception": str(exc)[:2000],
+            "comparator_sha256": sha_file(Path(__file__)), "thresholds": THRESHOLDS,
+            "scope": "incomplete verification; not production acceptance",
+        }
+        write_json(report_path, report)
+        return report
 
 
 COMMANDS = {
