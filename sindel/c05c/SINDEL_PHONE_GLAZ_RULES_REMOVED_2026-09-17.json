@@ -1,0 +1,29 @@
+{
+  "schema": "sindel.phone.protocol-decision.v1",
+  "decision_id": "SINDEL-PHONE-DEC-2026-09-17-NO-GLAZ",
+  "date": "2026-09-17",
+  "scope": "SINDEL for Android / phone project only",
+  "decision": "All GLAZ-specific mandatory gates, PRE_CHANGE/POST_CHANGE/FINAL requirements, attachment requirements and GLAZ-based mutation blocks are superseded and removed from the SINDEL phone project.",
+  "preserved_controls": [
+    "full protocol registry before changes",
+    "active milestone and requirement check before mutation",
+    "explicit change boundary",
+    "rollback condition",
+    "next test",
+    "evidence level ceiling",
+    "fail-closed status discipline",
+    "P0 user path requires L5"
+  ],
+  "does_not_change": [
+    "CP034 milestone sequence",
+    "V5B voice authority",
+    "frozen numerical thresholds",
+    "approved Android UI",
+    "L0-L5 evidence semantics"
+  ],
+  "supersedes": [
+    "MASTER v1.3 section 25.1 GLAZ mandatory independent execution gate",
+    "all audit-plan instructions that require GLAZ before mutation or finalization"
+  ],
+  "status": "ACTIVE"
+}
