@@ -6,7 +6,7 @@
   "active_milestone": "C-05C",
   "scope": "A01 gate fixes; A02 original/union diagnosis; no Android or threshold changes",
   "rollback": "discard isolated branch; baseline untouched",
-  "test": "TEST_AUDIT_GATES_R5.py: 16 tests passed",
+  "test": "TEST_AUDIT_GATES_R5.py: 19 tests passed",
   "evidence_ceiling": "L1; full model L2 pending; no L3/L4/L5 claims",
   "release_status": "RELEASE_BLOCKED",
   "findings": [
@@ -228,7 +228,14 @@
     }
   ],
   "sha256": {
-    "TEST_AUDIT_GATES_R5.py": "902fd46a78e4bb0939ac805be7f2fd5a890ae2582008f69550782627952ff11e",
+    "TEST_AUDIT_GATES_R5.py": "e4295d95e72c7ae42cc405a00244af6bd3fc256d69aa6349b23cce5b8e1aef8a",
     "C05C_COMPARE_STORES_R5.py": "342d41796ccf35fe938965cbd6975546e6f11fd9551be1d8cf7483cb4ee45764"
+  },
+  "protocol_registry_reference": {
+    "file": "SINDEL_PHONE_AUDIT_AND_FIX_PLAN_2026-09-16.docx",
+    "sha256": "e9ed81ade1e0d731b9dd2e34cbaa540bab28e9c968d27c6ab66fdcb0be180e11",
+    "embedded_registry": "customXml/sindel_audit_registry.xml",
+    "all_446_requirements_retained": true,
+    "current_delta": "F02-F06/F08 have L1 fixes only; A02 L2 in progress; original release gates remain blocked"
   }
 }
